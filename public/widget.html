@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Get your quote — MediVoyage</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M5 16h5l3 7 5-14 3 7h6' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Public+Sans:wght@400;500;600&family=Azeret+Mono:wght@400;500&display=swap">
+<style>
+  /* Same "clinic ledger" system as the management panel: cool clinical ground,
+     paper sheet, deep petrol ink, brass held back for one thing. This page is
+     embedded on the clinic's own site, so it follows the visitor's OS theme
+     rather than carrying a toggle of its own. */
+  :root{
+    --ground:#eaedef;
+    --paper:#ffffff;
+    --paper-2:#f4f6f8;
+    --ink:#0c1316;
+    --ink-2:#4b555b;
+    --ink-3:#7f8a90;
+    --rule:#dde3e6;
+    --rule-2:#c3ccd1;
+    --accent:#0e5750;
+    --accent-2:#157a6f;
+    --accent-wash:#e4efed;
+    --accent-line:#9dc3bc;
+    --brass:#8c6415;
+    --alert:#a02e21;
+    --alert-ink:#82251a;
+    --alert-wash:#fbe8e5;
+    --alert-line:#e6bdb5;
+    --display:"Fraunces",Georgia,"Times New Roman",serif;
+    --ui:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --r:3px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#0e1315;
+      --paper:#161c1f;
+      --paper-2:#1b2225;
+      --ink:#e6eaec;
+      --ink-2:#9aa4a9;
+      --ink-3:#6c767b;
+      --rule:#232b2e;
+      --rule-2:#323c40;
+      --accent:#5fb3a4;
+      --accent-2:#7cc9ba;
+      --accent-wash:#152825;
+      --accent-line:#2c4b46;
+      --brass:#d3a45c;
+      --alert:#e07a68;
+      --alert-ink:#f0a396;
+      --alert-wash:#2d1a17;
+      --alert-line:#4b2a25;
+    }
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:var(--ground);color:var(--ink);
+    font-family:var(--ui);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;
+  }
+  .card{
+    width:100%;max-width:428px;background:var(--paper);
+    border:1px solid var(--rule);border-radius:var(--r);padding:30px 28px 26px;
+    box-shadow:0 1px 0 rgba(12,19,22,.03), 0 10px 30px rgba(12,19,22,.07);
+  }
+
+  /* Masthead: the mark, then a hairline rule closing the line — the same
+     device the panel uses to open a section. */
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+  .mark{
+    width:26px;height:26px;border-radius:2px;display:grid;place-items:center;flex:none;
+    background:var(--accent);color:var(--paper);
+  }
+  .brand span{font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:-.015em}
+  .brand::after{content:"";flex:1;height:1px;background:var(--rule)}
+
+  h2{
+    font-family:var(--display);font-weight:600;font-size:25px;line-height:1.15;
+    letter-spacing:-.02em;margin:0 0 6px;text-wrap:balance;
+  }
+  h2 b{font-weight:600;color:var(--accent)}
+  p.sub{color:var(--ink-2);font-size:13.5px;margin:0 0 22px;line-height:1.5}
+
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+  .field label{
+    font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--ink-3);
+  }
+  input,select{
+    width:100%;background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r);
+    color:var(--ink);padding:10px 12px;font-family:var(--ui);font-size:14px;
+    transition:border-color .13s,box-shadow .13s;
+  }
+  input::placeholder{color:var(--ink-3)}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}
+  option{background:var(--paper);color:var(--ink)}
+
+  /* The live estimate is the one figure on the page, so it is the one thing
+     lifted off the sheet — and the only place brass appears. */
+  .est{
+    margin:18px 0;padding:13px 15px;border-radius:var(--r);
+    background:var(--accent-wash);border:1px solid var(--accent-line);
+    box-shadow:inset 2px 0 0 var(--accent);
+    font-size:13.5px;color:var(--ink);line-height:1.5;
+  }
+  .est b{font-family:var(--display);font-weight:600;font-size:17px;color:var(--brass);letter-spacing:-.01em}
+  .est .cap{
+    display:block;font-family:var(--mono);font-size:9px;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--ink-3);margin-bottom:5px;
+  }
+
+  .consent{
+    display:flex;gap:10px;align-items:flex-start;margin:18px 0 6px;
+    font-size:12px;color:var(--ink-2);line-height:1.45;cursor:pointer;
+  }
+  .consent input{width:15px;height:15px;margin-top:2px;accent-color:var(--accent);flex:none;cursor:pointer}
+  .consent a{color:var(--accent);text-underline-offset:2px}
+
+  button{
+    width:100%;margin-top:10px;border:1px solid var(--accent);border-radius:var(--r);
+    padding:12px;font-family:var(--ui);font-size:14px;font-weight:600;cursor:pointer;
+    color:#ffffff;background:var(--accent);transition:background .13s,border-color .13s;
+  }
+  @media (prefers-color-scheme:dark){ button{color:#0e1315} }
+  button:hover:not(:disabled){background:var(--accent-2);border-color:var(--accent-2)}
+  button:disabled{opacity:.5;cursor:default}
+  button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{
+    outline:2px solid var(--brass);outline-offset:2px;
+  }
+
+  .err{
+    color:var(--alert-ink);background:var(--alert-wash);border:1px solid var(--alert-line);
+    box-shadow:inset 2px 0 0 var(--alert);
+    font-size:12.5px;margin-top:12px;padding:9px 12px;border-radius:var(--r);
+  }
+  .err:empty{display:none}
+
+  .ok{text-align:center;padding:10px 0 6px}
+  .ok .big{
+    width:44px;height:44px;margin:0 auto 16px;border-radius:2px;display:grid;place-items:center;
+    background:var(--accent);color:var(--paper);font-size:22px;
+  }
+  .ok h2{margin-bottom:8px}
+  .ok p.sub{margin-bottom:4px}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+  <main class="card" id="card"></main>
+<script>
+  // For embedding on an external site, set this to your backend URL, e.g.
+  //   const API_BASE = "https://api.yourclinic.com";
+  const API_BASE = "";
+
+  // Indicative price ranges (edit to match the clinic). Powers the live estimate.
+  const PRICES = {
+    "Hair transplant": [2000, 3200, "EUR"],
+    "Dental veneers":  [3000, 6000, "EUR"],
+    "Rhinoplasty":     [3500, 5500, "EUR"],
+    "Bariatric surgery":[3500, 5000, "EUR"],
+    "Other":           [null, null, ""],
+  };
+
+  const card = document.getElementById("card");
+  const state = { treatment: "Hair transplant" };
+
+  function estimate(){
+    const [lo,hi,cur] = PRICES[state.treatment] || [];
+    if(!lo) return `<span class="cap">Your quote</span>Tell us a little more and we'll prepare a personal quote.`;
+    return `<span class="cap">Indicative range</span><b>${lo.toLocaleString()}–${hi.toLocaleString()} ${cur}</b> — all-inclusive package`;
+  }
+
+  const MARK = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2 5 4-10 2 5h4"/></svg>`;
+
+  function form(){
+    // A real <form> with labels bound to their inputs: the field label is now a
+    // hit target, screen readers announce it, and browsers can autofill.
+    card.innerHTML = `
+      <div class="brand"><div class="mark">${MARK}</div><span>MediVoyage</span></div>
+      <h2>Get your <b>free quote</b></h2>
+      <p class="sub">Tell us a little about you — our concierge replies within minutes, in your language.</p>
+      <form id="f" novalidate>
+        <div class="field">
+          <label for="name">Full name</label>
+          <input id="name" name="name" autocomplete="name" placeholder="Your name" />
+        </div>
+        <div class="field">
+          <label for="phone">WhatsApp number</label>
+          <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+44 7911 123456" required />
+        </div>
+        <div class="field">
+          <label for="country">Country</label>
+          <input id="country" name="country" autocomplete="country-name" placeholder="United Kingdom" />
+        </div>
+        <div class="field">
+          <label for="treatment">Treatment</label>
+          <select id="treatment" name="treatment">${Object.keys(PRICES).map(t=>`<option ${t===state.treatment?"selected":""}>${t}</option>`).join("")}</select>
+        </div>
+        <div class="est" id="est">${estimate()}</div>
+        <label class="consent" for="consent"><input type="checkbox" id="consent" name="consent" />
+          <span>I agree to be contacted about my enquiry and consent to the processing of my health-related data in line with the clinic's <a href="#" onclick="return false">privacy policy</a>.</span></label>
+        <button id="go" type="submit">Request my quote →</button>
+        <div class="err" id="err" role="alert" aria-live="polite"></div>
+      </form>`;
+    document.getElementById("treatment").onchange = (e)=>{
+      state.treatment = e.target.value;
+      document.getElementById("est").innerHTML = estimate();
+    };
+    document.getElementById("f").onsubmit = (e)=>{ e.preventDefault(); submit(); };
+  }
+
+  async function submit(){
+    const err = document.getElementById("err");
+    const phoneEl = document.getElementById("phone");
+    const phone = phoneEl.value.trim();
+    // Say what's wrong and move the cursor there, rather than only naming it.
+    if(!phone){ err.textContent = "Please enter your WhatsApp number so we can reply."; phoneEl.focus(); return; }
+    const consentEl = document.getElementById("consent");
+    if(!consentEl.checked){ err.textContent = "Please tick the consent box so we're allowed to contact you."; consentEl.focus(); return; }
+    const btn = document.getElementById("go");
+    btn.disabled = true; btn.textContent = "Sending…"; err.textContent = "";
+    try{
+      const res = await fetch(API_BASE + "/api/public/lead", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          name: document.getElementById("name").value.trim(),
+          phone, country: document.getElementById("country").value.trim(),
+          treatment: state.treatment,
+          consent: true,
+        }),
+      });
+      if(!res.ok) throw new Error("We couldn't send that just now. Please try again in a moment.");
+      card.innerHTML = `
+        <div class="brand"><div class="mark">${MARK}</div><span>MediVoyage</span></div>
+        <div class="ok">
+          <div class="big">✓</div>
+          <h2>Thank you</h2>
+          <p class="sub">Our concierge has your details and will message you on WhatsApp shortly.</p>
+        </div>`;
+    }catch(e){
+      err.textContent = e.message;
+      btn.disabled = false; btn.textContent = "Request my quote →";
+    }
+  }
+
+  form();
+</script>
+</body>
+</html>

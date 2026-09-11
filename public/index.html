@@ -1,0 +1,1631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script>
+  // Apply the saved theme before the first paint. The main script runs at the
+  // end of <body>, so without this a light-mode user sees a flash of the dark
+  // background on every load.
+  try { document.documentElement.setAttribute("data-theme", localStorage.getItem("mv-theme") || "dark"); } catch (e) {}
+</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M5 16h5l3 7 5-14 3 7h6' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=Azeret+Mono:wght@400;500&display=swap">
+<title>MediVoyage OS — Command Center</title>
+<style>
+  /* ═══════════════════════════════════════════════════════════════════════
+     MediVoyage OS — "clinic ledger"
+     A precisely set record, not a glowing dashboard. Hierarchy comes from
+     rules, spacing and type; fills and shadows are spent only where something
+     genuinely needs lifting. Stone ground, paper sheets, deep petrol ink,
+     brass reserved for the one thing that matters on each screen.
+     ═══════════════════════════════════════════════════════════════════════ */
+  :root{
+    /* Light — "clinical white". A cool, printed-form ground rather than a warm
+       paper one: the warmth now lives only in the brass accent, which reads as
+       a deliberate note against cool grey instead of dissolving into beige. */
+    --ground:#eaedef;
+    --paper:#ffffff;
+    --paper-2:#f4f6f8;
+    --sunk:#e0e5e8;
+    --ink:#0c1316;
+    --ink-2:#4b555b;
+    --ink-3:#7f8a90;
+    --rule:#dde3e6;
+    --rule-2:#c3ccd1;
+    --accent:#0e5750;
+    --accent-2:#157a6f;
+    --accent-wash:#e4efed;
+    --accent-line:#9dc3bc;
+    --brass:#8c6415;
+    --brass-wash:#f4ecdb;
+    --pos:#2e6b4d;
+    --pos-wash:#e5efe9;
+    --alert:#a02e21;
+    --alert-ink:#82251a;
+    --alert-wash:#fbe8e5;
+    --alert-line:#e6bdb5;
+    --chart-a:#0e5750;
+    --chart-b:#8c6415;
+    --chart-grid:#e6ebee;
+    --display:"Fraunces",Georgia,"Times New Roman",serif;
+    --ui:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --r:3px;
+    --lift:0 1px 0 rgba(12,19,22,.04), 0 6px 18px rgba(12,19,22,.07);
+  }
+  :root[data-theme="dark"]{
+    /* Dark cooled to match: a blue-green near-black, not a warm one. */
+    --ground:#0e1315;
+    --paper:#161c1f;
+    --paper-2:#1b2225;
+    --sunk:#111618;
+    --ink:#e6eaec;
+    --ink-2:#9aa4a9;
+    --ink-3:#6c767b;
+    --rule:#232b2e;
+    --rule-2:#323c40;
+    --accent:#5fb3a4;
+    --accent-2:#7cc9ba;
+    --accent-wash:#152825;
+    --accent-line:#2c4b46;
+    --brass:#d3a45c;
+    --brass-wash:#2a2318;
+    --pos:#6fb389;
+    --pos-wash:#182a20;
+    --alert:#e07a68;
+    --alert-ink:#f0a396;
+    --alert-wash:#2d1a17;
+    --alert-line:#4b2a25;
+    --chart-a:#5fb3a4;
+    --chart-b:#d3a45c;
+    --chart-grid:#232b2e;
+    --lift:0 1px 0 rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--ground);
+    color:var(--ink);
+    font-family:var(--ui);
+    font-size:14px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  ::selection{background:var(--brass-wash);color:var(--ink)}
+  *::-webkit-scrollbar{width:11px;height:11px}
+  *::-webkit-scrollbar-thumb{background:var(--rule-2);border:3px solid transparent;background-clip:padding-box;border-radius:99px}
+  *::-webkit-scrollbar-track{background:transparent}
+  #root{min-height:100vh;display:flex;flex-direction:column}
+
+  /* ── Sheets ──────────────────────────────────────────────────────────────
+     The former "glass" card. Paper on a stone desk: a hairline edge, a barely
+     perceptible lift, square corners. No blur, no glow. */
+  .glass{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r)}
+
+  /* ── Masthead ─────────────────────────────────────────────────────────── */
+  .topbar{
+    display:flex;align-items:center;gap:18px;padding:0 26px;height:58px;
+    position:sticky;top:0;z-index:20;
+    background:var(--ground);border-bottom:1px solid var(--rule-2);
+  }
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand-mark{
+    width:27px;height:27px;border-radius:2px;display:grid;place-items:center;
+    background:var(--accent);color:var(--paper);
+  }
+  .logo{font-family:var(--display);font-weight:600;font-size:19px;letter-spacing:-.015em}
+  .logo b{font-weight:600;color:var(--accent)}
+  .live{
+    display:flex;align-items:center;gap:7px;
+    font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-2);padding-left:16px;border-left:1px solid var(--rule);
+  }
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--pos);flex:none}
+
+  /* Language switch: two words divided by a rule, not a pill toggle. */
+  .seg{display:flex;align-items:center;border:1px solid var(--rule-2);border-radius:var(--r);overflow:hidden;flex:none}
+  .segbtn{
+    border:0;background:transparent;color:var(--ink-3);font-family:var(--mono);
+    font-size:10.5px;font-weight:500;letter-spacing:.09em;padding:6px 10px;cursor:pointer;
+  }
+  .segbtn + .segbtn{border-left:1px solid var(--rule-2)}
+  .segbtn:hover{color:var(--ink);background:var(--paper-2)}
+  .segbtn.on{background:var(--accent);color:var(--paper)}
+
+  /* ── Controls ─────────────────────────────────────────────────────────── */
+  .btn{
+    font-family:var(--ui);font-size:12.5px;font-weight:600;letter-spacing:.005em;
+    color:var(--ink);background:var(--paper);border:1px solid var(--rule-2);
+    border-radius:var(--r);padding:7px 13px;cursor:pointer;white-space:nowrap;
+    transition:background .13s,border-color .13s,color .13s;
+  }
+  .btn:hover{background:var(--paper-2);border-color:var(--ink-3)}
+  .btn:active{background:var(--sunk)}
+  .btn:disabled{opacity:.42;cursor:default;background:var(--paper)}
+  .btn:focus-visible,.segbtn:focus-visible,.chip:focus-visible,.navitem:focus-visible{
+    outline:2px solid var(--brass);outline-offset:2px;
+  }
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fbfaf7}
+  .btn.primary:hover{background:var(--accent-2);border-color:var(--accent-2)}
+  :root[data-theme="dark"] .btn.primary{color:#0f1312}
+  .btn.warn{color:var(--alert-ink);border-color:var(--alert-line);background:var(--alert-wash)}
+  .btn.warn:hover{background:var(--alert-wash);border-color:var(--alert)}
+  .iconbtn{padding:6px 10px;font-size:13px;line-height:1.2}
+  /* Toolbar buttons must not wrap, but the full-width action in the patient
+     profile carries a whole sentence and was being clipped by that rule. */
+  .profile .btn{white-space:normal;line-height:1.35}
+
+  /* ── Frame ────────────────────────────────────────────────────────────── */
+  .shell{display:flex;flex:1;min-height:0}
+  .sidebar{
+    width:224px;flex:none;padding:20px 0 28px;overflow:auto;
+    border-right:1px solid var(--rule);background:var(--ground);
+  }
+  .navgroup{
+    font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-3);
+    padding:18px 26px 7px;
+  }
+  .sidebar > div:first-child .navgroup{padding-top:0}
+  /* Nav items are rows in an index, not buttons. The active one is marked by a
+     brass rule in the margin — the only brass on the screen at rest. */
+  .navitem{
+    display:flex;align-items:center;gap:10px;position:relative;
+    padding:7px 26px;color:var(--ink-2);font-size:13.5px;font-weight:400;
+    cursor:pointer;transition:color .13s;
+  }
+  .navitem svg{width:15px;height:15px;flex:none;opacity:.6;transition:opacity .13s}
+  .navitem:hover{color:var(--ink)}
+  .navitem:hover svg{opacity:.9}
+  .navitem.active{color:var(--ink);font-weight:600}
+  .navitem.active svg{opacity:1;color:var(--accent)}
+  .navitem.active::before{
+    content:"";position:absolute;left:0;top:4px;bottom:4px;width:2px;background:var(--brass);
+  }
+  .navitem.disabled{opacity:.32;cursor:not-allowed}
+  .navitem.disabled:hover{color:var(--ink-2)}
+
+  .main{flex:1;min-width:0;overflow:auto;padding:30px 34px 56px;background:var(--ground)}
+  .view{max-width:1180px}
+
+  /* ── Page heads ───────────────────────────────────────────────────────── */
+  h1{
+    font-family:var(--display);font-weight:600;font-size:27px;line-height:1.15;
+    letter-spacing:-.018em;margin:0 0 5px;text-wrap:balance;
+  }
+  .sub{color:var(--ink-2);font-size:13.5px;margin:0 0 26px;max-width:74ch;line-height:1.55}
+
+  /* Section title with a rule running to the end of the line — a ledger
+     device, and it does real work: it closes the block it opens. */
+  .section-title{
+    display:flex;align-items:center;gap:12px;
+    font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:-.01em;
+    margin:0 0 15px;color:var(--ink);
+  }
+  .section-title::after{content:"";flex:1;height:1px;background:var(--rule)}
+  .clin-title{color:var(--alert)}
+  .clin-title::after{background:var(--alert-line)}
+
+  /* ── KPI band ─────────────────────────────────────────────────────────────
+     Was six floating cards. Now one ruled band: shared baseline, hairline
+     dividers, numbers set in the display serif. This is the change that makes
+     the screen read as ordered rather than assembled. */
+  .kpis{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));
+    gap:1px;background:var(--rule);
+    border:1px solid var(--rule);border-radius:var(--r);
+    margin-bottom:28px;overflow:hidden;
+  }
+  /* The 1px grid gap *is* the divider — it stays a perfect hairline lattice
+     however many cells wrap onto a second row. */
+  /* KPI cells carry .glass in the markup; inside the band the lattice provides
+     the edges, so the sheet border is neutralised here rather than in 30 tags. */
+  .kpis .glass{border:0;border-radius:0}
+  .kpi{
+    padding:15px 18px 16px;position:relative;background:var(--paper);
+    display:flex;flex-direction:column;gap:0;
+  }
+  .kpi .label{
+    font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--ink-3);
+  }
+  .kpi .val{
+    font-family:var(--display);font-weight:600;font-size:33px;line-height:1.12;
+    letter-spacing:-.02em;margin-top:9px;color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .kpi .val.cyan{color:var(--accent)}
+  .kpi .val.mint{color:var(--pos)}
+  .kpi .val.alert{color:var(--alert)}
+  .kpi .foot{color:var(--ink-3);font-size:11.5px;margin-top:7px;line-height:1.4}
+  /* The icon is a quiet marginal mark, not a filled tile. */
+  .kpi-ico{position:absolute;top:15px;right:16px;color:var(--ink-3);opacity:.5}
+  .kpi-ico.mint{color:var(--pos)}
+  .kpi-ico.alert{color:var(--alert);opacity:.8}
+  .kpi-ico svg{width:15px;height:15px;display:block}
+
+  /* ── Action rows ──────────────────────────────────────────────────────── */
+  .action-card{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    padding:13px 17px;margin-bottom:8px;
+    background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);
+  }
+  .action-left{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .action-name{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .action-reason{color:var(--ink-2);font-size:12.5px;line-height:1.45}
+  /* Fill is spent here and nowhere else: this is the row that needs a person. */
+  .alert-card{background:var(--alert-wash)!important;border-color:var(--alert-line)!important;box-shadow:inset 2px 0 0 var(--alert)}
+
+  /* ── Badges ───────────────────────────────────────────────────────────── */
+  .badge{
+    font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.09em;
+    text-transform:uppercase;padding:2px 6px;border-radius:2px;
+    border:1px solid var(--rule-2);color:var(--ink-2);background:transparent;white-space:nowrap;
+  }
+  .badge.hot{color:var(--alert);border-color:var(--alert-line);background:var(--alert-wash)}
+  .badge.human{color:var(--pos);border-color:var(--pos);background:var(--pos-wash)}
+  .badge.urgent{color:#fbfaf7;background:var(--alert);border-color:var(--alert)}
+  :root[data-theme="dark"] .badge.urgent{color:#0f1312}
+
+  /* The patient spoke last: the clinic owes a reply. Brass, because on this
+     screen that is the thing a coordinator is looking for. */
+  .badge.awaiting{color:var(--brass);border-color:var(--brass);background:var(--brass-wash)}
+  .conv-item.awaits{box-shadow:inset 2px 0 0 var(--brass)}
+  .offhours{color:var(--alert)}
+
+  /* ── Internal notes ───────────────────────────────────────────────────── */
+  .notes{margin-top:4px}
+  .note-input{
+    width:100%;min-height:58px;max-height:150px;resize:vertical;
+    background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r);
+    color:var(--ink);padding:9px 11px;font-family:var(--ui);font-size:12.5px;line-height:1.5;
+  }
+  .note-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}
+  .note{
+    margin-top:10px;padding:10px 12px;border-radius:var(--r);
+    background:var(--paper-2);border:1px solid var(--rule);
+    font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;
+  }
+  .note-meta{
+    font-family:var(--mono);font-size:9px;letter-spacing:.06em;
+    color:var(--ink-3);margin-bottom:5px;
+  }
+  .note-empty{margin-top:12px;color:var(--ink-3);font-size:12px}
+  .dep-flag{color:var(--brass);font-weight:600}
+
+  /* ── Inbox ────────────────────────────────────────────────────────────── */
+  .inbox{display:grid;grid-template-columns:300px 1fr 290px;gap:16px;height:calc(100vh - 178px);min-height:460px}
+  .col{overflow:auto;padding:0}
+  .filters{display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap}
+  /* Mono uppercase runs wide; tightened so the full filter set holds one line
+     in the 300px column instead of orphaning the last chip. */
+  .chip{
+    font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.03em;text-transform:uppercase;
+    padding:4px 7px;border-radius:2px;border:1px solid var(--rule-2);
+    background:transparent;color:var(--ink-3);cursor:pointer;transition:.13s;
+  }
+  .chip:hover{color:var(--ink);border-color:var(--ink-3)}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fbfaf7}
+  :root[data-theme="dark"] .chip.on{color:#0f1312}
+  .chip .ct{opacity:.65;margin-left:5px}
+  .search{margin:0 0 2px}
+
+  .conv-item{
+    padding:12px 16px;border-bottom:1px solid var(--rule);cursor:pointer;
+    border-left:2px solid transparent;transition:background .12s;
+  }
+  .conv-item:hover{background:var(--paper-2)}
+  .conv-item.sel{background:var(--accent-wash);border-left-color:var(--accent)}
+  .conv-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .conv-name{font-weight:600;font-size:13px}
+  .conv-prev{color:var(--ink-2);font-size:12px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .conv-time{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:5px;text-align:right;letter-spacing:.04em}
+
+  .thread{display:flex;flex-direction:column;height:100%}
+  .thread-head{
+    padding:13px 17px;border-bottom:1px solid var(--rule);
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+  }
+  .banner{
+    padding:8px 17px;font-size:12px;font-weight:500;
+    background:var(--accent-wash);color:var(--accent);border-bottom:1px solid var(--rule);
+  }
+  .banner.human{background:var(--pos-wash);color:var(--pos)}
+  .msgs{flex:1;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+  /* Messages read as slips of paper. The clinic's own replies carry an accent
+     rule on the binding edge, so authorship is legible without colour alone. */
+  .bubble{
+    max-width:74%;padding:10px 13px;border-radius:var(--r);font-size:13px;line-height:1.5;
+    white-space:pre-wrap;word-wrap:break-word;border:1px solid var(--rule);
+  }
+  .bubble.user{align-self:flex-start;background:var(--paper-2)}
+  .bubble.assistant{
+    align-self:flex-end;background:var(--accent-wash);border-color:var(--accent-line);
+    box-shadow:inset -2px 0 0 var(--accent);
+  }
+  .bubble .meta{
+    display:block;font-family:var(--mono);font-size:9px;letter-spacing:.06em;
+    color:var(--ink-3);margin-top:7px;
+  }
+  .composer{border-top:1px solid var(--rule);padding:12px;display:flex;gap:10px;align-items:flex-end}
+
+  /* ── Fields ───────────────────────────────────────────────────────────── */
+  textarea,.main input,.main select{
+    font-family:var(--ui);font-size:13px;color:var(--ink);
+    background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r);
+    padding:9px 11px;transition:border-color .13s,box-shadow .13s;
+  }
+  textarea{flex:1;resize:none;min-height:42px;max-height:128px;line-height:1.5}
+  textarea:focus,.main input:focus,.main select:focus{
+    outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash);
+  }
+  option{background:var(--paper);color:var(--ink)}
+  .fl{
+    display:block;font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--ink-3);margin-bottom:6px;
+  }
+
+  /* ── Profile / ledger rows ────────────────────────────────────────────── */
+  .profile{padding:17px}
+  .pf-name{font-family:var(--display);font-size:17px;font-weight:600;letter-spacing:-.012em}
+  .pf-row{
+    display:flex;justify-content:space-between;gap:14px;font-size:12.5px;
+    padding:8px 0;border-bottom:1px solid var(--rule);font-variant-numeric:tabular-nums;
+  }
+  .pf-row:last-child{border-bottom:0}
+  .pf-row .k{color:var(--ink-3);font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding-top:2px}
+  .scorebar{height:4px;border-radius:0;background:var(--sunk);overflow:hidden;margin-top:8px}
+  .scorebar>i{display:block;height:100%;background:var(--accent);transition:width .45s ease}
+
+  /* ── States ───────────────────────────────────────────────────────────── */
+  .empty{
+    display:flex;align-items:center;justify-content:center;height:100%;
+    color:var(--ink-3);font-size:13px;text-align:center;padding:26px;line-height:1.55;
+  }
+  .err{
+    background:var(--alert-wash);border:1px solid var(--alert-line);
+    box-shadow:inset 2px 0 0 var(--alert);
+    color:var(--alert-ink);padding:12px 16px;border-radius:var(--r);margin-bottom:16px;font-size:13px;
+  }
+  .est{
+    margin:16px 0;padding:12px 16px;border-radius:var(--r);
+    background:var(--accent-wash);border:1px solid var(--accent-line);
+    box-shadow:inset 2px 0 0 var(--accent);font-size:13px;
+  }
+  .est b{color:var(--accent)}
+  .med-note{
+    margin-top:13px;padding:11px 13px;border-radius:var(--r);
+    background:var(--alert-wash);border:1px solid var(--alert-line);
+    box-shadow:inset 2px 0 0 var(--alert);
+    font-size:12.5px;color:var(--alert-ink);line-height:1.45;
+  }
+  .med-note .lbl{
+    font-family:var(--mono);font-weight:500;font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
+    color:var(--alert);display:flex;align-items:center;gap:6px;margin-bottom:5px;
+  }
+  .med-note svg{width:13px;height:13px}
+  .rtl{direction:rtl;text-align:right}
+
+  /* ── Toasts ───────────────────────────────────────────────────────────── */
+  .toasts{position:fixed;bottom:22px;right:22px;z-index:100;display:flex;flex-direction:column;gap:9px}
+  .toast{
+    padding:11px 15px;border-radius:var(--r);font-size:12.5px;font-weight:500;
+    color:var(--ink);background:var(--paper);border:1px solid var(--rule-2);
+    box-shadow:var(--lift);min-width:210px;max-width:340px;
+    display:flex;align-items:center;gap:10px;
+    box-shadow:inset 2px 0 0 var(--pos), var(--lift);
+  }
+  .toast.error{box-shadow:inset 2px 0 0 var(--alert), var(--lift);color:var(--alert-ink)}
+
+  /* ── Chart ────────────────────────────────────────────────────────────────
+     Styled through classes rather than SVG fill attributes, so every mark takes
+     its colour from the same tokens as the surface behind it and both themes
+     resolve as a set. */
+  .chart-grid{stroke:var(--chart-grid);stroke-width:1}
+  .chart-axis{stroke:var(--rule-2);stroke-width:1}
+  .chart-label{fill:var(--ink-3);font-family:var(--mono);font-size:8px;letter-spacing:.04em}
+  .chart-bar{fill:var(--chart-a)}
+  .chart-bar.peak{fill:var(--chart-b)}
+  .chart-bar.zero{fill:var(--rule)}
+
+  /* ── Motion ───────────────────────────────────────────────────────────── */
+  /* One entrance, 160ms, no travel to speak of. Nothing else moves at rest —
+     the urgent badge is the single exception, because it must be noticed. */
+  .view{animation:settle .16s ease-out}
+  @keyframes settle{from{opacity:0}to{opacity:1}}
+  .badge.urgent{animation:urgentpulse 2.2s ease-in-out infinite}
+  @keyframes urgentpulse{0%,100%{opacity:1}50%{opacity:.62}}
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+
+  /* ── Responsive ───────────────────────────────────────────────────────── */
+  @media (max-width:1120px){
+    .inbox{grid-template-columns:1fr;height:auto;min-height:0}
+    .inbox>.col:first-child{max-height:300px}
+  }
+  @media (max-width:760px){
+    .sidebar{width:58px}
+    .navitem span{display:none}
+    .navitem{justify-content:center;padding:9px 0}
+    .navgroup{text-align:center;font-size:8px;padding:14px 0 6px;letter-spacing:.08em}
+    .main{padding:20px 16px 40px}
+    .kpis{grid-template-columns:1fr 1fr}
+    .topbar{padding:0 14px;gap:12px}
+    .live{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js" crossorigin></script>
+<script>
+const { useState, useEffect, useRef, useCallback } = React;
+// This panel's markup is written plain-HTML style: class="..." and
+// style="a:b" as strings. React wants className and a style *object* — a
+// string style throws (React error #62) and takes the whole tree down, which
+// is why the page rendered as a bare background. Normalise both here, once,
+// rather than rewriting ~300 attributes below.
+const styleCache = new Map();
+function styleToObject(css){
+  let obj = styleCache.get(css);
+  if (obj) return obj;
+  obj = {};
+  for (const decl of css.split(";")){
+    const i = decl.indexOf(":");
+    if (i < 0) continue;
+    const prop = decl.slice(0, i).trim(), val = decl.slice(i + 1).trim();
+    if (!prop || !val) continue;
+    // Leave CSS custom properties alone; camelCase everything else.
+    obj[prop.startsWith("--") ? prop : prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = val;
+  }
+  styleCache.set(css, obj);
+  return obj;
+}
+function createElement(type, props, ...children){
+  if (props && (typeof props.style === "string" || props.class !== undefined)){
+    props = { ...props };
+    if (typeof props.style === "string") props.style = styleToObject(props.style);
+    if (props.class !== undefined){ props.className = props.class; delete props.class; }
+  }
+  return React.createElement(type, props, ...children);
+}
+const html = htm.bind(createElement);
+
+// ── Language + theme ────────────────────────────────────────────────────────
+// Every user-facing string lives here under a key; T(key) resolves it against
+// the active language, falling back to English. The translate helper is named
+// T (not t) because `t` is already used as a loop variable throughout.
+const I18N = {
+  en: {
+    "nav.command":"Command Center","nav.inbox":"Omnichannel Inbox","nav.analytics":"CAC & ROAS Analytics",
+    "nav.campaigns":"WhatsApp Broadcast","nav.studio":"AI Prompt Studio","nav.widget":"Lead Widget",
+    "nav.consultants":"Consultant Performance","nav.matching":"Language Matching","nav.devices":"Smart Device Booking",
+    "nav.logistics":"VIP Transfer & Logistics","nav.postop":"Fit-to-Fly & Post-Op","nav.reviews":"Trust & Review Engine",
+    "nav.workflow":"Workflow Automation",
+    "group.overview":"Overview","group.growth":"Growth","group.team":"Team","group.operations":"Operations",
+    "cmd.sub":"Live overview of your clinic's inbound demand.",
+    "kpi.leadsToday":"Leads today","kpi.totalPipeline":"total in pipeline","kpi.hotLeads":"Hot leads",
+    "kpi.scoreGte":"score ≥ 70","kpi.awaitingHuman":"Awaiting human","kpi.inHandoverQueue":"in the handover queue",
+    "kpi.countries":"Countries","kpi.locatedLeads":"located leads",
+    "kpi.deviceOccupancy":"Device occupancy",
+    "kpi.aiAutonomy":"AI autonomy","kpi.autonomyFoot":"conversations still handled without a human",
+    "kpi.occupancyFoot":"today, averaged across devices",
+    "analytics.byChannel":"Ad spend by channel","analytics.cpc":"CPC",
+        "analytics.attributionNote":"CAC and ROAS are totals, not per channel: a lead records how it arrived (WhatsApp, widget), not which campaign paid for it. Per-channel CAC needs a campaign reference on the lead.",
+    "tbl.conversion":"Conv.",
+    "cmd.chartTitle":"📈 Leads — last 14 days","cmd.clinicalAlerts":"Clinical alerts — urgent medical escalations",
+    "badge.urgent":"URGENT","btn.openNow":"Open now","cmd.actionCenter":"⚡ Action Center — leads waiting for a human",
+    "cmd.allClear":"All clear 🎉","cmd.allClearSub":"No sales conversations need a human right now.",
+    "cmd.needsAttention":"Needs attention","badge.score":"score","btn.openTakeOver":"Open & take over",
+    "inbox.sub":"Every patient conversation in one place. The AI concierge replies automatically until you take over.",
+    "inbox.search":"Search name or number…","filter.all":"All","filter.urgent":"Urgent","filter.needsHuman":"Needs human",
+    "filter.ai":"AI","filter.awaiting":"Awaiting reply","inbox.noMatch":"No conversations match.",
+    "inbox.awaitingMark":"waiting for a reply",
+    "pf.localTime":"Local time","pf.offHours":"outside 08:00–21:00 where they are",
+    "notes.title":"Internal notes","notes.placeholder":"A note for whoever picks this up next…",
+    "filter.awaitingDeposit":"Awaiting deposit",
+    "payments.title":"Payments","payments.empty":"No payments recorded yet.",
+    "payments.amount":"Amount","payments.type.deposit":"Deposit","payments.type.balance":"Balance","payments.type.full":"Full payment",
+    "payments.status.pending":"Pending","payments.status.paid":"Paid","payments.status.refunded":"Refunded",
+    "payments.add":"Add payment","payments.markPaid":"Mark paid","payments.remind":"Mark reminder sent",
+    "payments.reminded":"Reminded","payments.due":"Due","payments.pendingBadge":"awaiting a deposit",
+    "toast.paymentAdded":"Payment added","toast.paymentPaid":"Marked as paid","toast.reminderSet":"Reminder marked",
+    "analytics.pendingDeposits":"Pending deposits","analytics.roasFoot":"revenue ÷ ad spend",
+    "analytics.noPaymentsNote":"No payments logged yet. Record a deposit on a lead's profile to see real revenue here.",
+    "analytics.pendingNote":"pending across",
+    "analytics.pendingNote2":"lead(s) — not counted until marked paid.",
+    "notes.add":"Add note","notes.empty":"No notes yet.","notes.saved":"Note added",
+    "confirm.discharge":"Mark this patient as discharged? This starts the post-op sequence and cannot be undone from the panel.","badge.human":"human","badge.agent":"agent",
+    "inbox.noConversations":"No conversations yet. Send a WhatsApp message to your number to see it appear here.","msg.patient":"patient",
+    "inbox.selectConv":"Select a conversation to view the thread.",
+    "inbox.youHandling":"You are handling this conversation — the AI is paused.",
+    "inbox.aiHandling":"AI concierge is handling this conversation.",
+    "btn.handBack":"↩ Hand back to AI","btn.takeOver":"Take over",
+    "inbox.urgentEsc":"🚑 Urgent medical escalation — a clinician should respond.",
+    "inbox.noMessages":"No messages yet.","msg.conciergeAgent":"concierge / agent",
+    "inbox.typeReply":"Type your reply…","inbox.takeOverHint":"Take over to reply manually, or send anyway",
+    "btn.send":"Send","inbox.leadDetails":"Lead details appear here.","pf.leadScore":"Lead score","pf.status":"Status",
+    "pf.readiness":"Readiness","pf.language":"Language","pf.treatment":"Treatment","pf.budget":"Budget",
+    "pf.crmId":"Zoho CRM id","pf.notSynced":"not synced","pf.unknown":"Unknown","pf.clinicalNote":"Clinical note",
+    "btn.markDischarged":"Mark discharged → start post-op",
+    "toast.takeover":"You're now handling this conversation","toast.handback":"Handed back to the AI concierge",
+    "toast.postopStarted":"Post-op & aftercare flow started",
+    "load.analytics":"Loading analytics…","load.profile":"Loading clinic profile…","load.generic":"Loading…",
+    "analytics.sub":"End-to-end marketing performance, from ad click to treatment.",
+    "analytics.adSpend":"Ad spend","analytics.clicks":"clicks","analytics.costPerLead":"cost per lead",
+    "analytics.revenue":"Revenue",
+    "analytics.fromBooked":"collected via logged payments","analytics.funnel":"Conversion funnel","analytics.bySource":"Leads by source",
+    "funnel.leads":"Leads","funnel.qualified":"Qualified","funnel.handedOver":"Handed over","funnel.booked":"Booked",
+    "chart.leads":"leads",
+    "campaigns.title":"WhatsApp Broadcast & Campaigns",
+    "campaigns.sub":"Send an approved template to a segment (re-engagement, seasonal offers, reviews). Outside the 24-hour window, WhatsApp requires templates.",
+    "campaigns.template":"Template","campaigns.offerText":"Offer text","campaigns.segment":"Segment",
+    "seg.past":"Past patients (handed over / booked)","seg.new":"New leads","seg.all":"Everyone",
+    "campaigns.defaultOffer":"20% off this month","campaigns.preview":"Preview:",
+    "btn.sending":"Sending…","btn.sendBroadcast":"Send broadcast",
+    "campaigns.sentTo":"Sent to","campaigns.recipients":"recipients","campaigns.templateLabel":"template",
+    "studio.title":"AI Prompt & Response Studio",
+    "studio.sub":"Teach the AI concierge in minutes — new prices, packages, tone. Changes apply to the very next patient reply, no restart.",
+    "studio.clinicName":"Clinic name","studio.city":"City","studio.languages":"Languages (comma separated)",
+    "studio.tone":"Concierge tone","studio.treatments":"Treatments & pricing","studio.treatmentN":"Treatment",
+    "btn.remove":"Remove","studio.phName":"Name","studio.phPrice":"Price range","studio.phPackage":"Package details",
+    "btn.addTreatment":"+ Add treatment","studio.availability":"Availability note","studio.bookingPolicy":"Booking policy",
+    "btn.saving":"Saving…","btn.saveTeach":"Save & teach the AI","studio.saved":"✅ Saved — live on the next reply",
+    "toast.profileSaved":"Clinic profile saved — live on the next reply",
+    "consultants.sub":"Transparent, commission-ready performance for your sales coordinators.",
+    "tbl.coordinator":"Coordinator","tbl.languages":"Languages","tbl.assigned":"Assigned","tbl.hot":"Hot",
+    "tbl.handed":"Handed","tbl.booked":"Booked",
+    "matching.title":"Multi-Language Coordinator Matching",
+    "matching.sub":"Incoming language is auto-detected and routed to the right coordinator. When none is available, the AI concierge bridges.",
+    "matching.noCoverage":"⚠️ No coordinator covers:",
+    "matching.bridging":"— the AI is bridging. Add a coordinator to cover them.",
+    "matching.allCovered":"✅ Every incoming language is currently covered by a coordinator.",
+    "matching.coverage":"Language coverage",
+    "postop.title":"Fit-to-Fly & Post-Op Automation",
+    "postop.sub":"Discharge a patient (from the Inbox profile) to auto-schedule the full aftercare sequence. Due steps are sent automatically on WhatsApp.",
+    "postop.empty":"No post-op flows yet. Open a conversation in the Inbox and click \"Mark discharged\".",
+    "postop.thankYou":"Thank-you","postop.reviewInvite":"Review invite","postop.checkin7":"Day-7 check-in",
+    "postop.checkin30":"Day-30 check-in","postop.fitToFly":"Fit-to-Fly doc","postop.checkup1y":"1-year checkup",
+    "postop.sentMark":"✓ sent",
+    "reviews.sub":"Every discharged patient is automatically invited to leave a Trustpilot / Google review — growing your reputation on autopilot.",
+    "reviews.invites":"Review invites","reviews.scheduled":"scheduled","reviews.sent":"Sent",
+    "reviews.delivered":"delivered automatically","reviews.reputation":"Reputation","reviews.noRatingSource":"needs a Trustpilot / Google connection",
+    "devices.sub":"Match empty operating-room / device slots to waiting patients automatically.",
+    "devices.slotsToday":"slots today","devices.waitingList":"Waiting list — assign to a slot",
+    "btn.bookNextSlot":"Book next slot","devices.noOneWaiting":"No one waiting 🎉","toast.slotBooked":"Slot booked into",
+    "logistics.sub":"Flight → VIP transfer → hotel check-in → clinic appointment, coordinated on one board.",
+    "logistics.empty":"No logistics yet. Discharge a patient from the Inbox to add them here.",
+    "toast.logisticsUpdated":"Logistics updated",
+    "workflow.title":"Medical Workflow Automation",
+    "workflow.sub":"The trigger-based automations currently running across MediVoyage OS.",
+    "workflow.when":"WHEN","workflow.then":"THEN",
+    "auto.1a":"New WhatsApp message","auto.1b":"AI concierge auto-replies in the patient's language",
+    "auto.2a":"Patient complains / ready to book","auto.2b":"Hand over to a human + notify the team",
+    "auto.3a":"Language detected","auto.3b":"Route to a matching language coordinator",
+    "auto.4a":"Lead created or updated","auto.4b":"Sync to Zoho CRM",
+    "auto.5a":"Website widget submitted","auto.5b":"Create a lead and open a conversation",
+    "auto.6a":"Patient discharged","auto.6b":"Schedule post-op sequence, review invite & logistics",
+    "auto.7a":"Post-op step due","auto.7b":"Send the WhatsApp follow-up template automatically",
+    "shell.aiLive":"AI concierge live","btn.refresh":"↻ Refresh",
+    "shell.backendDown":"Backend unreachable","shell.backendHint":"Is the server running with DATABASE_URL set?",
+    "shell.themeToggle":"Dark / light theme",
+    "time.justNow":"just now","time.m":"m ago","time.h":"h ago","time.d":"d ago",
+    "err.title":"This view could not be displayed","err.hint":"The rest of the panel still works — pick another section on the left.","err.retry":"Try again",
+  },
+  tr: {
+    "nav.command":"Komuta Merkezi","nav.inbox":"Tüm Kanallar Gelen Kutusu","nav.analytics":"CAC & ROAS Analizi",
+    "nav.campaigns":"WhatsApp Toplu Gönderim","nav.studio":"AI Prompt Stüdyosu","nav.widget":"Lead Widget'ı",
+    "nav.consultants":"Danışman Performansı","nav.matching":"Dil Eşleştirme","nav.devices":"Akıllı Cihaz Rezervasyonu",
+    "nav.logistics":"VIP Transfer & Lojistik","nav.postop":"Uçuşa Uygunluk & Ameliyat Sonrası",
+    "nav.reviews":"Güven & Değerlendirme Motoru","nav.workflow":"İş Akışı Otomasyonu",
+    "group.overview":"Genel Bakış","group.growth":"Büyüme","group.team":"Ekip","group.operations":"Operasyon",
+    "cmd.sub":"Kliniğinize gelen talebin canlı görünümü.",
+    "kpi.leadsToday":"Bugünkü lead'ler","kpi.totalPipeline":"lead havuzda","kpi.hotLeads":"Sıcak lead'ler",
+    "kpi.scoreGte":"skor ≥ 70","kpi.awaitingHuman":"İnsan bekliyor","kpi.inHandoverQueue":"devir kuyruğunda",
+    "kpi.countries":"Ülkeler","kpi.locatedLeads":"konumu bilinen lead",
+    "kpi.deviceOccupancy":"Cihaz doluluğu",
+    "kpi.aiAutonomy":"AI özerkliği","kpi.autonomyFoot":"görüşme hâlâ insansız yürüyor",
+    "kpi.occupancyFoot":"bugün, tüm cihazların ortalaması",
+    "analytics.byChannel":"Kanala göre reklam harcaması","analytics.cpc":"TBM",
+        "analytics.attributionNote":"CAC ve ROAS toplamdır, kanal bazlı değildir: bir lead nasıl geldiğini (WhatsApp, widget) kaydeder, hangi kampanyanın parasını ödediğini değil. Kanal bazlı CAC için lead üzerinde kampanya referansı gerekir.",
+    "tbl.conversion":"Dönüşüm",
+    "cmd.chartTitle":"📈 Lead'ler — son 14 gün",
+    "cmd.clinicalAlerts":"Klinik uyarılar — acil tıbbi yönlendirmeler",
+    "badge.urgent":"ACİL","btn.openNow":"Şimdi aç",
+    "cmd.actionCenter":"⚡ Aksiyon Merkezi — insan bekleyen lead'ler",
+    "cmd.allClear":"Her şey yolunda 🎉","cmd.allClearSub":"Şu an insan gerektiren satış görüşmesi yok.",
+    "cmd.needsAttention":"İlgi bekliyor","badge.score":"skor","btn.openTakeOver":"Aç & devral",
+    "inbox.sub":"Tüm hasta görüşmeleri tek yerde. Siz devralana kadar AI konsiyerj otomatik yanıtlar.",
+    "inbox.search":"İsim veya numara ara…","filter.all":"Tümü","filter.urgent":"Acil",
+    "filter.needsHuman":"İnsan gerekli","filter.ai":"AI","filter.awaiting":"Yanıt bekliyor","inbox.noMatch":"Eşleşen görüşme yok.",
+    "inbox.awaitingMark":"yanıt bekliyor",
+    "pf.localTime":"Yerel saat","pf.offHours":"hastanın yerinde 08:00–21:00 dışı",
+    "notes.title":"İç notlar","notes.placeholder":"Bu hastayı devralacak kişiye not…",
+    "filter.awaitingDeposit":"Depozito bekliyor",
+    "payments.title":"Ödemeler","payments.empty":"Henüz ödeme kaydı yok.",
+    "payments.amount":"Tutar","payments.type.deposit":"Depozito","payments.type.balance":"Kalan bakiye","payments.type.full":"Tam ödeme",
+    "payments.status.pending":"Bekliyor","payments.status.paid":"Ödendi","payments.status.refunded":"İade edildi",
+    "payments.add":"Ödeme ekle","payments.markPaid":"Ödendi işaretle","payments.remind":"Hatırlatma gönderildi işaretle",
+    "payments.reminded":"Hatırlatıldı","payments.due":"Vade","payments.pendingBadge":"depozito bekliyor",
+    "toast.paymentAdded":"Ödeme eklendi","toast.paymentPaid":"Ödendi olarak işaretlendi","toast.reminderSet":"Hatırlatma işaretlendi",
+    "analytics.pendingDeposits":"Bekleyen depozitolar","analytics.roasFoot":"gelir ÷ reklam harcaması",
+    "analytics.noPaymentsNote":"Henüz ödeme kaydı yok. Gerçek geliri burada görmek için bir lead profilinden depozito kaydedin.",
+    "analytics.pendingNote":"bekliyor —",
+    "analytics.pendingNote2":"lead genelinde, ödendi işaretlenene kadar sayılmaz.",
+    "notes.add":"Not ekle","notes.empty":"Henüz not yok.","notes.saved":"Not eklendi",
+    "confirm.discharge":"Bu hasta taburcu olarak işaretlensin mi? Ameliyat sonrası dizisi başlar ve panelden geri alınamaz.",
+    "inbox.noConversations":"Henüz görüşme yok. Numaranıza bir WhatsApp mesajı gönderin, burada görünsün.","msg.patient":"hasta",
+    "badge.human":"insan","badge.agent":"temsilci",
+    "inbox.selectConv":"Konuşmayı görmek için bir görüşme seçin.",
+    "inbox.youHandling":"Bu görüşmeyi siz yönetiyorsunuz — AI duraklatıldı.",
+    "inbox.aiHandling":"Bu görüşmeyi AI konsiyerj yönetiyor.",
+    "btn.handBack":"↩ AI'a geri ver","btn.takeOver":"Devral",
+    "inbox.urgentEsc":"🚑 Acil tıbbi yönlendirme — bir klinisyen yanıtlamalı.",
+    "inbox.noMessages":"Henüz mesaj yok.","msg.conciergeAgent":"konsiyerj / temsilci",
+    "inbox.typeReply":"Yanıtınızı yazın…",
+    "inbox.takeOverHint":"Manuel yanıt için devralın veya yine de gönderin",
+    "btn.send":"Gönder","inbox.leadDetails":"Lead detayları burada görünür.",
+    "pf.leadScore":"Lead skoru","pf.status":"Durum","pf.readiness":"Hazırlık","pf.language":"Dil",
+    "pf.treatment":"Tedavi","pf.budget":"Bütçe","pf.crmId":"Zoho CRM kimliği","pf.notSynced":"senkronize değil",
+    "pf.unknown":"Bilinmiyor","pf.clinicalNote":"Klinik not",
+    "btn.markDischarged":"Taburcu işaretle → ameliyat sonrasını başlat",
+    "toast.takeover":"Bu görüşmeyi artık siz yönetiyorsunuz","toast.handback":"AI konsiyerje geri verildi",
+    "toast.postopStarted":"Ameliyat sonrası & bakım akışı başlatıldı",
+    "load.analytics":"Analizler yükleniyor…","load.profile":"Klinik profili yükleniyor…","load.generic":"Yükleniyor…",
+    "analytics.sub":"Reklam tıklamasından tedaviye kadar uçtan uca pazarlama performansı.",
+    "analytics.adSpend":"Reklam harcaması","analytics.clicks":"tıklama","analytics.costPerLead":"lead başına maliyet",
+    "analytics.revenue":"Gelir",
+    "analytics.fromBooked":"kayıtlı ödemelerden tahsil edildi","analytics.funnel":"Dönüşüm hunisi",
+    "analytics.bySource":"Kaynağa göre lead'ler",
+    "funnel.leads":"Lead'ler","funnel.qualified":"Nitelikli","funnel.handedOver":"Devredilen","funnel.booked":"Rezervasyonlu",
+    "chart.leads":"lead",
+    "campaigns.title":"WhatsApp Toplu Gönderim & Kampanyalar",
+    "campaigns.sub":"Onaylı bir şablonu bir segmente gönderin (yeniden etkileşim, sezonluk teklifler, değerlendirmeler). 24 saatlik pencere dışında WhatsApp şablon zorunlu kılar.",
+    "campaigns.template":"Şablon","campaigns.offerText":"Teklif metni","campaigns.segment":"Segment",
+    "seg.past":"Geçmiş hastalar (devredilen / rezervasyonlu)","seg.new":"Yeni lead'ler","seg.all":"Herkes",
+    "campaigns.defaultOffer":"bu ay %20 indirim","campaigns.preview":"Önizleme:",
+    "btn.sending":"Gönderiliyor…","btn.sendBroadcast":"Toplu gönder",
+    "campaigns.sentTo":"Gönderildi:","campaigns.recipients":"alıcı","campaigns.templateLabel":"şablon",
+    "studio.title":"AI Prompt & Yanıt Stüdyosu",
+    "studio.sub":"AI konsiyerje dakikalar içinde öğretin — yeni fiyatlar, paketler, üslup. Değişiklikler bir sonraki hasta yanıtında geçerli olur, yeniden başlatma gerekmez.",
+    "studio.clinicName":"Klinik adı","studio.city":"Şehir","studio.languages":"Diller (virgülle ayrılmış)",
+    "studio.tone":"Konsiyerj üslubu","studio.treatments":"Tedaviler & fiyatlandırma","studio.treatmentN":"Tedavi",
+    "btn.remove":"Kaldır","studio.phName":"Ad","studio.phPrice":"Fiyat aralığı","studio.phPackage":"Paket detayları",
+    "btn.addTreatment":"+ Tedavi ekle","studio.availability":"Uygunluk notu","studio.bookingPolicy":"Rezervasyon politikası",
+    "btn.saving":"Kaydediliyor…","btn.saveTeach":"Kaydet & AI'a öğret",
+    "studio.saved":"✅ Kaydedildi — bir sonraki yanıtta geçerli",
+    "toast.profileSaved":"Klinik profili kaydedildi — bir sonraki yanıtta geçerli",
+    "consultants.sub":"Satış koordinatörleriniz için şeffaf, prim hesabına hazır performans.",
+    "tbl.coordinator":"Koordinatör","tbl.languages":"Diller","tbl.assigned":"Atanan","tbl.hot":"Sıcak",
+    "tbl.handed":"Devredilen","tbl.booked":"Rezervasyonlu",
+    "matching.title":"Çok Dilli Koordinatör Eşleştirme",
+    "matching.sub":"Gelen dil otomatik algılanır ve doğru koordinatöre yönlendirilir. Uygun kimse yoksa AI konsiyerj köprü kurar.",
+    "matching.noCoverage":"⚠️ Şu diller için koordinatör yok:",
+    "matching.bridging":"— AI köprü kuruyor. Bu dilleri kapsayan bir koordinatör ekleyin.",
+    "matching.allCovered":"✅ Gelen tüm diller şu an bir koordinatör tarafından kapsanıyor.",
+    "matching.coverage":"Dil kapsamı",
+    "postop.title":"Uçuşa Uygunluk & Ameliyat Sonrası Otomasyonu",
+    "postop.sub":"Bir hastayı (Gelen Kutusu profilinden) taburcu edin; tüm bakım dizisi otomatik planlanır. Vadesi gelen adımlar WhatsApp'tan otomatik gönderilir.",
+    "postop.empty":"Henüz ameliyat sonrası akış yok. Gelen Kutusu'nda bir görüşme açın ve \"Taburcu işaretle\"ye tıklayın.",
+    "postop.thankYou":"Teşekkür","postop.reviewInvite":"Değerlendirme daveti","postop.checkin7":"7. gün kontrol",
+    "postop.checkin30":"30. gün kontrol","postop.fitToFly":"Uçuşa uygunluk belgesi","postop.checkup1y":"1 yıllık kontrol",
+    "postop.sentMark":"✓ gönderildi",
+    "reviews.sub":"Taburcu olan her hasta otomatik olarak Trustpilot / Google değerlendirmesi bırakmaya davet edilir — itibarınız kendiliğinden büyür.",
+    "reviews.invites":"Değerlendirme davetleri","reviews.scheduled":"planlandı","reviews.sent":"Gönderilen",
+    "reviews.delivered":"otomatik iletildi","reviews.reputation":"İtibar","reviews.noRatingSource":"Trustpilot / Google bağlantısı gerekiyor",
+    "devices.sub":"Boş ameliyathane / cihaz slotlarını bekleyen hastalarla otomatik eşleştirin.",
+    "devices.slotsToday":"slot bugün","devices.waitingList":"Bekleme listesi — bir slota ata",
+    "btn.bookNextSlot":"Sonraki slotu ayır","devices.noOneWaiting":"Bekleyen kimse yok 🎉",
+    "toast.slotBooked":"Slot ayrıldı:",
+    "logistics.sub":"Uçuş → VIP transfer → otel girişi → klinik randevusu, tek panoda koordine edilir.",
+    "logistics.empty":"Henüz lojistik kaydı yok. Gelen Kutusu'ndan bir hastayı taburcu ederek buraya ekleyin.",
+    "toast.logisticsUpdated":"Lojistik güncellendi",
+    "workflow.title":"Tıbbi İş Akışı Otomasyonu",
+    "workflow.sub":"MediVoyage OS genelinde şu an çalışan tetikleyici tabanlı otomasyonlar.",
+    "workflow.when":"EĞER","workflow.then":"O ZAMAN",
+    "auto.1a":"Yeni WhatsApp mesajı","auto.1b":"AI konsiyerj hastanın dilinde otomatik yanıtlar",
+    "auto.2a":"Hasta şikâyet ediyor / rezervasyona hazır","auto.2b":"İnsana devret + ekibi bilgilendir",
+    "auto.3a":"Dil algılandı","auto.3b":"Eşleşen dildeki koordinatöre yönlendir",
+    "auto.4a":"Lead oluşturuldu veya güncellendi","auto.4b":"Zoho CRM'e senkronize et",
+    "auto.5a":"Web sitesi widget'ı gönderildi","auto.5b":"Lead oluştur ve görüşme aç",
+    "auto.6a":"Hasta taburcu edildi","auto.6b":"Ameliyat sonrası dizisi, değerlendirme daveti & lojistik planla",
+    "auto.7a":"Ameliyat sonrası adım vadesi geldi","auto.7b":"WhatsApp takip şablonunu otomatik gönder",
+    "shell.aiLive":"AI konsiyerj aktif","btn.refresh":"↻ Yenile",
+    "shell.backendDown":"Backend'e ulaşılamıyor","shell.backendHint":"Sunucu DATABASE_URL ayarıyken çalışıyor mu?",
+    "shell.themeToggle":"Koyu / açık tema",
+    "time.justNow":"az önce","time.m":" dk önce","time.h":" sa önce","time.d":" g önce",
+    "err.title":"Bu görünüm gösterilemedi","err.hint":"Panelin geri kalanı çalışıyor — soldan başka bir bölüm seçebilirsiniz.","err.retry":"Tekrar dene",
+  },
+};
+
+function store(key, fallback){
+  // Private windows and blocked site data make localStorage throw, not just
+  // return null — the panel must still render with the default.
+  try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
+}
+function remember(key, value){ try { localStorage.setItem(key, value); } catch (e) {} }
+
+let LANG = store("mv-lang", "tr");
+let THEME = store("mv-theme", "dark");
+
+function T(key){
+  const dict = I18N[LANG] || I18N.en;
+  return key in dict ? dict[key] : (key in I18N.en ? I18N.en[key] : key);
+}
+function setLang(next){ LANG = next; remember("mv-lang", next); document.documentElement.lang = next; renderApp(); }
+function setTheme(next){ THEME = next; remember("mv-theme", next); applyTheme(); renderApp(); }
+function applyTheme(){ document.documentElement.setAttribute("data-theme", THEME); }
+
+applyTheme();
+document.documentElement.lang = LANG;
+
+const RTL_LANGS = ["ar","fa","he","ur"];
+
+// Medical tourism runs across time zones, and the single easiest way to lose a
+// patient's trust is a WhatsApp message at 3am. The dialling code is the only
+// location signal that is always present, so the patient's local clock is
+// derived from it. Longest prefix wins.
+const TZ_BY_DIAL = {
+  "1":"America/New_York","7":"Europe/Moscow","20":"Africa/Cairo","31":"Europe/Amsterdam",
+  "32":"Europe/Brussels","33":"Europe/Paris","34":"Europe/Madrid","39":"Europe/Rome",
+  "41":"Europe/Zurich","43":"Europe/Vienna","44":"Europe/London","45":"Europe/Copenhagen",
+  "46":"Europe/Stockholm","47":"Europe/Oslo","48":"Europe/Warsaw","49":"Europe/Berlin",
+  "90":"Europe/Istanbul","98":"Asia/Tehran","212":"Africa/Casablanca","213":"Africa/Algiers",
+  "351":"Europe/Lisbon","353":"Europe/Dublin","380":"Europe/Kyiv","961":"Asia/Beirut",
+  "962":"Asia/Amman","964":"Asia/Baghdad","965":"Asia/Kuwait","966":"Asia/Riyadh",
+  "971":"Asia/Dubai","974":"Asia/Qatar","994":"Asia/Baku",
+};
+function patientZone(phone){
+  const digits = String(phone||"").replace(/\D/g,"");
+  for (let len = 3; len >= 1; len--){
+    const tz = TZ_BY_DIAL[digits.slice(0,len)];
+    if (tz) return tz;
+  }
+  return null;
+}
+function patientClock(phone){
+  const tz = patientZone(phone);
+  if (!tz) return null;
+  try{
+    const now = new Date();
+    const time = new Intl.DateTimeFormat(LANG, { hour:"2-digit", minute:"2-digit", timeZone:tz }).format(now);
+    const hour = Number(new Intl.DateTimeFormat("en-GB", { hour:"2-digit", hour12:false, timeZone:tz }).format(now));
+    return { time, offHours: hour < 8 || hour >= 21 };
+  }catch(e){ return null; }
+}
+const flag = (l)=>({de:"🇩🇪",en:"🇬🇧",ar:"🇦🇪",ru:"🇷🇺",fr:"🇫🇷",tr:"🇹🇷",it:"🇮🇹",es:"🇪🇸"}[l]||"🌐");
+const fmtTime=(t)=>{ if(!t) return ""; const d=new Date(t); return d.toLocaleString(LANG, {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}); };
+const timeAgo=(t)=>{ if(!t) return ""; const s=(Date.now()-new Date(t).getTime())/1000; if(s<45) return T("time.justNow"); if(s<3600) return Math.floor(s/60)+T("time.m"); if(s<86400) return Math.floor(s/3600)+T("time.h"); if(s<604800) return Math.floor(s/86400)+T("time.d"); return new Date(t).toLocaleDateString(LANG); };
+function showToast(message,type){ window.dispatchEvent(new CustomEvent("mv-toast",{detail:{message,type:type||"success"}})); }
+
+async function api(path, opts){
+  const res = await fetch("/api"+path, {
+    headers:{ "Content-Type":"application/json" }, ...opts,
+  });
+  if(!res.ok){ const e = await res.json().catch(()=>({})); throw new Error(e.error||("HTTP "+res.status)); }
+  return res.json();
+}
+
+function useInterval(fn, ms){
+  const ref = useRef(fn); ref.current = fn;
+  useEffect(()=>{ const id=setInterval(()=>ref.current(), ms); return ()=>clearInterval(id); }, [ms]);
+}
+
+// ── Command Center ──────────────────────────────────────────────────────────
+function CommandCenter({ stats, analytics, handovers, onOpenLead }){
+  const s = stats||{};
+  const n = (v)=> v==null? "–" : v;
+  return html`
+    <div>
+      <h1>${T("nav.command")}</h1>
+      <div class="sub">${T("cmd.sub")}</div>
+      <div class="kpis">
+        <div class="glass kpi"><div class="kpi-ico"><${Icon} name="users"/></div><div class="label">${T("kpi.leadsToday")}</div><div class="val cyan">${n(s.today_leads)}</div><div class="foot">${n(s.total_leads)} ${T("kpi.totalPipeline")}</div></div>
+        <div class="glass kpi"><div class="kpi-ico mint"><${Icon} name="activity"/></div><div class="label">${T("kpi.hotLeads")}</div><div class="val mint">${n(s.hot_leads)}</div><div class="foot">${T("kpi.scoreGte")}</div></div>
+        <div class="glass kpi"><div class="kpi-ico alert"><${Icon} name="inbox"/></div><div class="label">${T("kpi.awaitingHuman")}</div><div class="val alert">${n(s.needs_human)}</div><div class="foot">${T("kpi.inHandoverQueue")}</div></div>
+        <div class="glass kpi"><div class="kpi-ico"><${Icon} name="globe"/></div><div class="label">${T("kpi.countries")}</div><div class="val">${n(s.countries)}</div><div class="foot">${n(s.with_country)} ${T("kpi.locatedLeads")}</div></div>
+        <div class="glass kpi"><div class="kpi-ico"><${Icon} name="chart"/></div><div class="label">${T("kpi.aiAutonomy")}</div><div class="val cyan">${s.ai_autonomy==null?"–":s.ai_autonomy+"%"}</div><div class="foot">${T("kpi.autonomyFoot")}</div></div>
+        <div class="glass kpi"><div class="kpi-ico mint"><${Icon} name="calendar"/></div><div class="label">${T("kpi.deviceOccupancy")}</div><div class="val mint">${s.device_occupancy==null?"–":s.device_occupancy+"%"}</div><div class="foot">${T("kpi.occupancyFoot")}</div></div>
+      </div>
+
+      ${analytics?.trend ? html`
+        <div class="glass" style="padding:16px 18px;margin-bottom:22px">
+          <div class="section-title" style="margin-top:0">${T("cmd.chartTitle")}</div>
+          <${MiniBarChart} data=${analytics.trend} />
+        </div>` : null}
+
+      ${(() => {
+        const urgent = (handovers||[]).filter(h=>h.urgent);
+        const normal = (handovers||[]).filter(h=>!h.urgent);
+        return html`
+          ${urgent.length? html`
+            <div class="section-title clin-title"><${Icon} name="alert"/> ${T("cmd.clinicalAlerts")}</div>
+            ${urgent.map((h)=> html`
+              <div class="glass action-card alert-card" key=${h.lead_id}>
+                <div class="action-left">
+                  <div class="action-name">${flag(h.language)} ${h.name||h.phone} <span class="badge urgent">${T("badge.urgent")}</span></div>
+                  <div class="action-reason">${h.medical_note || h.handover_reason || 'Needs a clinician now'} · ${h.country||'—'}</div>
+                </div>
+                <button class="btn warn" onClick=${()=>onOpenLead(h.lead_id)}>${T("btn.openNow")}</button>
+              </div>`)}
+          `:null}
+
+          <div class="section-title">${T("cmd.actionCenter")}</div>
+          ${normal.length===0
+            ? html`<div class="glass action-card"><div class="action-left"><div class="action-name">${T("cmd.allClear")}</div><div class="action-reason">${T("cmd.allClearSub")}</div></div></div>`
+            : normal.map((h)=> html`
+              <div class="glass action-card" key=${h.lead_id}>
+                <div class="action-left">
+                  <div class="action-name">${flag(h.language)} ${h.name||h.phone} ${h.score!=null?html`<span class="badge hot">${T("badge.score")} ${h.score}</span>`:null}</div>
+                  <div class="action-reason">${h.handover_reason||T("cmd.needsAttention")} · ${h.country||"—"}</div>
+                </div>
+                <button class="btn primary" onClick=${()=>onOpenLead(h.lead_id)}>${T("btn.openTakeOver")}</button>
+              </div>`)}
+        `;
+      })()}
+    </div>`;
+}
+
+// ── Inbox ───────────────────────────────────────────────────────────────────
+function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pendingDeposits }){
+  const [detail, setDetail] = useState(null);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const msgsRef = useRef(null);
+
+  const loadDetail = useCallback(async (id)=>{
+    if(!id){ setDetail(null); return; }
+    try{ setDetail(await api("/conversations/"+id)); setErr(null); }
+    catch(e){ setErr(e.message); }
+  }, []);
+
+  useEffect(()=>{ loadDetail(selectedId); }, [selectedId, loadDetail]);
+  useInterval(()=>{ if(selectedId) loadDetail(selectedId); }, 5000);
+  useEffect(()=>{ if(msgsRef.current) msgsRef.current.scrollTop = msgsRef.current.scrollHeight; }, [detail]);
+
+  const act = async (action)=>{
+    if(!selectedId) return;
+    setBusy(true); setErr(null);
+    try{ await api("/conversations/"+selectedId+"/"+action, {method:"POST"}); await loadDetail(selectedId); await reloadShared();
+      showToast(action==="takeover"?T("toast.takeover"):T("toast.handback")); }
+    catch(e){ setErr(e.message); showToast(e.message,"error"); } finally{ setBusy(false); }
+  };
+  const send = async ()=>{
+    const t = text.trim(); if(!t||!selectedId) return;
+    setBusy(true); setErr(null);
+    try{ await api("/conversations/"+selectedId+"/reply", {method:"POST", body:JSON.stringify({text:t})}); setText(""); await loadDetail(selectedId); await reloadShared(); showToast("Message sent"); }
+    catch(e){ setErr(e.message); showToast(e.message,"error"); } finally{ setBusy(false); }
+  };
+  const discharge = async ()=>{
+    if(!selectedId) return;
+    // Irreversible from here, and it starts sending the patient messages.
+    if(!window.confirm(T("confirm.discharge"))) return;
+    setBusy(true); setErr(null);
+    try{ await api("/conversations/"+selectedId+"/discharge", {method:"POST"}); await loadDetail(selectedId); await reloadShared(); showToast(T("toast.postopStarted")); }
+    catch(e){ setErr(e.message); showToast(e.message,"error"); } finally{ setBusy(false); }
+  };
+
+  const lead = detail?.lead; const conv = detail?.conversation;
+  const isHuman = conv?.status==="human_handling";
+  const rtl = lead && RTL_LANGS.includes(lead.language);
+
+  const q = query.trim().toLowerCase();
+  const filtered = (conversations||[]).filter((c)=>{
+    if(filter==="urgent" && !c.urgent) return false;
+    if(filter==="human" && c.conv_status!=="needs_human") return false;
+    if(filter==="ai" && c.conv_status!=="ai_handling") return false;
+    // The patient spoke last, so the ball is on the clinic's side of the net.
+    if(filter==="awaiting" && c.last_role!=="user") return false;
+    if(filter==="deposit" && !depositLeadIds.has(c.lead_id)) return false;
+    if(q && !((c.name||"").toLowerCase().includes(q) || (c.phone||"").includes(q))) return false;
+    return true;
+  });
+  const urgentCount = (conversations||[]).filter(c=>c.urgent).length;
+  const humanCount = (conversations||[]).filter(c=>c.conv_status==="needs_human").length;
+  const awaitingCount = (conversations||[]).filter(c=>c.last_role==="user").length;
+  // A Set keyed by lead_id: O(1) lookup per row instead of re-scanning the
+  // pending-deposits array for every conversation on every render.
+  const depositLeadIds = new Set((pendingDeposits||[]).map((d)=>d.lead_id));
+  const depositCount = depositLeadIds.size;
+
+  return html`
+    <div>
+      <h1>${T("nav.inbox")}</h1>
+      <div class="sub">${T("inbox.sub")}</div>
+      ${err?html`<div class="err">${err}</div>`:null}
+      <div class="inbox">
+        <!-- conversation list -->
+        <div class="glass col">
+          <div style="padding:12px 12px 2px">
+            <input class="search" placeholder=${T("inbox.search")} value=${query} onInput=${(e)=>setQuery(e.target.value)} />
+            <div class="filters">
+              <span class="chip ${filter==='all'?'on':''}" onClick=${()=>setFilter('all')}>${T("filter.all")}</span>
+              <span class="chip ${filter==='urgent'?'on':''}" onClick=${()=>setFilter('urgent')}>${T("filter.urgent")}${urgentCount?html`<span class="ct">${urgentCount}</span>`:null}</span>
+              <span class="chip ${filter==='human'?'on':''}" onClick=${()=>setFilter('human')}>${T("filter.needsHuman")}${humanCount?html`<span class="ct">${humanCount}</span>`:null}</span>
+              <span class="chip ${filter==='awaiting'?'on':''}" onClick=${()=>setFilter('awaiting')}>${T("filter.awaiting")}${awaitingCount?html`<span class="ct">${awaitingCount}</span>`:null}</span>
+              <span class="chip ${filter==='deposit'?'on':''}" onClick=${()=>setFilter('deposit')}>${T("filter.awaitingDeposit")}${depositCount?html`<span class="ct">${depositCount}</span>`:null}</span>
+              <span class="chip ${filter==='ai'?'on':''}" onClick=${()=>setFilter('ai')}>${T("filter.ai")}</span>
+            </div>
+          </div>
+          ${filtered.length===0
+            ? html`<div class="empty">${(conversations||[]).length===0?T("inbox.noConversations"):T("inbox.noMatch")}</div>`
+            : filtered.map((c)=> html`
+              <div class="conv-item ${c.lead_id===selectedId?"sel":""} ${c.last_role==="user"?"awaits":""}" key=${c.lead_id} onClick=${()=>setSelectedId(c.lead_id)}>
+                <div class="conv-top">
+                  <span class="conv-name">${flag(c.language)} ${c.name||c.phone}</span>
+                  ${c.urgent?html`<span class="badge urgent">${T("badge.urgent")}</span>`
+                    : c.conv_status==="needs_human"?html`<span class="badge hot">${T("badge.human")}</span>`
+                    : c.last_role==="user"?html`<span class="badge awaiting" title=${T("inbox.awaitingMark")}>${T("filter.awaiting")}</span>`
+                    : c.conv_status==="human_handling"?html`<span class="badge human">${T("badge.agent")}</span>`
+                    : c.score!=null?html`<span class="badge">${c.score}</span>`:null}
+                </div>
+                <div class="conv-prev">${c.last_role==="assistant"?"↩ ":""}${c.last_message||"—"}</div>
+                <div class="conv-time">${depositLeadIds.has(c.lead_id)?html`<span class="dep-flag" title=${T("payments.pendingBadge")}>€</span> `:null}${timeAgo(c.last_message_at)}</div>
+              </div>`)
+          }
+        </div>
+
+        <!-- active thread -->
+        <div class="glass thread">
+          ${!detail? html`<div class="empty">${T("inbox.selectConv")}</div>` : html`
+            <div class="thread-head">
+              <div><b>${flag(lead.language)} ${lead.name||lead.phone}</b> <span class="sub" style="margin:0">· ${lead.phone}</span></div>
+              ${isHuman
+                ? html`<button class="btn" disabled=${busy} onClick=${()=>act("handback")}>${T("btn.handBack")}</button>`
+                : html`<button class="btn warn" disabled=${busy} onClick=${()=>act("takeover")}>${T("btn.takeOver")}</button>`}
+            </div>
+            <div class="banner ${isHuman?"human":""}">
+              ${isHuman ? T("inbox.youHandling") : T("inbox.aiHandling")}
+            </div>
+            ${conv?.urgent? html`<div class="banner" style="background:var(--alert-wash);color:var(--alert-ink);font-weight:600">${T("inbox.urgentEsc")}</div>`:null}
+            <div class="msgs" ref=${msgsRef}>
+              ${(detail.messages||[]).map((m,i)=> html`
+                <div class="bubble ${m.role} ${rtl?"rtl":""}" key=${i}>
+                  ${m.content}
+                  <span class="meta">${m.role==="assistant"?T("msg.conciergeAgent"):T("msg.patient")} · ${fmtTime(m.created_at)}</span>
+                </div>`)}
+              ${(detail.messages||[]).length===0?html`<div class="empty">${T("inbox.noMessages")}</div>`:null}
+            </div>
+            <div class="composer">
+              <textarea placeholder=${isHuman?T("inbox.typeReply"):T("inbox.takeOverHint")} value=${text}
+                onInput=${(e)=>setText(e.target.value)}
+                onKeyDown=${(e)=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } }}></textarea>
+              <button class="btn primary" disabled=${busy||!text.trim()} onClick=${send}>${T("btn.send")}</button>
+            </div>
+          `}
+        </div>
+
+        <!-- lead profile -->
+        <div class="glass profile">
+          ${!lead? html`<div class="empty">${T("inbox.leadDetails")}</div>` : html`
+            <div class="pf-name">${flag(lead.language)} ${lead.name||T("pf.unknown")}</div>
+            <div class="sub" style="margin:2px 0 14px">${lead.country||"—"} · ${lead.phone}</div>
+            <div class="pf-row"><span class="k">${T("pf.leadScore")}</span><span>${lead.score??"–"}/100</span></div>
+            <div class="scorebar"><i style=${{width:(lead.score||0)+"%"}}></i></div>
+            <div class="pf-row" style="margin-top:12px"><span class="k">${T("pf.status")}</span><span>${lead.status||"–"}</span></div>
+            <div class="pf-row"><span class="k">${T("pf.readiness")}</span><span>${lead.readiness||"–"}</span></div>
+            <div class="pf-row"><span class="k">${T("pf.language")}</span><span>${lead.language||"–"}</span></div>
+            <div class="pf-row"><span class="k">${T("pf.treatment")}</span><span style="text-align:right;max-width:150px">${lead.treatment_interest||"–"}</span></div>
+            <div class="pf-row"><span class="k">${T("pf.budget")}</span><span>${lead.budget_hint||"–"}</span></div>
+            <div class="pf-row"><span class="k">${T("pf.crmId")}</span><span>${lead.crm_lead_id||T("pf.notSynced")}</span></div>
+            ${(()=>{ const clock = patientClock(lead.phone); return clock? html`
+              <div class="pf-row"><span class="k">${T("pf.localTime")}</span>
+                <span class=${clock.offHours?"offhours":""}>${clock.time}${clock.offHours?html` · ${T("pf.offHours")}`:null}</span></div>`:null; })()}
+            ${lead.medical_note? html`<div class="med-note"><span class="lbl"><${Icon} name="alert"/> ${T("pf.clinicalNote")}</span>${lead.medical_note}</div>`:null}
+            <button class="btn" style="width:100%;margin-top:14px" disabled=${busy} onClick=${discharge}>${T("btn.markDischarged")}</button>
+            <${Notes} leadId=${lead.id} notes=${detail.notes} onAdded=${()=>loadDetail(lead.id)} />
+            <${Payments} leadId=${lead.id} payments=${detail.payments} onChanged=${()=>{ loadDetail(lead.id); reloadShared(); }} />
+          `}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Chart + Analytics + Campaigns ───────────────────────────────────────────
+// Internal notes: the handover an operations team actually runs on — what one
+// coordinator needs to tell the next. Never reaches the patient.
+function Notes({ leadId, notes, onAdded }){
+  const [text,setText] = useState("");
+  const [busy,setBusy] = useState(false);
+  const save = async ()=>{
+    const body = text.trim();
+    if(!body) return;
+    setBusy(true);
+    try{
+      await api("/conversations/"+leadId+"/notes", { method:"POST", body: JSON.stringify({ body }) });
+      setText(""); showToast(T("notes.saved")); await onAdded();
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(false); }
+  };
+  return html`<div class="notes">
+    <div class="section-title" style=${{marginTop:"20px",marginBottom:"10px",fontSize:"13px"}}>${T("notes.title")}</div>
+    <textarea class="note-input" placeholder=${T("notes.placeholder")} value=${text}
+      onInput=${(e)=>setText(e.target.value)}
+      onKeyDown=${(e)=>{ if(e.key==="Enter" && (e.metaKey||e.ctrlKey)){ e.preventDefault(); save(); } }}></textarea>
+    <button class="btn" style=${{marginTop:"8px",width:"100%"}} disabled=${busy||!text.trim()} onClick=${save}>${T("notes.add")}</button>
+    ${(notes||[]).length===0
+      ? html`<div class="note-empty">${T("notes.empty")}</div>`
+      : (notes||[]).map((n)=> html`<div class="note" key=${n.id}>
+          <div class="note-meta">${n.author||"—"} · ${fmtTime(n.created_at)}</div>
+          ${n.body}
+        </div>`)}
+  </div>`;
+}
+
+// Payments: the one number the rest of the app's "real" figures depend on.
+// A pending row can be marked paid or nudged with a reminder; nothing here is
+// ever visible to the patient.
+const PAYMENT_TYPES = ["deposit","balance","full"];
+function Payments({ leadId, payments, onChanged }){
+  const [amount,setAmount] = useState("");
+  const [type,setType] = useState("deposit");
+  const [dueDate,setDueDate] = useState("");
+  const [busy,setBusy] = useState(false);
+
+  const add = async ()=>{
+    const amt = Number(amount);
+    if(!amt || amt<=0) return;
+    setBusy(true);
+    try{
+      await api("/conversations/"+leadId+"/payments", { method:"POST", body: JSON.stringify({ amount: amt, type, dueDate: dueDate||null }) });
+      setAmount(""); setDueDate(""); showToast(T("toast.paymentAdded")); await onChanged();
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(false); }
+  };
+  const markPaid = async (id)=>{
+    try{ await api("/payments/"+id, { method:"PUT", body: JSON.stringify({ status:"paid" }) }); showToast(T("toast.paymentPaid")); await onChanged(); }
+    catch(e){ showToast(e.message,"error"); }
+  };
+  const remind = async (id)=>{
+    try{ await api("/payments/"+id, { method:"PUT", body: JSON.stringify({ reminder:true }) }); showToast(T("toast.reminderSet")); await onChanged(); }
+    catch(e){ showToast(e.message,"error"); }
+  };
+
+  return html`<div class="notes">
+    <div class="section-title" style=${{marginTop:"20px",marginBottom:"10px",fontSize:"13px"}}>${T("payments.title")}</div>
+    <div style=${{display:"flex",gap:"6px"}}>
+      <input type="number" min="0" step="0.01" placeholder=${T("payments.amount")} value=${amount}
+        onInput=${(e)=>setAmount(e.target.value)} style=${{flex:"1",minWidth:"0"}}/>
+      <select value=${type} onChange=${(e)=>setType(e.target.value)} style=${{flex:"none"}}>
+        ${PAYMENT_TYPES.map((t)=> html`<option key=${t} value=${t}>${T("payments.type."+t)}</option>`)}
+      </select>
+    </div>
+    <input type="date" value=${dueDate} onInput=${(e)=>setDueDate(e.target.value)}
+      style=${{width:"100%",marginTop:"6px"}} title=${T("payments.due")}/>
+    <button class="btn" style=${{marginTop:"8px",width:"100%"}} disabled=${busy||!amount} onClick=${add}>${T("payments.add")}</button>
+    ${(payments||[]).length===0
+      ? html`<div class="note-empty">${T("payments.empty")}</div>`
+      : (payments||[]).map((pmt)=> html`<div class="note" key=${pmt.id}>
+          <div class="note-meta">
+            ${T("payments.type."+pmt.type)} · ${pmt.currency} ${Number(pmt.amount).toLocaleString()}
+            · <span class="badge ${pmt.status==='paid'?'human':pmt.status==='pending'?'awaiting':''}">${T("payments.status."+pmt.status)}</span>
+            ${pmt.due_date? html` · ${T("payments.due")}: ${pmt.due_date}`:null}
+          </div>
+          ${pmt.status==="pending"? html`<div style=${{display:"flex",gap:"6px",marginTop:"6px"}}>
+            <button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} onClick=${()=>markPaid(pmt.id)}>${T("payments.markPaid")}</button>
+            <button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${!!pmt.reminder_sent_at} onClick=${()=>remind(pmt.id)}>
+              ${pmt.reminder_sent_at? T("payments.reminded")+" · "+fmtTime(pmt.reminder_sent_at) : T("payments.remind")}
+            </button>
+          </div>`:null}
+        </div>`)}
+  </div>`;
+}
+
+function MiniBarChart({ data }){
+  // Room reserved in the viewBox for the value labels on the left and the day
+  // numbers underneath, so nothing is clipped at the drawing's edge.
+  const w=680, h=142, padX=28, padTop=14, padBottom=24;
+  const plot = h - padTop - padBottom;
+  const max = Math.max(1, ...data.map(d=>d.count));
+  const bw = (w-padX*2)/data.length;
+  const base = padTop + plot;
+  const y = (v)=> base - (v/max)*plot;
+  // Reference lines name values the chart actually reaches — the peak and,
+  // when there is room between them, its midpoint.
+  const mid = Math.round(max/2);
+  const ticks = max > 1 && mid > 0 && mid < max ? [max, mid] : [max];
+  // The tallest day gets the brass — but only when there is something to be
+  // tallest *than*. With a single active day the highlight has no comparison to
+  // make and just turns the whole chart into one loud block, so it stays off.
+  let peak = -1;
+  if (data.filter((d)=>d.count > 0).length > 1) {
+    peak = 0;
+    data.forEach((d,i)=>{ if(d.count > data[peak].count) peak = i; });
+  }
+  return html`<svg viewBox="0 0 ${w} ${h}" style=${{width:"100%",height:"auto",display:"block"}} role="img"
+                   aria-label=${`${data.reduce((a,d)=>a+d.count,0)} ${T("chart.leads")}`}>
+    ${ticks.map((v,i)=> html`<g key=${"t"+i}>
+      <line class="chart-grid" x1=${padX} y1=${y(v)} x2=${w-padX} y2=${y(v)}/>
+      <text class="chart-label" x=${padX-7} y=${y(v)+3} textAnchor="end">${v}</text>
+    </g>`)}
+    <line class="chart-axis" x1=${padX} y1=${base} x2=${w-padX} y2=${base}/>
+    ${data.map((d,i)=>{
+      const bh = (d.count/max)*plot;
+      const x = padX + i*bw;
+      // Empty days keep a 1px stub on the baseline so the series reads as a
+      // continuous fourteen days rather than a few floating bars.
+      const drawn = Math.max(bh, 1);
+      const cls = d.count ? (i===peak ? "chart-bar peak" : "chart-bar") : "chart-bar zero";
+      return html`<g key=${i}>
+        <rect class=${cls} x=${x+2} y=${base-drawn} width=${Math.max(1,bw-5)} height=${drawn}>
+          <title>${d.count} ${T("chart.leads")}</title></rect>
+        <text class="chart-label" x=${x+bw/2} y=${h-8} textAnchor="middle">${new Date(d.day).getDate()}</text>
+      </g>`;
+    })}
+  </svg>`;
+}
+
+function Analytics({ analytics }){
+  if(!analytics) return html`<div class="empty">${T("load.analytics")}</div>`;
+  const f=analytics.funnel||{};
+  const stages=[[T("funnel.leads"),f.leads],[T("funnel.qualified"),f.qualified],[T("funnel.handedOver"),f.handed_over],[T("funnel.booked"),f.booked]];
+  const maxF=Math.max(1,...stages.map(s=>Number(s[1])));
+  return html`<div>
+    <h1>${T("nav.analytics")}</h1>
+    <div class="sub">${T("analytics.sub")}</div>
+    <div class="kpis">
+      <div class="glass kpi"><div class="label">${T("analytics.adSpend")}</div><div class="val">€${analytics.spend.total_spend.toLocaleString()}</div><div class="foot">${analytics.spend.total_clicks} ${T("analytics.clicks")}</div></div>
+      <div class="glass kpi"><div class="label">CAC</div><div class="val cyan">€${analytics.cac}</div><div class="foot">${T("analytics.costPerLead")}</div></div>
+      <div class="glass kpi"><div class="label">ROAS</div><div class="val mint">${analytics.roas}×</div><div class="foot">${T("analytics.roasFoot")}</div></div>
+      <div class="glass kpi"><div class="label">${T("analytics.revenue")}</div><div class="val">€${analytics.revenue.toLocaleString()}</div><div class="foot">${T("analytics.fromBooked")}</div></div>
+      <div class="glass kpi"><div class="label">${T("analytics.pendingDeposits")}</div><div class="val alert">€${(analytics.payments_pending||0).toLocaleString()}</div><div class="foot">${analytics.payments_pending_count||0} ${T("payments.pendingBadge")}</div></div>
+    </div>
+    <div class="glass" style="padding:16px 18px;margin-bottom:16px">
+      <div class="section-title" style="margin-top:0">${T("analytics.funnel")}</div>
+      ${stages.map((s,i)=> html`<div key=${i} style="margin:9px 0">
+        <div style="display:flex;justify-content:space-between;font-size:13px"><span>${s[0]}</span><span>${s[1]}</span></div>
+        <div class="scorebar"><i style=${{width:(Number(s[1])/maxF*100)+"%"}}></i></div></div>`)}
+    </div>
+    <div class="glass" style="padding:16px 18px">
+      <div class="section-title" style="margin-top:0">${T("analytics.bySource")}</div>
+      ${(analytics.by_source||[]).map((s,i)=> html`<div key=${i} class="pf-row"><span class="k">${s.source}</span><span>${s.count}</span></div>`)}
+    </div>
+    <div class="glass" style="padding:16px 18px;margin-top:16px">
+      <div class="section-title" style="margin-top:0">${T("analytics.byChannel")}</div>
+      ${(analytics.by_channel||[]).map((c,i)=> html`<div key=${i} class="pf-row">
+        <span class="k">${c.channel}</span>
+        <span>€${c.spend.toLocaleString()} · ${c.clicks} ${T("analytics.clicks")} · ${T("analytics.cpc")} €${c.cpc==null?"–":c.cpc}</span>
+      </div>`)}
+      ${analytics.channel_attribution===false? html`<div class="sub" style="margin:14px 0 0;font-size:12.5px">${T("analytics.attributionNote")}</div>`:null}
+    </div>
+    ${analytics.revenue===0 && !analytics.payments_pending? html`<div class="sub" style="margin:16px 0 0;font-size:12.5px">${T("analytics.noPaymentsNote")}</div>`
+      : analytics.payments_pending? html`<div class="sub" style="margin:16px 0 0;font-size:12.5px">€${analytics.payments_pending.toLocaleString()} ${T("analytics.pendingNote")} ${analytics.payments_pending_count} ${T("analytics.pendingNote2")}</div>`
+      : null}
+  </div>`;
+}
+
+function Campaigns({ templates, reloadShared }){
+  const [tpl,setTpl]=useState(null);
+  const [segment,setSegment]=useState("past");
+  const [offer,setOffer]=useState(T("campaigns.defaultOffer"));
+  const [result,setResult]=useState(null);
+  const [busy,setBusy]=useState(false);
+  useEffect(()=>{ if(templates.length && !tpl) setTpl(templates[0].key); }, [templates, tpl]);
+  const current=templates.find(t=>t.key===tpl);
+  const needsOffer=current?.params?.includes("offer");
+  const send=async()=>{
+    setBusy(true); setResult(null);
+    try{
+      const r=await api("/campaigns/broadcast",{method:"POST",body:JSON.stringify({template:tpl,segment,variables:needsOffer?{offer}:{}})});
+      setResult(r); reloadShared(); showToast(`Broadcast sent to ${r.sent} of ${r.recipients}`);
+    }catch(e){ setResult({error:e.message}); } finally{ setBusy(false); }
+  };
+  return html`<div>
+    <h1>${T("campaigns.title")}</h1>
+    <div class="sub">${T("campaigns.sub")}</div>
+    <div class="glass" style="padding:18px;max-width:620px">
+      <label style="display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px">${T("campaigns.template")}</label>
+      <select value=${tpl||""} onChange=${(e)=>setTpl(e.target.value)} style="width:100%;margin-bottom:14px">
+        ${templates.map(t=> html`<option key=${t.key} value=${t.key}>${t.label}</option>`)}
+      </select>
+      ${needsOffer? html`<label style="display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px">${T("campaigns.offerText")}</label>
+        <input value=${offer} onInput=${(e)=>setOffer(e.target.value)} style="width:100%;margin-bottom:14px"/>`:null}
+      <label style="display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px">${T("campaigns.segment")}</label>
+      <select value=${segment} onChange=${(e)=>setSegment(e.target.value)} style="width:100%;margin-bottom:14px">
+        <option value="past">${T("seg.past")}</option>
+        <option value="hot">${T("kpi.hotLeads")}</option>
+        <option value="new">${T("seg.new")}</option>
+        <option value="all">${T("seg.all")}</option>
+      </select>
+      ${current? html`<div class="est" style="background:var(--accent-wash);border-color:var(--accent-line)">
+        ${T("campaigns.preview")} ${current.preview.replaceAll("{{1}}","[name]").replace("{{2}}", needsOffer?offer:"[value]")}</div>`:null}
+      <button class="btn primary" disabled=${busy||!tpl} onClick=${send}>${busy?T("btn.sending"):T("btn.sendBroadcast")}</button>
+      ${result? (result.error
+        ? html`<div class="err" style="margin-top:12px">${result.error}</div>`
+        : html`<div class="est" style="margin-top:12px">✅ ${T("campaigns.sentTo")} ${result.sent}/${result.recipients} ${T("campaigns.recipients")} (${T("campaigns.templateLabel")}: ${result.template}).</div>`):null}
+    </div>
+  </div>`;
+}
+
+function PromptStudio(){
+  const [p,setP]=useState(null);
+  const [saved,setSaved]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState(null);
+  useEffect(()=>{ api("/settings").then(setP).catch(e=>setErr(e.message)); }, []);
+  if(err && !p) return html`<div class="err">${err}</div>`;
+  if(!p) return html`<div class="empty">${T("load.profile")}</div>`;
+
+  const set=(k,v)=>setP({...p,[k]:v});
+  const setTr=(i,k,v)=>{ const t=[...p.treatments]; t[i]={...t[i],[k]:v}; setP({...p,treatments:t}); };
+  const addTr=()=>setP({...p,treatments:[...(p.treatments||[]),{name:"",priceRange:"",package:""}]});
+  const delTr=(i)=>setP({...p,treatments:(p.treatments||[]).filter((_,j)=>j!==i)});
+  const langs=Array.isArray(p.languages)?p.languages.join(", "):(p.languages||"");
+
+  const save=async()=>{
+    setBusy(true); setSaved(false); setErr(null);
+    try{
+      const body={
+        name:p.name, city:p.city, tone:p.tone,
+        languages: Array.isArray(p.languages)?p.languages:String(p.languages).split(",").map(s=>s.trim()).filter(Boolean),
+        treatments:(p.treatments||[]).filter(t=>t.name),
+        availabilityNote:p.availabilityNote, bookingPolicy:p.bookingPolicy, contact:p.contact,
+      };
+      const updated=await api("/settings",{method:"PUT",body:JSON.stringify(body)});
+      setP(updated); setSaved(true); setTimeout(()=>setSaved(false),2500); showToast(T("toast.profileSaved"));
+    }catch(e){ setErr(e.message); } finally{ setBusy(false); }
+  };
+
+  return html`<div>
+    <h1>${T("studio.title")}</h1>
+    <div class="sub">${T("studio.sub")}</div>
+    <div style="max-width:720px">
+      <div class="glass" style="padding:18px;margin-bottom:14px">
+        <label class="fl">${T("studio.clinicName")}</label><input value=${p.name||""} onInput=${e=>set("name",e.target.value)} style="width:100%;margin-bottom:12px"/>
+        <label class="fl">${T("studio.city")}</label><input value=${p.city||""} onInput=${e=>set("city",e.target.value)} style="width:100%;margin-bottom:12px"/>
+        <label class="fl">${T("studio.languages")}</label><input value=${langs} onInput=${e=>set("languages",e.target.value)} style="width:100%;margin-bottom:12px"/>
+        <label class="fl">${T("studio.tone")}</label><textarea onInput=${e=>set("tone",e.target.value)} style="width:100%;min-height:54px">${p.tone||""}</textarea>
+      </div>
+      <div class="glass" style="padding:18px;margin-bottom:14px">
+        <div class="section-title" style="margin-top:0">${T("studio.treatments")}</div>
+        ${(p.treatments||[]).map((t,i)=> html`<div key=${i} style="border:1px solid var(--rule);border-radius:var(--r);padding:12px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:12px;color:var(--ink-2)">${T("studio.treatmentN")} ${i+1}</span>
+            <button class="btn warn" style="padding:4px 10px;font-size:12px" onClick=${()=>delTr(i)}>${T("btn.remove")}</button>
+          </div>
+          <input placeholder=${T("studio.phName")} value=${t.name||""} onInput=${e=>setTr(i,"name",e.target.value)} style="width:100%;margin-bottom:8px"/>
+          <input placeholder=${T("studio.phPrice")} value=${t.priceRange||""} onInput=${e=>setTr(i,"priceRange",e.target.value)} style="width:100%;margin-bottom:8px"/>
+          <input placeholder=${T("studio.phPackage")} value=${t.package||""} onInput=${e=>setTr(i,"package",e.target.value)} style="width:100%"/>
+        </div>`)}
+        <button class="btn" onClick=${addTr}>${T("btn.addTreatment")}</button>
+      </div>
+      <div class="glass" style="padding:18px;margin-bottom:14px">
+        <label class="fl">${T("studio.availability")}</label><input value=${p.availabilityNote||""} onInput=${e=>set("availabilityNote",e.target.value)} style="width:100%;margin-bottom:12px"/>
+        <label class="fl">${T("studio.bookingPolicy")}</label><textarea onInput=${e=>set("bookingPolicy",e.target.value)} style="width:100%;min-height:54px">${p.bookingPolicy||""}</textarea>
+      </div>
+      <button class="btn primary" disabled=${busy} onClick=${save}>${busy?T("btn.saving"):T("btn.saveTeach")}</button>
+      ${saved? html`<span style="margin-left:12px;color:var(--pos)">${T("studio.saved")}</span>`:null}
+      ${err? html`<div class="err" style="margin-top:12px">${err}</div>`:null}
+    </div>
+  </div>`;
+}
+
+function Consultants({ data }){
+  if(!data) return html`<div class="empty">${T("load.generic")}</div>`;
+  const grid="display:grid;grid-template-columns:1.4fr 1fr repeat(5,.7fr);gap:8px";
+  return html`<div>
+    <h1>${T("nav.consultants")}</h1>
+    <div class="sub">${T("consultants.sub")}</div>
+    <div class="glass" style="padding:4px 0">
+      <div style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+        <span>${T("tbl.coordinator")}</span><span>${T("tbl.languages")}</span><span>${T("tbl.assigned")}</span><span>${T("tbl.hot")}</span><span>${T("tbl.handed")}</span><span>${T("tbl.booked")}</span><span>${T("tbl.conversion")}</span>
+      </div>
+      ${(data.coordinators||[]).map((c,i)=> html`<div key=${i} style="${grid};padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+        <span style="font-weight:700">${c.name}</span>
+        <span style="color:var(--ink-2);font-size:12px">${(c.languages||[]).join(', ')}</span>
+        <span>${c.assigned}</span>
+        <span style="color:var(--alert)">${c.hot}</span>
+        <span>${c.handed_over}</span>
+        <span style="color:var(--pos)">${c.booked}</span>
+        <span style="font-weight:600">${c.conversion==null?"–":c.conversion+"%"}</span>
+      </div>`)}
+    </div>
+  </div>`;
+}
+
+function Matching({ data }){
+  if(!data) return html`<div class="empty">${T("load.generic")}</div>`;
+  const langMap={};
+  data.coordinators.forEach(c=> c.languages.forEach(l=>{ (langMap[l]=langMap[l]||[]).push(c.name); }));
+  return html`<div>
+    <h1>${T("matching.title")}</h1>
+    <div class="sub">${T("matching.sub")}</div>
+    ${(data.unmatched_languages||[]).length
+      ? html`<div class="err" style="margin-bottom:16px">${T("matching.noCoverage")} ${(data.unmatched_languages||[]).map(flag).join(' ')} ${(data.unmatched_languages||[]).join(', ')} ${T("matching.bridging")}</div>`
+      : html`<div class="est" style="margin-bottom:16px">${T("matching.allCovered")}</div>`}
+    <div class="glass" style="padding:16px 18px">
+      <div class="section-title" style="margin-top:0">${T("matching.coverage")}</div>
+      ${Object.entries(langMap).map(([l,names],i)=> html`<div key=${i} class="pf-row"><span>${flag(l)} ${l.toUpperCase()}</span><span style="color:var(--ink-2);font-size:12.5px">${names.join(', ')}</span></div>`)}
+    </div>
+  </div>`;
+}
+
+// ── Operations tabs (Post-Op, Reviews, Devices, Logistics, Workflow) ─────────
+function useFetch(path){
+  const [d,setD]=useState(null); const [e,setE]=useState(null);
+  const load=useCallback(()=>{ api(path).then(setD).catch(x=>setE(x.message)); },[path]);
+  useEffect(()=>{ load(); },[load]);
+  return [d,e,load];
+}
+const emptyBox=(txt)=> html`<div class="glass" style="padding:24px;text-align:center;color:var(--ink-2);font-size:13.5px">${txt}</div>`;
+const POSTOP_LABELS={thank_you:"postop.thankYou",review_request:"postop.reviewInvite",checkin_7:"postop.checkin7",checkin_30:"postop.checkin30",fit_to_fly:"postop.fitToFly",checkup_1y:"postop.checkup1y"};
+
+function PostOp(){
+  const [d,e]=useFetch("/postop");
+  if(e) return html`<div class="err">${e}</div>`;
+  if(!d) return emptyBox(T("load.generic"));
+  return html`<div>
+    <h1>${T("postop.title")}</h1>
+    <div class="sub">${T("postop.sub")}</div>
+    ${d.length===0? emptyBox(T("postop.empty"))
+      : d.map((p,i)=> html`<div class="glass" key=${i} style="padding:14px 18px;margin-bottom:12px">
+        <div style="font-weight:700;margin-bottom:8px">${p.name||p.phone}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${(p.tasks||[]).map((t,j)=> html`<span key=${j} class="badge ${t.status==='sent'?'human':''}" style="font-size:11.5px">${POSTOP_LABELS[t.kind]?T(POSTOP_LABELS[t.kind]):t.kind} · ${t.status==='sent'?T("postop.sentMark"):new Date(t.due_at).toLocaleDateString()}</span>`)}
+        </div>
+      </div>`)}
+  </div>`;
+}
+
+function Reviews(){
+  const [d,e]=useFetch("/reviews");
+  if(e) return html`<div class="err">${e}</div>`;
+  if(!d) return emptyBox(T("load.generic"));
+  return html`<div>
+    <h1>${T("nav.reviews")}</h1>
+    <div class="sub">${T("reviews.sub")}</div>
+    <div class="kpis">
+      <div class="glass kpi"><div class="label">${T("reviews.invites")}</div><div class="val cyan">${d.invites}</div><div class="foot">${T("reviews.scheduled")}</div></div>
+      <div class="glass kpi"><div class="label">${T("reviews.sent")}</div><div class="val mint">${d.sent}</div><div class="foot">${T("reviews.delivered")}</div></div>
+      <div class="glass kpi"><div class="label">${T("reviews.reputation")}</div><div class="val">${d.rating==null?"–":d.rating+"★"}</div><div class="foot">${T("reviews.noRatingSource")}</div></div>
+    </div>
+  </div>`;
+}
+
+function Devices(){
+  const [d,e,reload]=useFetch("/devices");
+  const [busy,setBusy]=useState(false);
+  if(e) return html`<div class="err">${e}</div>`;
+  if(!d) return emptyBox(T("load.generic"));
+  const book=async(leadId)=>{
+    const dev=[...d.devices].sort((a,b)=>a.utilization-b.utilization)[0]; if(!dev) return;
+    setBusy(true);
+    try{ await api("/appointments",{method:"POST",body:JSON.stringify({deviceId:dev.id,leadId})}); showToast(T("toast.slotBooked")+" "+dev.name); reload(); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+  return html`<div>
+    <h1>${T("nav.devices")}</h1>
+    <div class="sub">${T("devices.sub")}</div>
+    <div class="kpis">
+      ${(d.devices||[]).map((dev,i)=> html`<div class="glass kpi" key=${i}>
+        <div class="label">${dev.name}</div><div class="val ${dev.utilization>=80?'alert':'cyan'}">${dev.utilization}%</div>
+        <div class="foot">${dev.today_booked}/${dev.slots} ${T("devices.slotsToday")}</div></div>`)}
+    </div>
+    <div class="section-title">${T("devices.waitingList")}</div>
+    ${(d.waiting||[]).length===0? emptyBox(T("devices.noOneWaiting"))
+      : (d.waiting||[]).map((w,i)=> html`<div class="glass action-card" key=${i}>
+        <div class="action-left"><div class="action-name">${w.name||w.phone} ${w.score!=null?html`<span class="badge hot">${w.score}</span>`:null}</div>
+          <div class="action-reason">${w.treatment_interest||'—'}</div></div>
+        <button class="btn primary" disabled=${busy} onClick=${()=>book(w.id)}>${T("btn.bookNextSlot")}</button>
+      </div>`)}
+  </div>`;
+}
+
+const STAGES={
+  transfer_status:["pending","arranged","completed"],
+  hotel_status:["pending","checked_in","checked_out"],
+  appointment_status:["pending","scheduled","done"],
+};
+function Logistics(){
+  const [d,e,reload]=useFetch("/logistics");
+  if(e) return html`<div class="err">${e}</div>`;
+  if(!d) return emptyBox(T("load.generic"));
+  const upd=async(leadId,field,value)=>{ try{ await api("/logistics/"+leadId,{method:"PUT",body:JSON.stringify({[field]:value})}); showToast(T("toast.logisticsUpdated")); reload(); }catch(x){ showToast(x.message,"error");} };
+  return html`<div>
+    <h1>${T("nav.logistics")}</h1>
+    <div class="sub">${T("logistics.sub")}</div>
+    ${d.length===0? emptyBox(T("logistics.empty"))
+      : d.map((l,i)=> html`<div class="glass" key=${i} style="padding:14px 18px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+          <span style="font-weight:700">${l.name||l.phone}</span>
+          <span style="color:var(--ink-2);font-size:12.5px">${l.country||''} ${l.flight_no?('· '+l.flight_no):''}</span></div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          ${["transfer_status","hotel_status","appointment_status"].map((f,j)=> html`<div key=${j}>
+            <div class="fl" style="margin-bottom:4px">${f.replace('_status','').replace('_',' ')}</div>
+            <select value=${l[f]} onChange=${(ev)=>upd(l.lead_id,f,ev.target.value)}>
+              ${STAGES[f].map(s=> html`<option key=${s} value=${s}>${s}</option>`)}
+            </select></div>`)}
+        </div>
+      </div>`)}
+  </div>`;
+}
+
+const AUTOMATIONS=[
+  ["auto.1a","auto.1b"],["auto.2a","auto.2b"],["auto.3a","auto.3b"],["auto.4a","auto.4b"],
+  ["auto.5a","auto.5b"],["auto.6a","auto.6b"],["auto.7a","auto.7b"],
+];
+function Workflow(){
+  return html`<div>
+    <h1>${T("workflow.title")}</h1>
+    <div class="sub">${T("workflow.sub")}</div>
+    ${AUTOMATIONS.map(([t,a],i)=> html`<div class="glass" key=${i} style="padding:13px 18px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="badge" style="background:var(--accent-wash);border-color:var(--accent-line);color:var(--accent)">${T("workflow.when")}</span>
+      <span style="flex:1;min-width:180px;font-size:13.5px">${T(t)}</span>
+      <span style="color:var(--ink-2)">→</span>
+      <span class="badge human">${T("workflow.then")}</span>
+      <span style="flex:1;min-width:180px;font-size:13.5px">${T(a)}</span>
+    </div>`)}
+  </div>`;
+}
+
+// ── Shell ───────────────────────────────────────────────────────────────────
+const NAV_META={
+  command:{label:"nav.command",icon:"grid"},
+  inbox:{label:"nav.inbox",icon:"inbox"},
+  analytics:{label:"nav.analytics",icon:"chart"},
+  campaigns:{label:"nav.campaigns",icon:"bullhorn"},
+  studio:{label:"nav.studio",icon:"wand"},
+  widget:{label:"nav.widget",icon:"puzzle"},
+  consultants:{label:"nav.consultants",icon:"users"},
+  matching:{label:"nav.matching",icon:"globe"},
+  devices:{label:"nav.devices",icon:"calendar"},
+  logistics:{label:"nav.logistics",icon:"plane"},
+  postop:{label:"nav.postop",icon:"firstaid"},
+  reviews:{label:"nav.reviews",icon:"star"},
+  workflow:{label:"nav.workflow",icon:"workflow"},
+};
+const NAV_GROUPS=[
+  ["group.overview",["command","inbox"]],
+  ["group.growth",["analytics","campaigns","widget","studio"]],
+  ["group.team",["consultants","matching"]],
+  ["group.operations",["devices","logistics","postop","reviews","workflow"]],
+];
+const ENABLED = new Set(["command","inbox","analytics","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow"]);
+
+const ICONS={
+  grid:'<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
+  inbox:'<path d="M3 12h5l1.5 2.5h5L21 12"/><path d="M5.5 5h13l2.5 7v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/>',
+  chart:'<path d="M4 5v14h16"/><path d="M7 14l3-4 3 2 4-6"/>',
+  bullhorn:'<path d="M3 11v2a1 1 0 0 0 1 1h2l4 3.5V6.5L6 10H4a1 1 0 0 0-1 1z"/><path d="M14 8.5a3.5 3.5 0 0 1 0 7"/>',
+  wand:'<path d="M5 20l10-10"/><path d="M14 6l4 4"/><path d="M17 3l.8 1.7L19.5 5.5 17.8 6.3 17 8l-.8-1.7L14.5 5.5l1.7-.8z"/>',
+  puzzle:'<path d="M10 4h4v2.5a1.5 1.5 0 0 0 3 0V4h1a2 2 0 0 1 2 2v1h-2.5a1.5 1.5 0 0 0 0 3H20v5a1 1 0 0 1-1 1h-4v-1.5a1.5 1.5 0 0 0-3 0V16H8a1 1 0 0 1-1-1v-4h1.5a1.5 1.5 0 0 0 0-3H7V6a2 2 0 0 1 2-2z"/>',
+  users:'<circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6a3 3 0 0 1 0 6"/><path d="M20.5 19a5.5 5.5 0 0 0-3.5-5.1"/>',
+  globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c3 3 3 15 0 18c-3-3-3-15 0-18z"/>',
+  calendar:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M8 3v4M16 3v4"/>',
+  plane:'<path d="M21 4l-9.5 9.5"/><path d="M21 4l-6 17-3.5-7.5L4 10z"/>',
+  activity:'<path d="M3 12h4l2 6 4-13 2 7h6"/>',
+  star:'<path d="M12 4l2.3 4.7 5.2.8-3.8 3.6.9 5.1L12 15.8 7.4 18.2l.9-5.1L4.5 9.5l5.2-.8z"/>',
+  workflow:'<circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 6h4a4 4 0 0 1 4 4M8 18h4a4 4 0 0 0 4-4"/>',
+  firstaid:'<rect x="3" y="6" width="18" height="14" rx="2"/><path d="M8 6V4h8v2M12 10v6M9 13h6"/>',
+  pulse:'<path d="M3 12h4l2 6 4-13 2 7h6"/>',
+  alert:'<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17.5v.01"/>',
+};
+function Icon({name}){
+  return html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML=${{__html:ICONS[name]||""}} />`;
+}
+
+function App(){
+  const [tab, setTab] = useState("command");
+  const [stats, setStats] = useState(null);
+  const [conversations, setConversations] = useState([]);
+  const [handovers, setHandovers] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [consultants, setConsultants] = useState(null);
+  const [pendingDeposits, setPendingDeposits] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [fatal, setFatal] = useState(null);
+
+  const reloadShared = useCallback(async ()=>{
+    try{
+      const [s,c,h,a,co,pd] = await Promise.all([api("/stats"),api("/conversations"),api("/handovers"),api("/analytics"),api("/consultants"),api("/payments/pending")]);
+      setStats(s); setConversations(c); setHandovers(h); setAnalytics(a); setConsultants(co); setPendingDeposits(pd); setFatal(null);
+    }catch(e){ setFatal(e.message); }
+  }, []);
+
+  useEffect(()=>{ reloadShared(); api("/templates").then(setTemplates).catch(()=>{}); }, [reloadShared]);
+  useInterval(reloadShared, 8000);
+
+  const openLead = async (id)=>{ setSelectedId(id); setTab("inbox"); await api("/conversations/"+id+"/takeover",{method:"POST"}).catch(()=>{}); reloadShared(); };
+
+  return html`
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2 5 4-10 2 5h4"/></svg></div>
+        <div class="logo">Medi<b>Voyage</b> OS</div>
+      </div>
+      <div class="live"><span class="dot"></span> ${T("shell.aiLive")}</div>
+      <div style="flex:1"></div>
+      <div class="seg">
+        <button class="segbtn ${LANG==="tr"?"on":""}" aria-pressed=${LANG==="tr"} onClick=${()=>setLang("tr")}>TR</button>
+        <button class="segbtn ${LANG==="en"?"on":""}" aria-pressed=${LANG==="en"} onClick=${()=>setLang("en")}>EN</button>
+      </div>
+      <button class="btn iconbtn" title=${T("shell.themeToggle")} aria-label=${T("shell.themeToggle")}
+        onClick=${()=>setTheme(THEME==="dark"?"light":"dark")}>${THEME==="dark"?"☀️":"🌙"}</button>
+      <button class="btn" onClick=${reloadShared}>${T("btn.refresh")}</button>
+    </div>
+    <div class="shell">
+      <div class="sidebar">
+        ${NAV_GROUPS.map(([group,ids])=> html`
+          <div key=${group}>
+            <div class="navgroup">${T(group)}</div>
+            ${ids.map((id)=>{ const m=NAV_META[id]; const enabled=ENABLED.has(id)||id==="widget";
+              return html`<div key=${id} class="navitem ${tab===id?"active":""} ${enabled?"":"disabled"}"
+                onClick=${()=>{ if(id==="widget"){ window.open("/panel/widget.html","_blank"); return; } if(ENABLED.has(id)) setTab(id); }}>
+                <${Icon} name=${m.icon}/> <span>${T(m.label)}</span>
+              </div>`; })}
+          </div>`)}
+      </div>
+      <div class="main">
+        ${fatal? html`<div class="err">${T("shell.backendDown")}: ${fatal}. ${T("shell.backendHint")}</div>`:null}
+        <div class="view" key=${tab}>
+        <${ErrorBoundary} key=${"eb-"+tab}>
+        ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} onOpenLead=${openLead} />`
+          : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} />`
+          : tab==="analytics" ? html`<${Analytics} analytics=${analytics} />`
+          : tab==="campaigns" ? html`<${Campaigns} templates=${templates} reloadShared=${reloadShared} />`
+          : tab==="studio" ? html`<${PromptStudio} />`
+          : tab==="consultants" ? html`<${Consultants} data=${consultants} />`
+          : tab==="matching" ? html`<${Matching} data=${consultants} />`
+          : tab==="devices" ? html`<${Devices} />`
+          : tab==="logistics" ? html`<${Logistics} />`
+          : tab==="postop" ? html`<${PostOp} />`
+          : tab==="reviews" ? html`<${Reviews} />`
+          : tab==="workflow" ? html`<${Workflow} />`
+          : null}
+        <//>
+        </div>
+      </div>
+    </div>`;
+}
+
+// A render error anywhere below used to unmount the whole tree and leave the
+// page blank (React does that by design when nothing catches). This boundary
+// keeps the shell — topbar, nav, language and theme switches — alive and
+// shows what broke instead of a black screen.
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error){ return { error }; }
+  componentDidCatch(error, info){ console.error("[panel] render error:", error, info); }
+  render(){
+    if (!this.state.error) return this.props.children;
+    const msg = (this.state.error && this.state.error.message) || String(this.state.error);
+    return html`<div class="err">
+      <b>${T("err.title")}</b>
+      <div style=${{marginTop:"6px",opacity:.85}}>${T("err.hint")}</div>
+      <div style=${{marginTop:"8px",fontSize:"12px",fontFamily:"ui-monospace,SFMono-Regular,Menlo,monospace",opacity:.75,wordBreak:"break-word"}}>${msg}</div>
+      <button class="btn" style=${{marginTop:"12px"}} onClick=${()=>this.setState({error:null})}>${T("err.retry")}</button>
+    </div>`;
+  }
+}
+
+function Toasts(){
+  const [items,setItems]=useState([]);
+  useEffect(()=>{
+    const h=(e)=>{ const id=Date.now()+Math.random(); setItems(x=>[...x,{id,...e.detail}]);
+      setTimeout(()=>setItems(x=>x.filter(i=>i.id!==id)),3200); };
+    window.addEventListener("mv-toast",h); return ()=>window.removeEventListener("mv-toast",h);
+  },[]);
+  return html`<div class="toasts">${items.map(t=> html`<div key=${t.id} class="toast ${t.type}">${t.message}</div>`)}</div>`;
+}
+
+// Language and theme changes re-render the whole tree; React reconciles it,
+// so component state (open conversation, form drafts) survives the switch.
+const _root = ReactDOM.createRoot(document.getElementById("root"));
+function renderApp(){ _root.render(html`<${React.Fragment}><${App} /><${Toasts} /><//>`); }
+renderApp();
+</script>
+</body>
+</html>

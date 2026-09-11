@@ -84,3 +84,45 @@ export async function sendTemplate(to, templateName, langCode = 'en', variables 
   }
   return data;
 }
+
+/**
+ * Send a document (a quote PDF, in practice) as a WhatsApp message by public
+ * link. This only works inside Meta's 24-hour customer-service window — the
+ * same constraint sendText has; outside it, use an approved template instead
+ * (see sendTemplate). Dry-run when credentials aren't set, same as the rest
+ * of this file.
+ *
+ * @param {string} to        recipient in E.164 without '+'
+ * @param {string} url       a URL Meta's servers can fetch the PDF from
+ * @param {string} filename  suggested filename on the patient's device
+ * @param {string} caption   short message shown alongside the document
+ */
+export async function sendDocument(to, url, filename, caption) {
+  if (!sendEnabled) {
+    console.log(`[whatsapp:dry-run] would send DOCUMENT → ${to}: ${filename} (${url})`);
+    return { dryRun: true };
+  }
+
+  const apiUrl = `https://graph.facebook.com/${config.whatsapp.graphVersion}/${config.whatsapp.phoneNumberId}/messages`;
+  const res = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.whatsapp.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'document',
+      document: { link: url, filename, caption },
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error('[whatsapp] document send failed', res.status, JSON.stringify(data));
+    throw new Error(`WhatsApp document send failed: ${res.status}`);
+  }
+  return data;
+}

@@ -1,4 +1,5 @@
 import { pool } from '../db/pool.js';
+import { getProfile } from '../services/profile.js'; // draftQuoteFromLead() için — bkz. devresel import notu
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -302,7 +303,8 @@ export async function getConversationDetail(leadId) {
   // needs one request, not two.
   const notes = await listLeadNotes(leadId);
   const payments = await listPaymentsForLead(leadId);
-  return { lead, conversation, messages, notes, payments };
+  const quotes = await listQuotesForLead(leadId);
+  return { lead, conversation, messages, notes, payments, quotes };
 }
 
 // ── Internal notes ──────────────────────────────────────────────────────────
@@ -335,7 +337,7 @@ export async function addLeadNote(leadId, body, author) {
 // not a count of booked leads times an assumed average.
 export async function listPaymentsForLead(leadId) {
   const q = await pool.query(
-    `SELECT id, amount, currency, type, status, due_date, paid_at,
+    `SELECT id, amount, currency, type, status, to_char(due_date, 'YYYY-MM-DD') AS due_date, paid_at,
             reminder_sent_at, note, created_at, updated_at
        FROM payments WHERE lead_id = $1 ORDER BY created_at DESC`,
     [leadId],
@@ -350,7 +352,7 @@ export async function createPayment(leadId, { amount, currency, type, dueDate, n
   const q = await pool.query(
     `INSERT INTO payments (clinic_id, lead_id, amount, currency, type, due_date, note)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING id, amount, currency, type, status, due_date, paid_at,
+     RETURNING id, amount, currency, type, status, to_char(due_date, 'YYYY-MM-DD') AS due_date, paid_at,
                reminder_sent_at, note, created_at, updated_at`,
     [clinicId, leadId, amt, (currency || 'EUR').toUpperCase().slice(0, 3), type || 'deposit', dueDate || null, note || null],
   );
@@ -378,7 +380,7 @@ export async function updatePayment(paymentId, { status, reminder }) {
   vals.unshift(paymentId);
   const q = await pool.query(
     `UPDATE payments SET ${sets.join(', ')} WHERE id = $1
-     RETURNING id, lead_id, amount, currency, type, status, due_date, paid_at,
+     RETURNING id, lead_id, amount, currency, type, status, to_char(due_date, 'YYYY-MM-DD') AS due_date, paid_at,
                reminder_sent_at, note, created_at, updated_at`,
     vals,
   );
@@ -392,7 +394,7 @@ export async function listPendingDeposits() {
   const q = await pool.query(`
     SELECT p.lead_id, count(*)::int AS pending_count,
            sum(p.amount) AS pending_amount, min(p.currency) AS currency,
-           min(p.due_date) AS earliest_due, max(p.reminder_sent_at) AS last_reminder
+           to_char(min(p.due_date), 'YYYY-MM-DD') AS earliest_due, max(p.reminder_sent_at) AS last_reminder
       FROM payments p WHERE p.status = 'pending'
      GROUP BY p.lead_id
   `);
@@ -411,6 +413,165 @@ export async function getPaymentTotals() {
   `);
   const r = q.rows[0];
   return { collected: Number(r.collected), pending: Number(r.pending), pending_count: Number(r.pending_count) };
+}
+
+// ── Quotes (Treatment Plan Builder) ─────────────────────────────────────────
+// Line items are the source of truth; total_amount is always recomputed from
+// them server-side, the same discipline as payments.amount — never trust a
+// client-sent total.
+function computeTotal(items) {
+  return (Array.isArray(items) ? items : []).reduce(
+    (sum, it) => sum + Number(it.qty ?? 1) * Number(it.unit_price ?? 0), 0,
+  );
+}
+function sanitizeItems(items) {
+  return (Array.isArray(items) ? items : [])
+    .filter((it) => it && it.label)
+    .map((it) => ({
+      label: String(it.label).slice(0, 200),
+      qty: Math.max(0, Number(it.qty ?? 1)) || 1,
+      unit_price: Math.max(0, Number(it.unit_price ?? 0)) || 0,
+    }));
+}
+
+export async function listQuotesForLead(leadId) {
+  const q = await pool.query(
+    `SELECT id, items, total_amount, currency, language, status, to_char(valid_until, 'YYYY-MM-DD') AS valid_until,
+            view_token, created_at, sent_at, viewed_at, accepted_at
+       FROM quotes WHERE lead_id = $1 ORDER BY created_at DESC`,
+    [leadId],
+  );
+  return q.rows;
+}
+
+export async function createQuote(leadId, { items, currency, language, validUntil }) {
+  const clinicId = await getDefaultClinicId();
+  const cleanItems = sanitizeItems(items);
+  const total = computeTotal(cleanItems);
+  const q = await pool.query(
+    `INSERT INTO quotes (clinic_id, lead_id, items, total_amount, currency, language, valid_until)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, items, total_amount, currency, language, status, to_char(valid_until, 'YYYY-MM-DD') AS valid_until,
+               view_token, created_at, sent_at, viewed_at, accepted_at`,
+    [clinicId, leadId, JSON.stringify(cleanItems), total, (currency || 'EUR').toUpperCase().slice(0, 3), language || 'en', validUntil || null],
+  );
+  return q.rows[0];
+}
+
+// Pulls a first, real starting price from the clinic's own price list for the
+// treatment the concierge already recorded — never a guessed number. If
+// nothing matches (unrecognised treatment, or none set yet), it returns a
+// single empty line at €0 so the coordinator has something to fill in rather
+// than a blocked "create quote" button. Package inclusions (hotel, transfer)
+// are NOT synthesised as priced line items here: the clinic profile only
+// carries them as descriptive text, not real per-unit prices, and inventing
+// numbers for them would be exactly the kind of fake data this project
+// removes elsewhere. The coordinator adds those lines with real prices.
+function firstPrice(priceRange) {
+  const m = String(priceRange || '').match(/[\d.,]+/);
+  if (!m) return 0;
+  return Number(m[0].replace(/,/g, '')) || 0;
+}
+export async function draftQuoteFromLead(leadId) {
+  const leadQ = await pool.query('SELECT id, name, language, treatment_interest FROM leads WHERE id = $1', [leadId]);
+  const lead = leadQ.rows[0];
+  if (!lead) throw new Error('lead not found');
+
+  const profile = await getProfile();
+  const interest = (lead.treatment_interest || '').toLowerCase();
+  const words = interest.split(/[^a-zçğıöşü]+/i).filter((w) => w.length > 3);
+  const match = (profile.treatments || []).find((t) =>
+    words.some((w) => t.name.toLowerCase().includes(w)) || (interest && t.name.toLowerCase().includes(interest)),
+  );
+
+  const items = match
+    ? [{ label: match.name, qty: 1, unit_price: firstPrice(match.priceRange) }]
+    : [{ label: lead.treatment_interest || 'Treatment', qty: 1, unit_price: 0 }];
+
+  // Valid for two weeks by default — matches the clinic's own "2–3 week lead
+  // time" availability note; the coordinator can change it before sending.
+  const validUntil = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  const language = LANG_TO_ISO[lead.language] || lead.language || 'en';
+  return createQuote(leadId, { items, currency: 'EUR', language, validUntil });
+}
+// The clinic profile lists languages as display names ("Deutsch"); quotes and
+// the AI both key on ISO codes. A tiny fixed map beats depending on the AI
+// having filled leads.language with an ISO code already.
+const LANG_TO_ISO = { 'Türkçe':'tr', 'English':'en', 'العربية':'ar', 'Deutsch':'de', 'Русский':'ru', 'Français':'fr', 'Italiano':'it' };
+
+export async function updateQuote(quoteId, { items, currency, language, validUntil }) {
+  const current = await pool.query('SELECT status FROM quotes WHERE id = $1', [quoteId]);
+  if (!current.rows[0]) throw new Error('quote not found');
+  if (current.rows[0].status !== 'draft') throw new Error('only a draft quote can be edited');
+
+  const cleanItems = items !== undefined ? sanitizeItems(items) : undefined;
+  const sets = ['updated_at = now()']; // no-op column guard removed below if absent
+  const fields = [];
+  const vals = [quoteId];
+  let i = 1;
+  if (cleanItems !== undefined) { fields.push(`items = $${++i}`, `total_amount = $${++i}`); vals.push(JSON.stringify(cleanItems), computeTotal(cleanItems)); }
+  if (currency) { fields.push(`currency = $${++i}`); vals.push(currency.toUpperCase().slice(0, 3)); }
+  if (language) { fields.push(`language = $${++i}`); vals.push(language); }
+  if (validUntil !== undefined) { fields.push(`valid_until = $${++i}`); vals.push(validUntil || null); }
+  if (!fields.length) throw new Error('nothing to update');
+
+  const q = await pool.query(
+    `UPDATE quotes SET ${fields.join(', ')} WHERE id = $1
+     RETURNING id, lead_id, items, total_amount, currency, language, status, to_char(valid_until, 'YYYY-MM-DD') AS valid_until,
+               view_token, created_at, sent_at, viewed_at, accepted_at`,
+    vals,
+  );
+  return q.rows[0];
+}
+
+export async function getQuoteById(quoteId) {
+  const q = await pool.query(
+    `SELECT id, lead_id, clinic_id, items, total_amount, currency, language, status,
+            to_char(valid_until, 'YYYY-MM-DD') AS valid_until, view_token, created_at, sent_at, viewed_at, accepted_at
+       FROM quotes WHERE id = $1`,
+    [quoteId],
+  );
+  return q.rows[0] || null;
+}
+
+export async function getQuoteByToken(token) {
+  const q = await pool.query(
+    `SELECT id, lead_id, items, total_amount, currency, language, status, to_char(valid_until, 'YYYY-MM-DD') AS valid_until, viewed_at
+       FROM quotes WHERE view_token = $1`,
+    [token],
+  );
+  return q.rows[0] || null;
+}
+
+export async function markQuoteSent(quoteId) {
+  const q = await pool.query(
+    `UPDATE quotes SET status = 'sent', sent_at = now() WHERE id = $1 AND status = 'draft'
+     RETURNING id, lead_id, status, sent_at`,
+    [quoteId],
+  );
+  if (!q.rows[0]) throw new Error('quote not found or not in draft status');
+  return q.rows[0];
+}
+
+// Idempotent on purpose: the patient may open the link (or the tracking
+// pixel may fire) more than once. Only the first view moves the status and
+// sets the timestamp.
+export async function markQuoteViewed(quoteId) {
+  await pool.query(
+    `UPDATE quotes SET status = 'viewed', viewed_at = now()
+      WHERE id = $1 AND viewed_at IS NULL`,
+    [quoteId],
+  );
+}
+
+export async function markQuoteAccepted(quoteId) {
+  const q = await pool.query(
+    `UPDATE quotes SET status = 'accepted', accepted_at = now() WHERE id = $1
+     RETURNING id, lead_id, status, accepted_at`,
+    [quoteId],
+  );
+  if (!q.rows[0]) throw new Error('quote not found');
+  return q.rows[0];
 }
 
 // Set a conversation's status (takeover / hand back to AI / close).

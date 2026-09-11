@@ -539,6 +539,14 @@ const I18N = {
     "payments.add":"Add payment","payments.markPaid":"Mark paid","payments.remind":"Mark reminder sent",
     "payments.reminded":"Reminded","payments.due":"Due","payments.pendingBadge":"awaiting a deposit",
     "toast.paymentAdded":"Payment added","toast.paymentPaid":"Marked as paid","toast.reminderSet":"Reminder marked",
+    "quotes.title":"Quotes","quotes.empty":"No quotes yet.","quotes.suggest":"Suggest a draft",
+    "quotes.status.draft":"Draft","quotes.status.sent":"Sent","quotes.status.viewed":"Viewed","quotes.status.accepted":"Accepted",
+    "quotes.preview":"Preview PDF","quotes.send":"Send","quotes.accept":"Mark accepted",
+    "quotes.itemLabel":"Description","quotes.qty":"Qty","quotes.price":"Unit price","quotes.addItem":"Add item",
+    "quotes.remove":"Remove item","quotes.validUntil":"Valid until","quotes.noItems":"No items yet — add one below.",
+    "quotes.confirmSend":"Send this quote to the patient on WhatsApp?",
+    "toast.quoteDrafted":"Draft quote created","toast.quoteUpdated":"Quote updated","toast.quoteSent":"Quote sent",
+    "toast.quoteAccepted":"Marked as accepted",
     "analytics.pendingDeposits":"Pending deposits","analytics.roasFoot":"revenue ÷ ad spend",
     "analytics.noPaymentsNote":"No payments logged yet. Record a deposit on a lead's profile to see real revenue here.",
     "analytics.pendingNote":"pending across",
@@ -657,6 +665,14 @@ const I18N = {
     "payments.add":"Ödeme ekle","payments.markPaid":"Ödendi işaretle","payments.remind":"Hatırlatma gönderildi işaretle",
     "payments.reminded":"Hatırlatıldı","payments.due":"Vade","payments.pendingBadge":"depozito bekliyor",
     "toast.paymentAdded":"Ödeme eklendi","toast.paymentPaid":"Ödendi olarak işaretlendi","toast.reminderSet":"Hatırlatma işaretlendi",
+    "quotes.title":"Teklifler","quotes.empty":"Henüz teklif yok.","quotes.suggest":"Taslak öner",
+    "quotes.status.draft":"Taslak","quotes.status.sent":"Gönderildi","quotes.status.viewed":"Görüntülendi","quotes.status.accepted":"Onaylandı",
+    "quotes.preview":"PDF önizle","quotes.send":"Gönder","quotes.accept":"Onaylandı işaretle",
+    "quotes.itemLabel":"Açıklama","quotes.qty":"Adet","quotes.price":"Birim fiyat","quotes.addItem":"Kalem ekle",
+    "quotes.remove":"Kalemi kaldır","quotes.validUntil":"Geçerlilik tarihi","quotes.noItems":"Henüz kalem yok — aşağıdan ekleyin.",
+    "quotes.confirmSend":"Bu teklif hastaya WhatsApp üzerinden gönderilsin mi?",
+    "toast.quoteDrafted":"Taslak teklif oluşturuldu","toast.quoteUpdated":"Teklif güncellendi","toast.quoteSent":"Teklif gönderildi",
+    "toast.quoteAccepted":"Onaylandı olarak işaretlendi",
     "analytics.pendingDeposits":"Bekleyen depozitolar","analytics.roasFoot":"gelir ÷ reklam harcaması",
     "analytics.noPaymentsNote":"Henüz ödeme kaydı yok. Gerçek geliri burada görmek için bir lead profilinden depozito kaydedin.",
     "analytics.pendingNote":"bekliyor —",
@@ -1027,6 +1043,7 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
             <button class="btn" style="width:100%;margin-top:14px" disabled=${busy} onClick=${discharge}>${T("btn.markDischarged")}</button>
             <${Notes} leadId=${lead.id} notes=${detail.notes} onAdded=${()=>loadDetail(lead.id)} />
             <${Payments} leadId=${lead.id} payments=${detail.payments} onChanged=${()=>{ loadDetail(lead.id); reloadShared(); }} />
+            <${Quotes} leadId=${lead.id} quotes=${detail.quotes} onChanged=${()=>loadDetail(lead.id)} />
           `}
         </div>
       </div>
@@ -1120,6 +1137,97 @@ function Payments({ leadId, payments, onChanged }){
             </button>
           </div>`:null}
         </div>`)}
+  </div>`;
+}
+
+// Quotes: the concierge already knows the treatment, so the coordinator
+// starts from a suggested draft instead of a blank page, edits the line
+// items (never the total — that's always recomputed server-side, see
+// updateQuote()), and sends. One card per quote, at most one open for
+// editing at a time — this column is 290px wide, not a spreadsheet.
+const QUOTE_LANGS = ["en","tr","de","ar","ru","fr"];
+function Quotes({ leadId, quotes, onChanged }){
+  const [busy,setBusy] = useState(false);
+  const [openId,setOpenId] = useState(null);
+
+  const suggest = async ()=>{
+    setBusy(true);
+    try{
+      const q = await api("/conversations/"+leadId+"/quotes/draft", { method:"POST" });
+      showToast(T("toast.quoteDrafted")); setOpenId(q.id); await onChanged();
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(false); }
+  };
+
+  return html`<div class="notes">
+    <div class="section-title" style=${{marginTop:"20px",marginBottom:"10px",fontSize:"13px"}}>${T("quotes.title")}</div>
+    <button class="btn" style=${{width:"100%"}} disabled=${busy} onClick=${suggest}>${T("quotes.suggest")}</button>
+    ${(quotes||[]).length===0
+      ? html`<div class="note-empty">${T("quotes.empty")}</div>`
+      : (quotes||[]).map((q)=> html`<${QuoteCard} key=${q.id} quote=${q}
+          open=${openId===q.id} onToggle=${()=>setOpenId(openId===q.id?null:q.id)} onChanged=${onChanged} />`)}
+  </div>`;
+}
+
+function QuoteCard({ quote, open, onToggle, onChanged }){
+  const [busy,setBusy] = useState(false);
+  const [label,setLabel] = useState("");
+  const [qty,setQty] = useState("1");
+  const [price,setPrice] = useState("");
+
+  const save = async (items)=>{
+    setBusy(true);
+    try{ await api("/quotes/"+quote.id, { method:"PUT", body: JSON.stringify({ items }) }); showToast(T("toast.quoteUpdated")); await onChanged(); }
+    catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(false); }
+  };
+  const addItem = async ()=>{
+    if(!label.trim() || !price) return;
+    await save([...(quote.items||[]), { label: label.trim(), qty: Number(qty)||1, unit_price: Number(price)||0 }]);
+    setLabel(""); setQty("1"); setPrice("");
+  };
+  const removeItem = (i)=> save((quote.items||[]).filter((_,j)=>j!==i));
+  const setLang = async (language)=>{ try{ await api("/quotes/"+quote.id,{method:"PUT",body:JSON.stringify({language})}); await onChanged(); }catch(e){ showToast(e.message,"error"); } };
+  const send = async ()=>{
+    if(!window.confirm(T("quotes.confirmSend"))) return;
+    setBusy(true);
+    try{ await api("/quotes/"+quote.id+"/send", { method:"POST" }); showToast(T("toast.quoteSent")); await onChanged(); }
+    catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(false); }
+  };
+  const accept = async ()=>{
+    try{ await api("/quotes/"+quote.id+"/accept", { method:"POST" }); showToast(T("toast.quoteAccepted")); await onChanged(); }
+    catch(e){ showToast(e.message,"error"); }
+  };
+
+  const isDraft = quote.status === "draft";
+  return html`<div class="note">
+    <div class="note-meta" style=${{cursor:"pointer"}} onClick=${onToggle}>
+      ${flag(quote.language)} ${quote.currency} ${Number(quote.total_amount).toLocaleString()}
+      · <span class="badge ${quote.status==='accepted'?'human':quote.status==='draft'?'':'awaiting'}">${T("quotes.status."+quote.status)}</span>
+      · ${fmtTime(quote.created_at)}${quote.valid_until? html` · ${T("quotes.validUntil")}: ${quote.valid_until}`:null}
+    </div>
+    ${open? html`<div style=${{marginTop:"8px"}}>
+      ${(quote.items||[]).length===0? html`<div class="note-empty" style=${{marginTop:"0"}}>${T("quotes.noItems")}</div>`
+        : (quote.items||[]).map((it,i)=> html`<div key=${i} style=${{display:"flex",justifyContent:"space-between",gap:"6px",fontSize:"12px",padding:"4px 0",borderBottom:"1px solid var(--rule)"}}>
+            <span>${it.label} · ${it.qty} × ${quote.currency} ${Number(it.unit_price).toLocaleString()}</span>
+            ${isDraft? html`<button class="btn" title=${T("quotes.remove")} style=${{padding:"1px 6px",fontSize:"11px",flex:"none"}} disabled=${busy} onClick=${()=>removeItem(i)}>×</button>`:null}
+          </div>`)}
+      ${isDraft? html`<div style=${{display:"flex",gap:"5px",marginTop:"8px"}}>
+        <input placeholder=${T("quotes.itemLabel")} value=${label} onInput=${(e)=>setLabel(e.target.value)} style=${{flex:"1",minWidth:"0",fontSize:"12px"}}/>
+        <input type="number" min="1" placeholder=${T("quotes.qty")} value=${qty} onInput=${(e)=>setQty(e.target.value)} style=${{width:"46px",fontSize:"12px"}}/>
+        <input type="number" min="0" step="0.01" placeholder=${T("quotes.price")} value=${price} onInput=${(e)=>setPrice(e.target.value)} style=${{width:"64px",fontSize:"12px"}}/>
+      </div>
+      <button class="btn" style=${{marginTop:"6px",width:"100%",fontSize:"11px",padding:"4px"}} disabled=${busy||!label.trim()||!price} onClick=${addItem}>${T("quotes.addItem")}</button>`:null}
+      <div style=${{display:"flex",gap:"6px",marginTop:"8px",alignItems:"center"}}>
+        ${isDraft? html`<select value=${quote.language} onChange=${(e)=>setLang(e.target.value)} style=${{fontSize:"11px",flex:"none"}}>
+          ${QUOTE_LANGS.map((l)=> html`<option key=${l} value=${l}>${flag(l)} ${l.toUpperCase()}</option>`)}
+        </select>`:null}
+        <a href=${"/api/quotes/"+quote.id+"/pdf"} target="_blank" rel="noopener" class="btn" style=${{fontSize:"11px",padding:"4px 8px",textDecoration:"none"}}>${T("quotes.preview")}</a>
+        ${isDraft? html`<button class="btn primary" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${busy||!(quote.items||[]).length} onClick=${send}>${T("quotes.send")}</button>`
+          : quote.status!=="accepted"? html`<button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} onClick=${accept}>${T("quotes.accept")}</button>`:null}
+      </div>
+    </div>`:null}
   </div>`;
 }
 

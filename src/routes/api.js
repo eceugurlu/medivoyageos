@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { dbEnabled } from '../db/pool.js';
-import { sendText, sendTemplate } from '../services/whatsapp.js';
+import { sendText, sendTemplate, sendDocument } from '../services/whatsapp.js';
+import { renderQuotePdf } from '../services/pdf.js';
 import { listTemplates, renderPreview, TEMPLATES } from '../templates.js';
 import { getProfile, updateProfile } from '../services/profile.js';
 import {
@@ -29,6 +30,15 @@ import {
   createPayment,
   updatePayment,
   listPendingDeposits,
+  listQuotesForLead,
+  draftQuoteFromLead,
+  createQuote,
+  updateQuote,
+  getQuoteById,
+  getQuoteByToken,
+  markQuoteSent,
+  markQuoteViewed,
+  markQuoteAccepted,
 } from '../store/repository.js';
 
 // ── Public router (NO auth) — for the embeddable website lead widget ─────────
@@ -66,6 +76,42 @@ publicRouter.post('/lead', (req, res) => {
   })().catch((err) => {
     console.error('[public] lead error:', err.message);
     res.status(500).json({ error: err.message });
+  });
+});
+
+// ── Public quote link (NO auth, by design) ────────────────────────────────
+// The patient reaches these from a WhatsApp message, not from a logged-in
+// session — they can't carry a PANEL_API_TOKEN. Two separate URLs:
+//   .../file   — raw PDF bytes, no side effect. This is what gets handed to
+//                Meta as the document.link for delivery, so Meta's own fetch
+//                of it is never mistaken for the patient opening it.
+//   (bare)     — what the patient actually taps. Marks the quote viewed
+//                (once — see markQuoteViewed's idempotency) and redirects to
+//                .../file. One click, one honest signal.
+publicRouter.get('/quote/:token/file', (req, res) => {
+  (async () => {
+    const quote = await getQuoteByToken(req.params.token);
+    if (!quote) return res.status(404).send('Quote not found');
+    const [profile, lead] = await Promise.all([getProfile(), getConversationDetail(quote.lead_id)]);
+    const pdf = await renderQuotePdf({ clinic: profile, lead: lead.lead, quote });
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'inline; filename="quote.pdf"');
+    res.send(pdf);
+  })().catch((err) => {
+    console.error('[public] quote file error:', err.message);
+    res.status(500).send('Could not generate the quote right now.');
+  });
+});
+
+publicRouter.get('/quote/:token', (req, res) => {
+  (async () => {
+    const quote = await getQuoteByToken(req.params.token);
+    if (!quote) return res.status(404).send('Quote not found');
+    await markQuoteViewed(quote.id);
+    res.redirect(`/api/public/quote/${req.params.token}/file`);
+  })().catch((err) => {
+    console.error('[public] quote view error:', err.message);
+    res.status(500).send('Something went wrong.');
   });
 });
 
@@ -153,6 +199,103 @@ apiRouter.put('/payments/:paymentId', h(async (req, res) => {
 // Cross-lead list for the Inbox's "Awaiting deposit" filter.
 apiRouter.get('/payments/pending', h(async (_req, res) => {
   res.json(await listPendingDeposits());
+}));
+
+// ── Quotes (Treatment Plan Builder) ───────────────────────────────────────
+apiRouter.get('/conversations/:leadId/quotes', h(async (req, res) => {
+  res.json(await listQuotesForLead(req.params.leadId));
+}));
+
+// Pre-fills a draft from what the concierge already knows about the lead
+// (treatment + the clinic's own price list) — never an invented number, see
+// draftQuoteFromLead()'s comment. The coordinator always edits before sending.
+apiRouter.post('/conversations/:leadId/quotes/draft', h(async (req, res) => {
+  try {
+    res.json(await draftQuoteFromLead(req.params.leadId));
+  } catch (err) {
+    res.status(err.message === 'lead not found' ? 404 : 400).json({ error: err.message });
+  }
+}));
+
+// Manual quote, written by a coordinator from scratch instead of the draft
+// suggestion — same shape, just skips the auto-fill step.
+apiRouter.post('/conversations/:leadId/quotes', h(async (req, res) => {
+  const { items, currency, language, validUntil } = req.body || {};
+  try {
+    res.json(await createQuote(req.params.leadId, { items, currency, language, validUntil }));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}));
+
+apiRouter.put('/quotes/:quoteId', h(async (req, res) => {
+  const { items, currency, language, validUntil } = req.body || {};
+  try {
+    res.json(await updateQuote(req.params.quoteId, { items, currency, language, validUntil }));
+  } catch (err) {
+    res.status(err.message === 'quote not found' ? 404 : 400).json({ error: err.message });
+  }
+}));
+
+// Authenticated preview — lets a coordinator see exactly what the patient
+// will get before sending it. Same renderer the send route and the public
+// tracking link use, so there's no risk of the preview looking different.
+apiRouter.get('/quotes/:quoteId/pdf', h(async (req, res) => {
+  const quote = await getQuoteById(req.params.quoteId);
+  if (!quote) return res.status(404).json({ error: 'quote not found' });
+  const [profile, lead] = await Promise.all([getProfile(), getConversationDetail(quote.lead_id)]);
+  const pdf = await renderQuotePdf({ clinic: profile, lead: lead.lead, quote });
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', 'inline; filename="quote.pdf"');
+  res.send(pdf);
+}));
+
+// Short, per-language line sent alongside the PDF. Deliberately not the full
+// LABELS set from pdf.js — this is one WhatsApp caption sentence, not a
+// document, so a small map here is proportionate.
+const SEND_CAPTIONS = {
+  en: (url) => `Here's your treatment quote 📄 View it online any time: ${url}`,
+  tr: (url) => `Tedavi teklifiniz ekte 📄 İstediğiniz an çevrimiçi görüntüleyin: ${url}`,
+  de: (url) => `Hier ist Ihr Behandlungsangebot 📄 Jederzeit online ansehen: ${url}`,
+  ar: (url) => `إليك عرض سعر علاجك 📄 يمكنك الاطلاع عليه عبر الإنترنت في أي وقت: ${url}`,
+  ru: (url) => `Вот ваша смета лечения 📄 Смотрите онлайн в любое время: ${url}`,
+  fr: (url) => `Voici votre devis de traitement 📄 Consultez-le en ligne à tout moment : ${url}`,
+};
+
+// Sends the quote: WhatsApp gets a document (Meta's servers fetch the PDF
+// once, by link, to attach it) plus a caption carrying the SEPARATE tracking
+// link. Those are two different URLs on purpose — see services/pdf.js's
+// sibling routes below in publicRouter — so Meta's own fetch of the file
+// never gets counted as the patient having viewed it.
+apiRouter.post('/quotes/:quoteId/send', h(async (req, res) => {
+  const quote = await getQuoteById(req.params.quoteId);
+  if (!quote) return res.status(404).json({ error: 'quote not found' });
+  if (quote.status !== 'draft') return res.status(400).json({ error: 'quote already sent' });
+
+  const phone = await getLeadPhone(quote.lead_id);
+  if (!phone) return res.status(400).json({ error: 'lead has no phone number' });
+
+  const fileUrl = `${config.publicBaseUrl}/api/public/quote/${quote.view_token}/file`;
+  const trackUrl = `${config.publicBaseUrl}/api/public/quote/${quote.view_token}`;
+  const caption = (SEND_CAPTIONS[quote.language] || SEND_CAPTIONS.en)(trackUrl);
+
+  try {
+    await sendDocument(phone, fileUrl, 'quote.pdf', caption);
+  } catch (err) {
+    return res.status(502).json({ error: `WhatsApp send failed: ${err.message}` });
+  }
+  res.json(await markQuoteSent(quote.id));
+}));
+
+// Coordinator marks a quote accepted — after a phone call, an in-person
+// confirmation, or a WhatsApp reply the AI doesn't yet parse as acceptance.
+// A manual switch is honest here: there is no online "accept" flow yet.
+apiRouter.post('/quotes/:quoteId/accept', h(async (req, res) => {
+  try {
+    res.json(await markQuoteAccepted(req.params.quoteId));
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
 }));
 
 // Agent takes over — pause the AI for this conversation.

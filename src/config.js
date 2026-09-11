@@ -11,6 +11,12 @@ function softRequire(name, value) {
 export const config = {
   port: process.env.PORT || 3000,
 
+  // The URL other systems (WhatsApp's servers fetching a quote PDF, a patient
+  // clicking a tracking link) use to reach this server. Defaults to localhost
+  // for local dev — fine there since dry-run mode never actually fetches it,
+  // but MUST be set to the real public URL before quotes are sent for real.
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, ''),
+
   whatsapp: {
     // A random string you choose. Put the SAME value into the Meta webhook config.
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || 'change-me',

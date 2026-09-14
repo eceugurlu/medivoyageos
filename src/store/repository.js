@@ -237,8 +237,13 @@ export async function getStats() {
 }
 
 // Inbox: one row per conversation with lead info + last message preview.
-export async function listConversations() {
-  const q = await pool.query(`
+// Paginated — the panel used to hard-cap at 100 and silently hide older threads.
+export async function listConversations({ limit = 50, offset = 0 } = {}) {
+  const safeLimit = Math.min(200, Math.max(1, Number(limit) || 50));
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  const [q, countQ] = await Promise.all([
+    pool.query(
+      `
     SELECT
       l.id                AS lead_id,
       l.phone, l.name, l.country, l.language, l.score, l.status AS lead_status,
@@ -255,9 +260,18 @@ export async function listConversations() {
       ORDER BY created_at DESC LIMIT 1
     ) lm ON true
     ORDER BY lm.created_at DESC NULLS LAST
-    LIMIT 100
-  `);
-  return q.rows;
+    LIMIT $1 OFFSET $2
+  `,
+      [safeLimit, safeOffset],
+    ),
+    pool.query(`SELECT COUNT(*)::int AS total FROM conversations`),
+  ]);
+  return {
+    items: q.rows,
+    total: countQ.rows[0].total,
+    limit: safeLimit,
+    offset: safeOffset,
+  };
 }
 
 // The Action Center handover queue.

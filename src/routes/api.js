@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Router } from 'express';
 import { config } from '../config.js';
 import { dbEnabled } from '../db/pool.js';
@@ -127,10 +128,15 @@ apiRouter.use((req, res, next) => {
 });
 
 // Optional bearer-token protection (enabled only if PANEL_API_TOKEN is set).
+// Compare via SHA-256 digests so a wrong-length token cannot short-circuit
+// timingSafeEqual, and so the secret itself is never used as a Buffer length oracle.
 apiRouter.use((req, res, next) => {
   if (!config.panel.apiToken) return next();
   const auth = req.headers.authorization || '';
-  if (auth === `Bearer ${config.panel.apiToken}`) return next();
+  const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  const a = crypto.createHash('sha256').update(provided).digest();
+  const b = crypto.createHash('sha256').update(config.panel.apiToken).digest();
+  if (crypto.timingSafeEqual(a, b)) return next();
   return res.status(401).json({ error: 'Unauthorized' });
 });
 
@@ -145,8 +151,10 @@ apiRouter.get('/stats', h(async (_req, res) => {
   res.json(await getStats());
 }));
 
-apiRouter.get('/conversations', h(async (_req, res) => {
-  res.json(await listConversations());
+apiRouter.get('/conversations', h(async (req, res) => {
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+  const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+  res.json(await listConversations({ limit, offset }));
 }));
 
 apiRouter.get('/handovers', h(async (_req, res) => {

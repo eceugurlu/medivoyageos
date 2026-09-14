@@ -632,6 +632,10 @@ const I18N = {
     "shell.themeToggle":"Dark / light theme",
     "time.justNow":"just now","time.m":"m ago","time.h":"h ago","time.d":"d ago",
     "err.title":"This view could not be displayed","err.hint":"The rest of the panel still works — pick another section on the left.","err.retry":"Try again",
+    "gate.sub":"Enter the panel access token to continue.","gate.label":"Access token",
+    "gate.enter":"Enter","gate.checking":"Checking…","gate.wrongToken":"That token is not valid.",
+    "gate.sessionExpired":"Session expired — enter the token again.","shell.signOut":"Sign out",
+    "inbox.loadMore":"Load more","inbox.showingOf":"Showing {shown} of {total}",
   },
   tr: {
     "nav.command":"Komuta Merkezi","nav.inbox":"Tüm Kanallar Gelen Kutusu","nav.analytics":"CAC & ROAS Analizi",
@@ -768,6 +772,10 @@ const I18N = {
     "shell.themeToggle":"Koyu / açık tema",
     "time.justNow":"az önce","time.m":" dk önce","time.h":" sa önce","time.d":" g önce",
     "err.title":"Bu görünüm gösterilemedi","err.hint":"Panelin geri kalanı çalışıyor — soldan başka bir bölüm seçebilirsiniz.","err.retry":"Tekrar dene",
+    "gate.sub":"Devam etmek için panel erişim jetonunu girin.","gate.label":"Erişim jetonu",
+    "gate.enter":"Giriş","gate.checking":"Kontrol ediliyor…","gate.wrongToken":"Bu jeton geçersiz.",
+    "gate.sessionExpired":"Oturum sona erdi — jetonu yeniden girin.","shell.signOut":"Çıkış",
+    "inbox.loadMore":"Daha fazla yükle","inbox.showingOf":"{shown} / {total} gösteriliyor",
   },
 };
 
@@ -780,6 +788,13 @@ function remember(key, value){ try { localStorage.setItem(key, value); } catch (
 
 let LANG = store("mv-lang", "tr");
 let THEME = store("mv-theme", "dark");
+// PANEL_API_TOKEN korumalıysa panel ilk açılışta Gate ekranını gösterir; token
+// doğrulanınca burada saklanır ve her api() çağrısına eklenir. Sunucuda token
+// ayarlı değilse (lokal geliştirme) her şey normal 200 döner, NEEDS_AUTH hiç
+// true olmaz — mevcut geliştirme akışına sıfır sürtünme.
+let TOKEN = store("mv-panel-token", "");
+let NEEDS_AUTH = false;
+function setToken(next){ TOKEN = next; remember("mv-panel-token", next); NEEDS_AUTH = false; renderApp(); }
 
 function T(key){
   const dict = I18N[LANG] || I18N.en;
@@ -831,10 +846,23 @@ const fmtTime=(t)=>{ if(!t) return ""; const d=new Date(t); return d.toLocaleStr
 const timeAgo=(t)=>{ if(!t) return ""; const s=(Date.now()-new Date(t).getTime())/1000; if(s<45) return T("time.justNow"); if(s<3600) return Math.floor(s/60)+T("time.m"); if(s<86400) return Math.floor(s/3600)+T("time.h"); if(s<604800) return Math.floor(s/86400)+T("time.d"); return new Date(t).toLocaleDateString(LANG); };
 function showToast(message,type){ window.dispatchEvent(new CustomEvent("mv-toast",{detail:{message,type:type||"success"}})); }
 
-async function api(path, opts){
+async function api(path, opts={}){
+  const { headers: extraHeaders, ...rest } = opts;
   const res = await fetch("/api"+path, {
-    headers:{ "Content-Type":"application/json" }, ...opts,
+    ...rest,
+    headers:{
+      "Content-Type":"application/json",
+      ...(TOKEN?{"Authorization":"Bearer "+TOKEN}:{}),
+      ...(extraHeaders||{}),
+    },
   });
+  if(res.status===401){
+    // Saklanan token artık geçersiz (hiç yoktu, yanlıştı ya da sunucu tarafında
+    // değişti) — temizle ve Gate'e dön. reloadShared'in 8sn'lik polling'i
+    // sırasında birden çok 401 gelebilir; hepsi aynı sonuca varır, zararsız.
+    TOKEN = ""; remember("mv-panel-token",""); NEEDS_AUTH = true; renderApp();
+    throw new Error(T("gate.sessionExpired"));
+  }
   if(!res.ok){ const e = await res.json().catch(()=>({})); throw new Error(e.error||("HTTP "+res.status)); }
   return res.json();
 }
@@ -932,7 +960,7 @@ function CommandCenter({ stats, analytics, handovers, risks, onOpenLead }){
 }
 
 // ── Inbox ───────────────────────────────────────────────────────────────────
-function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pendingDeposits }){
+function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pendingDeposits, convTotal, onLoadMore, loadingMore }){
   const [detail, setDetail] = useState(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -977,6 +1005,12 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
   const isHuman = conv?.status==="human_handling";
   const rtl = lead && RTL_LANGS.includes(lead.language);
 
+  // A Set keyed by lead_id: O(1) lookup per row instead of re-scanning the
+  // pending-deposits array for every conversation on every render.
+  // Declared before filtered — the deposit filter closes over this Set.
+  const depositLeadIds = new Set((pendingDeposits||[]).map((d)=>d.lead_id));
+  const depositCount = depositLeadIds.size;
+
   const q = query.trim().toLowerCase();
   const filtered = (conversations||[]).filter((c)=>{
     if(filter==="urgent" && !c.urgent) return false;
@@ -991,10 +1025,10 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
   const urgentCount = (conversations||[]).filter(c=>c.urgent).length;
   const humanCount = (conversations||[]).filter(c=>c.conv_status==="needs_human").length;
   const awaitingCount = (conversations||[]).filter(c=>c.last_role==="user").length;
-  // A Set keyed by lead_id: O(1) lookup per row instead of re-scanning the
-  // pending-deposits array for every conversation on every render.
-  const depositLeadIds = new Set((pendingDeposits||[]).map((d)=>d.lead_id));
-  const depositCount = depositLeadIds.size;
+  const hasMore = (conversations||[]).length < (convTotal||0);
+  const showingLabel = T("inbox.showingOf")
+    .replace("{shown}", String((conversations||[]).length))
+    .replace("{total}", String(convTotal||0));
 
   return html`
     <div>
@@ -1031,6 +1065,10 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
                 <div class="conv-time">${depositLeadIds.has(c.lead_id)?html`<span class="dep-flag" title=${T("payments.pendingBadge")}>€</span> `:null}${timeAgo(c.last_message_at)}</div>
               </div>`)
           }
+          ${(convTotal||0)>0? html`<div style=${{padding:"10px 12px 14px",borderTop:"1px solid var(--rule)"}}>
+            <div class="sub" style=${{margin:"0 0 8px",fontSize:"12px"}}>${showingLabel}</div>
+            ${hasMore? html`<button class="btn" style=${{width:"100%"}} disabled=${loadingMore} onClick=${onLoadMore}>${loadingMore?T("load.generic"):T("inbox.loadMore")}</button>`:null}
+          </div>`:null}
         </div>
 
         <!-- active thread -->
@@ -1668,6 +1706,9 @@ function App(){
   const [tab, setTab] = useState("command");
   const [stats, setStats] = useState(null);
   const [conversations, setConversations] = useState([]);
+  const [convTotal, setConvTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const convLimitRef = useRef(50);
   const [handovers, setHandovers] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [templates, setTemplates] = useState([]);
@@ -1679,15 +1720,47 @@ function App(){
 
   const reloadShared = useCallback(async ()=>{
     try{
-      const [s,c,h,a,co,pd,rk] = await Promise.all([api("/stats"),api("/conversations"),api("/handovers"),api("/analytics"),api("/consultants"),api("/payments/pending"),api("/risk")]);
-      setStats(s); setConversations(c); setHandovers(h); setAnalytics(a); setConsultants(co); setPendingDeposits(pd); setRisks(rk); setFatal(null);
+      const limit = Math.max(50, convLimitRef.current);
+      const [s,c,h,a,co,pd,rk] = await Promise.all([
+        api("/stats"),
+        api("/conversations?limit="+limit+"&offset=0"),
+        api("/handovers"),
+        api("/analytics"),
+        api("/consultants"),
+        api("/payments/pending"),
+        api("/risk"),
+      ]);
+      setStats(s);
+      setConversations(c.items||[]);
+      setConvTotal(c.total||0);
+      convLimitRef.current = Math.max(50, (c.items||[]).length);
+      setHandovers(h); setAnalytics(a); setConsultants(co); setPendingDeposits(pd); setRisks(rk); setFatal(null);
     }catch(e){ setFatal(e.message); }
   }, []);
+
+  const loadMoreConversations = useCallback(async ()=>{
+    if(loadingMore) return;
+    setLoadingMore(true);
+    try{
+      const offset = conversations.length;
+      const page = await api("/conversations?limit=50&offset="+offset);
+      const incoming = page.items||[];
+      setConversations((prev)=>{
+        const seen = new Set(prev.map((x)=>x.lead_id));
+        const merged = prev.concat(incoming.filter((x)=>!seen.has(x.lead_id)));
+        convLimitRef.current = Math.max(50, merged.length);
+        return merged;
+      });
+      setConvTotal(page.total||0);
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setLoadingMore(false); }
+  }, [conversations.length, loadingMore]);
 
   useEffect(()=>{ reloadShared(); api("/templates").then(setTemplates).catch(()=>{}); }, [reloadShared]);
   useInterval(reloadShared, 8000);
 
   const openLead = async (id)=>{ setSelectedId(id); setTab("inbox"); await api("/conversations/"+id+"/takeover",{method:"POST"}).catch(()=>{}); reloadShared(); };
+  const signOut = ()=>{ TOKEN=""; remember("mv-panel-token",""); NEEDS_AUTH=true; renderApp(); };
 
   return html`
     <div class="topbar">
@@ -1703,6 +1776,7 @@ function App(){
       </div>
       <button class="btn iconbtn" title=${T("shell.themeToggle")} aria-label=${T("shell.themeToggle")}
         onClick=${()=>setTheme(THEME==="dark"?"light":"dark")}>${THEME==="dark"?"☀️":"🌙"}</button>
+      ${TOKEN? html`<button class="btn" onClick=${signOut}>${T("shell.signOut")}</button>`:null}
       <button class="btn" onClick=${reloadShared}>${T("btn.refresh")}</button>
     </div>
     <div class="shell">
@@ -1722,7 +1796,7 @@ function App(){
         <div class="view" key=${tab}>
         <${ErrorBoundary} key=${"eb-"+tab}>
         ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} onOpenLead=${openLead} />`
-          : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} />`
+          : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} convTotal=${convTotal} onLoadMore=${loadMoreConversations} loadingMore=${loadingMore} />`
           : tab==="analytics" ? html`<${Analytics} analytics=${analytics} />`
           : tab==="campaigns" ? html`<${Campaigns} templates=${templates} reloadShared=${reloadShared} />`
           : tab==="studio" ? html`<${PromptStudio} />`
@@ -1770,10 +1844,50 @@ function Toasts(){
   return html`<div class="toasts">${items.map(t=> html`<div key=${t.id} class="toast ${t.type}">${t.message}</div>`)}</div>`;
 }
 
+// One card, styled from the same tokens as everything else — no new palette.
+// Tries the token against a real endpoint before storing it, so a wrong
+// entry shows an error right here instead of flashing the app then bouncing
+// back to this screen.
+function Gate(){
+  const [val,setVal] = useState("");
+  const [busy,setBusy] = useState(false);
+  const [err,setErr] = useState(null);
+
+  const submit = async (e)=>{
+    e.preventDefault();
+    if(!val.trim()) return;
+    setBusy(true); setErr(null);
+    try{
+      const res = await fetch("/api/stats", { headers:{ "Authorization":"Bearer "+val.trim() } });
+      if(res.status===401) throw new Error(T("gate.wrongToken"));
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      setToken(val.trim());
+    }catch(ex){ setErr(ex.message); }
+    finally{ setBusy(false); }
+  };
+
+  return html`<div style=${{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--ground)",padding:"24px"}}>
+    <form onSubmit=${submit} class="glass" style=${{width:"100%",maxWidth:"340px",padding:"28px"}}>
+      <div class="logo" style=${{marginBottom:"6px"}}>Medi<b>Voyage</b> OS</div>
+      <div class="sub" style=${{margin:"0 0 18px"}}>${T("gate.sub")}</div>
+      <label class="fl">${T("gate.label")}</label>
+      <input type="password" autofocus value=${val} onInput=${(e)=>setVal(e.target.value)} style=${{width:"100%"}}/>
+      ${err? html`<div class="err" style=${{marginTop:"12px"}}>${err}</div>`:null}
+      <button class="btn primary" type="submit" style=${{width:"100%",marginTop:"14px"}} disabled=${busy||!val.trim()}>${busy?T("gate.checking"):T("gate.enter")}</button>
+    </form>
+  </div>`;
+}
+
 // Language and theme changes re-render the whole tree; React reconciles it,
 // so component state (open conversation, form drafts) survives the switch.
+// NEEDS_AUTH swaps the whole tree for the Gate instead — set by api()'s 401
+// handler, cleared by a successful Gate submit.
 const _root = ReactDOM.createRoot(document.getElementById("root"));
-function renderApp(){ _root.render(html`<${React.Fragment}><${App} /><${Toasts} /><//>`); }
+function renderApp(){
+  _root.render(NEEDS_AUTH
+    ? html`<${Gate} />`
+    : html`<${React.Fragment}><${App} /><${Toasts} /><//>`);
+}
 renderApp();
 </script>
 </body>

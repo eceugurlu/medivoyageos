@@ -5,7 +5,7 @@ import { zohoEnabled } from './services/zoho.js';
 import { notifyEnabled, notifyNoShowRisk } from './services/notify.js';
 import { webhookRouter } from './routes/webhook.js';
 import { apiRouter, publicRouter } from './routes/api.js';
-import { seedCampaignsIfEmpty, seedCoordinatorsIfEmpty, seedDevicesIfEmpty, getDuePostOpTasks, markPostOpSent, getNoShowRisks, markRiskNotified, clearRiskNotified } from './store/repository.js';
+import { seedCampaignsIfEmpty, seedCoordinatorsIfEmpty, seedDevicesIfEmpty, seedBranchesIfEmpty, getDuePostOpTasks, markPostOpSent, getNoShowRisks, markRiskNotified, clearRiskNotified } from './store/repository.js';
 import { seedProfileIfEmpty } from './services/profile.js';
 import { sendTemplate } from './services/whatsapp.js';
 
@@ -78,6 +78,11 @@ app.listen(config.port, () => {
     seedCoordinatorsIfEmpty()
       .then((seeded) => seeded && console.log('[seed] demo coordinators inserted for language matching'))
       .catch((err) => console.error('[seed] coordinators failed:', err.message));
+    // Branches after coordinators so the seed can assign existing staff/leads
+    // across şubeler on first boot of Öncelik 4.
+    seedBranchesIfEmpty()
+      .then((seeded) => seeded && console.log('[seed] demo branches inserted (Ana Şube / Nişantaşı / Ataşehir)'))
+      .catch((err) => console.error('[seed] branches failed:', err.message));
     seedDevicesIfEmpty()
       .then((seeded) => seeded && console.log('[seed] demo devices inserted for booking'))
       .catch((err) => console.error('[seed] devices failed:', err.message));

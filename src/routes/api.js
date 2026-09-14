@@ -41,6 +41,9 @@ import {
   markQuoteSent,
   markQuoteViewed,
   markQuoteAccepted,
+  listBranches,
+  setLeadBranch,
+  normalizeBranchId,
 } from '../store/repository.js';
 
 // ── Public router (NO auth) — for the embeddable website lead widget ─────────
@@ -147,18 +150,35 @@ const h = (fn) => (req, res) =>
     res.status(500).json({ error: err.message });
   });
 
-apiRouter.get('/stats', h(async (_req, res) => {
-  res.json(await getStats());
+apiRouter.get('/stats', h(async (req, res) => {
+  res.json(await getStats({ branchId: normalizeBranchId(req.query.branch_id) }));
+}));
+
+apiRouter.get('/branches', h(async (_req, res) => {
+  res.json(await listBranches());
 }));
 
 apiRouter.get('/conversations', h(async (req, res) => {
   const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
   const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
-  res.json(await listConversations({ limit, offset }));
+  res.json(await listConversations({
+    limit,
+    offset,
+    branchId: normalizeBranchId(req.query.branch_id),
+  }));
 }));
 
-apiRouter.get('/handovers', h(async (_req, res) => {
-  res.json(await getHandoverQueue());
+apiRouter.get('/handovers', h(async (req, res) => {
+  res.json(await getHandoverQueue({ branchId: normalizeBranchId(req.query.branch_id) }));
+}));
+
+apiRouter.put('/conversations/:leadId/branch', h(async (req, res) => {
+  try {
+    res.json(await setLeadBranch(req.params.leadId, req.body?.branch_id ?? null));
+  } catch (err) {
+    const status = err.message === 'lead not found' || err.message === 'branch not found' ? 404 : 400;
+    res.status(status).json({ error: err.message });
+  }
 }));
 
 apiRouter.get('/conversations/:leadId', h(async (req, res) => {
@@ -206,15 +226,15 @@ apiRouter.put('/payments/:paymentId', h(async (req, res) => {
 }));
 
 // Cross-lead list for the Inbox's "Awaiting deposit" filter.
-apiRouter.get('/payments/pending', h(async (_req, res) => {
-  res.json(await listPendingDeposits());
+apiRouter.get('/payments/pending', h(async (req, res) => {
+  res.json(await listPendingDeposits({ branchId: normalizeBranchId(req.query.branch_id) }));
 }));
 
 // Rule-based no-show risk, recomputed per request — it is derived entirely
 // from data that already exists (silence, deposits, dates, wording), so there
 // is nothing to store and nothing to go stale.
-apiRouter.get('/risk', h(async (_req, res) => {
-  res.json(await getNoShowRisks());
+apiRouter.get('/risk', h(async (req, res) => {
+  res.json(await getNoShowRisks({ branchId: normalizeBranchId(req.query.branch_id) }));
 }));
 
 // ── Quotes (Treatment Plan Builder) ───────────────────────────────────────
@@ -350,14 +370,14 @@ apiRouter.post('/conversations/:leadId/reply', h(async (req, res) => {
   res.json({ ok: true, delivered });
 }));
 
-// Analytics: CAC / ROAS / funnel / 14-day trend / sources.
-apiRouter.get('/analytics', h(async (_req, res) => {
-  res.json(await getAnalytics());
+// Analytics: CAC / ROAS / funnel / 14-day trend / sources / by_branch.
+apiRouter.get('/analytics', h(async (req, res) => {
+  res.json(await getAnalytics({ branchId: normalizeBranchId(req.query.branch_id) }));
 }));
 
 // Consultant performance + language coordinator matching.
-apiRouter.get('/consultants', h(async (_req, res) => {
-  res.json(await getConsultantMetrics());
+apiRouter.get('/consultants', h(async (req, res) => {
+  res.json(await getConsultantMetrics({ branchId: normalizeBranchId(req.query.branch_id) }));
 }));
 
 // ── Post-Op & Trust/Review (Modül 8+9) ──────────────────────────────────────

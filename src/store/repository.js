@@ -14,6 +14,17 @@ export async function getDefaultClinicId() {
   return cachedClinicId;
 }
 
+// Optional şube scope. NULL = tüm şubeler (mevcut global davranış — kırılmaz).
+// UUID-looking strings only; anything else is treated as "all".
+export function normalizeBranchId(value) {
+  if (value == null || value === '' || value === 'all') return null;
+  const s = String(value);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)) {
+    return null;
+  }
+  return s;
+}
+
 /**
  * Resolve the lead + conversation for an inbound WhatsApp message and return
  * the prior message history for AI context. Also performs idempotency dedup:
@@ -205,29 +216,38 @@ export async function saveInboundMessage(ctx, { userText, wamid }) {
 // derive utilisation from this one assumption, so the two screens can't drift.
 export const SLOTS_PER_DAY = 6;
 
-export async function getStats() {
-  const q = await pool.query(`
+export async function getStats({ branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  const q = await pool.query(
+    `
     SELECT
-      (SELECT count(*) FROM leads)                                            AS total_leads,
-      (SELECT count(*) FROM leads WHERE created_at::date = now()::date)       AS today_leads,
-      (SELECT count(*) FROM leads WHERE status = 'hot')                       AS hot_leads,
-      (SELECT count(*) FROM leads WHERE status = 'handed_over')               AS handed_over,
-      (SELECT count(*) FROM conversations WHERE status = 'needs_human')       AS needs_human,
-      (SELECT count(DISTINCT country) FROM leads WHERE country IS NOT NULL)   AS countries,
-      (SELECT count(*) FROM leads WHERE country IS NOT NULL)                  AS with_country,
-      -- Share of conversations the AI is still handling on its own. This is a
-      -- real autonomy figure, unlike a "booking rate", which needs the payment
-      -- data we don't collect yet.
-      (SELECT count(*) FROM conversations WHERE status = 'ai_handling')        AS ai_handled,
-      (SELECT count(*) FROM conversations)                                     AS total_conversations,
-      -- Today's average device utilisation, same maths as the booking view.
+      (SELECT count(*) FROM leads l WHERE ($1::uuid IS NULL OR l.branch_id = $1)) AS total_leads,
+      (SELECT count(*) FROM leads l WHERE l.created_at::date = now()::date
+         AND ($1::uuid IS NULL OR l.branch_id = $1))                              AS today_leads,
+      (SELECT count(*) FROM leads l WHERE l.status = 'hot'
+         AND ($1::uuid IS NULL OR l.branch_id = $1))                              AS hot_leads,
+      (SELECT count(*) FROM leads l WHERE l.status = 'handed_over'
+         AND ($1::uuid IS NULL OR l.branch_id = $1))                              AS handed_over,
+      (SELECT count(*) FROM conversations c JOIN leads l ON l.id = c.lead_id
+        WHERE c.status = 'needs_human' AND ($1::uuid IS NULL OR l.branch_id = $1)) AS needs_human,
+      (SELECT count(DISTINCT l.country) FROM leads l
+        WHERE l.country IS NOT NULL AND ($1::uuid IS NULL OR l.branch_id = $1)) AS countries,
+      (SELECT count(*) FROM leads l WHERE l.country IS NOT NULL
+         AND ($1::uuid IS NULL OR l.branch_id = $1))                              AS with_country,
+      (SELECT count(*) FROM conversations c JOIN leads l ON l.id = c.lead_id
+        WHERE c.status = 'ai_handling' AND ($1::uuid IS NULL OR l.branch_id = $1)) AS ai_handled,
+      (SELECT count(*) FROM conversations c JOIN leads l ON l.id = c.lead_id
+        WHERE ($1::uuid IS NULL OR l.branch_id = $1))                             AS total_conversations,
+      -- Device occupancy is clinic-wide (devices have no branch_id yet).
       (SELECT COALESCE(round(avg(u.util)), 0) FROM (
          SELECT (count(a.id) FILTER (WHERE a.starts_at::date = now()::date AND a.status = 'booked')::numeric
                  / ${SLOTS_PER_DAY}) * 100 AS util
          FROM devices d LEFT JOIN appointments a ON a.device_id = d.id
          WHERE d.active GROUP BY d.id
        ) u)                                                                    AS device_occupancy
-  `);
+  `,
+    [bid],
+  );
   const row = q.rows[0];
   const convs = Number(row.total_conversations);
   return {
@@ -238,15 +258,17 @@ export async function getStats() {
 
 // Inbox: one row per conversation with lead info + last message preview.
 // Paginated — the panel used to hard-cap at 100 and silently hide older threads.
-export async function listConversations({ limit = 50, offset = 0 } = {}) {
+export async function listConversations({ limit = 50, offset = 0, branchId = null } = {}) {
   const safeLimit = Math.min(200, Math.max(1, Number(limit) || 50));
   const safeOffset = Math.max(0, Number(offset) || 0);
+  const bid = normalizeBranchId(branchId);
   const [q, countQ] = await Promise.all([
     pool.query(
       `
     SELECT
       l.id                AS lead_id,
       l.phone, l.name, l.country, l.language, l.score, l.status AS lead_status,
+      l.branch_id,
       c.status            AS conv_status,
       c.handover_reason, c.urgent,
       lm.content          AS last_message,
@@ -259,12 +281,18 @@ export async function listConversations({ limit = 50, offset = 0 } = {}) {
       WHERE m.conversation_id = c.id
       ORDER BY created_at DESC LIMIT 1
     ) lm ON true
+    WHERE ($3::uuid IS NULL OR l.branch_id = $3)
     ORDER BY lm.created_at DESC NULLS LAST
     LIMIT $1 OFFSET $2
   `,
-      [safeLimit, safeOffset],
+      [safeLimit, safeOffset, bid],
     ),
-    pool.query(`SELECT COUNT(*)::int AS total FROM conversations`),
+    pool.query(
+      `SELECT COUNT(*)::int AS total
+         FROM conversations c JOIN leads l ON l.id = c.lead_id
+        WHERE ($1::uuid IS NULL OR l.branch_id = $1)`,
+      [bid],
+    ),
   ]);
   return {
     items: q.rows,
@@ -275,15 +303,20 @@ export async function listConversations({ limit = 50, offset = 0 } = {}) {
 }
 
 // The Action Center handover queue.
-export async function getHandoverQueue() {
-  const q = await pool.query(`
+export async function getHandoverQueue({ branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  const q = await pool.query(
+    `
     SELECT l.id AS lead_id, l.phone, l.name, l.country, l.language, l.score, l.medical_note,
            c.handover_reason, c.urgent, c.updated_at
     FROM conversations c
     JOIN leads l ON l.id = c.lead_id
     WHERE c.status = 'needs_human'
+      AND ($1::uuid IS NULL OR l.branch_id = $1)
     ORDER BY c.urgent DESC, l.score DESC NULLS LAST, c.updated_at DESC
-  `);
+  `,
+    [bid],
+  );
   return q.rows;
 }
 
@@ -291,7 +324,7 @@ export async function getHandoverQueue() {
 export async function getConversationDetail(leadId) {
   const leadQ = await pool.query(
     `SELECT id, phone, name, country, language, treatment_interest, budget_hint,
-            readiness, score, status, crm_lead_id, medical_note
+            readiness, score, status, crm_lead_id, medical_note, branch_id
        FROM leads WHERE id = $1`,
     [leadId],
   );
@@ -404,27 +437,40 @@ export async function updatePayment(paymentId, { status, reminder }) {
 
 // Cross-lead view for the Inbox's "Awaiting deposit" filter and any future
 // dunning list — every lead with at least one payment still pending.
-export async function listPendingDeposits() {
-  const q = await pool.query(`
+export async function listPendingDeposits({ branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  const q = await pool.query(
+    `
     SELECT p.lead_id, count(*)::int AS pending_count,
            sum(p.amount) AS pending_amount, min(p.currency) AS currency,
            to_char(min(p.due_date), 'YYYY-MM-DD') AS earliest_due, max(p.reminder_sent_at) AS last_reminder
-      FROM payments p WHERE p.status = 'pending'
+      FROM payments p
+      JOIN leads l ON l.id = p.lead_id
+     WHERE p.status = 'pending'
+       AND ($1::uuid IS NULL OR l.branch_id = $1)
      GROUP BY p.lead_id
-  `);
+  `,
+    [bid],
+  );
   return q.rows.map((r) => ({ ...r, pending_amount: Number(r.pending_amount) }));
 }
 
 // The real revenue figure: money actually marked paid. Booked-but-unpaid
 // leads contribute nothing here — as they shouldn't.
-export async function getPaymentTotals() {
-  const q = await pool.query(`
+export async function getPaymentTotals({ branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  const q = await pool.query(
+    `
     SELECT
-      COALESCE(sum(amount) FILTER (WHERE status = 'paid'), 0)    AS collected,
-      COALESCE(sum(amount) FILTER (WHERE status = 'pending'), 0) AS pending,
-      count(*) FILTER (WHERE status = 'pending')                 AS pending_count
-    FROM payments
-  `);
+      COALESCE(sum(p.amount) FILTER (WHERE p.status = 'paid'), 0)    AS collected,
+      COALESCE(sum(p.amount) FILTER (WHERE p.status = 'pending'), 0) AS pending,
+      count(*) FILTER (WHERE p.status = 'pending')                   AS pending_count
+    FROM payments p
+    JOIN leads l ON l.id = p.lead_id
+    WHERE ($1::uuid IS NULL OR l.branch_id = $1)
+  `,
+    [bid],
+  );
   const r = q.rows[0];
   return { collected: Number(r.collected), pending: Number(r.pending), pending_count: Number(r.pending_count) };
 }
@@ -690,8 +736,10 @@ export function computeNoShowRisk(row, now = Date.now()) {
   };
 }
 
-export async function getNoShowRisks() {
-  const q = await pool.query(`
+export async function getNoShowRisks({ branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  const q = await pool.query(
+    `
     SELECT l.id, l.name, l.phone, l.language, l.country, l.status, l.risk_notified_at,
       (SELECT max(m.created_at) FROM messages m
          JOIN conversations c ON c.id = m.conversation_id
@@ -714,7 +762,10 @@ export async function getNoShowRisks() {
       ), ARRAY[]::text[])                                              AS recent_patient_texts
     FROM leads l
     WHERE l.status <> 'lost'
-  `);
+      AND ($1::uuid IS NULL OR l.branch_id = $1)
+  `,
+    [bid],
+  );
 
   return q.rows
     .map((row) => {
@@ -811,28 +862,49 @@ export async function createWidgetLead(d) {
 }
 
 // ── Analytics (CAC / ROAS / funnel / trend) ─────────────────────────────────
-export async function getAnalytics() {
-  const trend = await pool.query(`
+export async function getAnalytics({ branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  const trend = await pool.query(
+    `
     SELECT d::date AS day, count(l.id) AS count
     FROM generate_series(now()::date - interval '13 days', now()::date, interval '1 day') d
     LEFT JOIN leads l ON l.created_at::date = d::date
+      AND ($1::uuid IS NULL OR l.branch_id = $1)
     GROUP BY d ORDER BY d
-  `);
-  const funnel = await pool.query(`
+  `,
+    [bid],
+  );
+  const funnel = await pool.query(
+    `
     SELECT
-      (SELECT count(*) FROM leads)                                  AS leads,
-      (SELECT count(*) FROM leads WHERE status IN ('hot','handed_over','booked')) AS qualified,
-      (SELECT count(*) FROM leads WHERE status IN ('handed_over','booked'))       AS handed_over,
-      (SELECT count(*) FROM leads WHERE status = 'booked')          AS booked
-  `);
-  const bySource = await pool.query(`
+      (SELECT count(*) FROM leads l WHERE ($1::uuid IS NULL OR l.branch_id = $1)) AS leads,
+      (SELECT count(*) FROM leads l WHERE l.status IN ('hot','handed_over','booked')
+         AND ($1::uuid IS NULL OR l.branch_id = $1)) AS qualified,
+      (SELECT count(*) FROM leads l WHERE l.status IN ('handed_over','booked')
+         AND ($1::uuid IS NULL OR l.branch_id = $1)) AS handed_over,
+      (SELECT count(*) FROM leads l WHERE l.status = 'booked'
+         AND ($1::uuid IS NULL OR l.branch_id = $1)) AS booked
+  `,
+    [bid],
+  );
+  const bySource = await pool.query(
+    `
     SELECT COALESCE(source,'unknown') AS source, count(*) AS count
-    FROM leads GROUP BY source ORDER BY count DESC
-  `);
-  const byLang = await pool.query(`
+    FROM leads l
+    WHERE ($1::uuid IS NULL OR l.branch_id = $1)
+    GROUP BY source ORDER BY count DESC
+  `,
+    [bid],
+  );
+  const byLang = await pool.query(
+    `
     SELECT COALESCE(language,'?') AS language, count(*) AS count
-    FROM leads GROUP BY language ORDER BY count DESC
-  `);
+    FROM leads l
+    WHERE ($1::uuid IS NULL OR l.branch_id = $1)
+    GROUP BY language ORDER BY count DESC
+  `,
+    [bid],
+  );
   const spend = await pool.query(`SELECT COALESCE(sum(spend),0) AS total_spend, COALESCE(sum(clicks),0) AS total_clicks FROM campaigns`);
   // Per-channel spend and cost-per-click are real. Per-channel CAC/ROAS are NOT
   // derivable yet: leads.source records how a lead arrived (whatsapp, widget),
@@ -846,21 +918,74 @@ export async function getAnalytics() {
     FROM campaigns GROUP BY channel ORDER BY spend DESC
   `);
 
+  // Always returned — panel shows şube kırılımı even when a single branch is
+  // selected (that row simply dominates). Unassigned leads are a separate row
+  // with branch_id null so they don't disappear into a named şube.
+  const byBranch = await pool.query(`
+    SELECT b.id AS branch_id, b.name, b.code, b.is_default,
+      count(l.id)::int AS leads,
+      count(l.id) FILTER (WHERE l.status = 'booked')::int AS booked,
+      COALESCE((
+        SELECT sum(p.amount) FROM payments p
+          JOIN leads lp ON lp.id = p.lead_id
+         WHERE p.status = 'paid' AND lp.branch_id = b.id
+      ), 0) AS revenue
+    FROM branches b
+    LEFT JOIN leads l ON l.branch_id = b.id
+    WHERE b.active
+    GROUP BY b.id
+    ORDER BY b.is_default DESC, b.name
+  `);
+  const unassigned = await pool.query(`
+    SELECT count(*)::int AS leads,
+           count(*) FILTER (WHERE status = 'booked')::int AS booked,
+           COALESCE((
+             SELECT sum(p.amount) FROM payments p
+               JOIN leads lp ON lp.id = p.lead_id
+              WHERE p.status = 'paid' AND lp.branch_id IS NULL
+           ), 0) AS revenue
+    FROM leads WHERE branch_id IS NULL
+  `);
+
   const totalLeads = Number(funnel.rows[0].leads);
   const totalSpend = Number(spend.rows[0].total_spend);
   const cac = totalLeads ? +(totalSpend / totalLeads).toFixed(2) : 0;
   // Revenue is now a real sum over payments.status = 'paid' — see migration
   // 009. It reads as zero until deposits are logged, which is the honest
   // number: no money has been recorded as collected yet.
-  const paymentTotals = await getPaymentTotals();
+  const paymentTotals = await getPaymentTotals({ branchId: bid });
   const revenue = paymentTotals.collected;
   const roas = totalSpend ? +(revenue / totalSpend).toFixed(2) : 0;
+
+  const byBranchRows = byBranch.rows.map((r) => ({
+    branch_id: r.branch_id,
+    name: r.name,
+    code: r.code,
+    is_default: r.is_default,
+    leads: Number(r.leads),
+    booked: Number(r.booked),
+    revenue: Number(r.revenue),
+  }));
+  const u = unassigned.rows[0];
+  if (Number(u.leads) > 0) {
+    byBranchRows.push({
+      branch_id: null,
+      name: null,
+      code: null,
+      is_default: false,
+      unassigned: true,
+      leads: Number(u.leads),
+      booked: Number(u.booked),
+      revenue: Number(u.revenue),
+    });
+  }
 
   return {
     trend: trend.rows.map((r) => ({ day: r.day, count: Number(r.count) })),
     funnel: funnel.rows[0],
     by_source: bySource.rows,
     by_language: byLang.rows,
+    by_branch: byBranchRows,
     spend: { total_spend: totalSpend, total_clicks: Number(spend.rows[0].total_clicks) },
     by_channel: byChannel.rows.map((r) => {
       const s = Number(r.spend), c = Number(r.clicks);
@@ -921,22 +1046,102 @@ export async function seedCoordinatorsIfEmpty() {
   return true;
 }
 
+// Öncelik 4: şube listesi + ilk açılışta demo şubeler. Mevcut lead/koordinatör
+// satırlarına branch_id yazmak kırılmaz — NULL zaten "atanmamış" demek; seed
+// sadece boş tabloda çalışır ve mevcut kayıtlara nazikçe dağıtır.
+export async function listBranches() {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `SELECT id, name, code, city, is_default, active
+       FROM branches WHERE clinic_id = $1 AND active
+       ORDER BY is_default DESC, name`,
+    [clinicId],
+  );
+  return q.rows;
+}
+
+export async function seedBranchesIfEmpty() {
+  const clinicId = await getDefaultClinicId();
+  const c = await pool.query('SELECT count(*)::int AS n FROM branches WHERE clinic_id = $1', [clinicId]);
+  if (c.rows[0].n > 0) return false;
+
+  const ins = await pool.query(
+    `INSERT INTO branches (clinic_id, name, code, city, is_default) VALUES
+       ($1, 'Ana Şube',  'MAIN', 'Istanbul', true),
+       ($1, 'Nişantaşı', 'NIS',  'Istanbul', false),
+       ($1, 'Ataşehir',  'ATA',  'Istanbul', false)
+     RETURNING id, code, is_default`,
+    [clinicId],
+  );
+  const byCode = Object.fromEntries(ins.rows.map((r) => [r.code, r.id]));
+
+  // Spread existing coordinators across şubeler so Matching/Consultants have
+  // a real branch dimension without wiping prior language coverage.
+  const coords = await pool.query(
+    `SELECT id FROM coordinators WHERE clinic_id = $1 AND branch_id IS NULL ORDER BY created_at`,
+    [clinicId],
+  );
+  const branchIds = ins.rows.map((r) => r.id);
+  for (let i = 0; i < coords.rows.length; i++) {
+    await pool.query('UPDATE coordinators SET branch_id = $2 WHERE id = $1', [
+      coords.rows[i].id,
+      branchIds[i % branchIds.length],
+    ]);
+  }
+
+  // Same for unassigned leads — language buckets keep the split readable in demos.
+  const leads = await pool.query(
+    `SELECT id, language FROM leads WHERE clinic_id = $1 AND branch_id IS NULL ORDER BY created_at`,
+    [clinicId],
+  );
+  for (const lead of leads.rows) {
+    let target = byCode.MAIN;
+    if (lead.language === 'ar' || lead.language === 'en') target = byCode.NIS;
+    else if (lead.language === 'de' || lead.language === 'ru') target = byCode.ATA;
+    await pool.query('UPDATE leads SET branch_id = $2 WHERE id = $1', [lead.id, target]);
+  }
+  return true;
+}
+
+export async function setLeadBranch(leadId, branchId) {
+  const bid = branchId == null || branchId === '' || branchId === 'none'
+    ? null
+    : normalizeBranchId(branchId);
+  if (branchId && !bid && branchId !== 'none' && branchId !== '') {
+    throw new Error('invalid branch_id');
+  }
+  if (bid) {
+    const exists = await pool.query('SELECT id FROM branches WHERE id = $1 AND active', [bid]);
+    if (!exists.rows[0]) throw new Error('branch not found');
+  }
+  const q = await pool.query(
+    `UPDATE leads SET branch_id = $2, updated_at = now()
+       WHERE id = $1 RETURNING id, branch_id`,
+    [leadId, bid],
+  );
+  if (!q.rows[0]) throw new Error('lead not found');
+  return q.rows[0];
+}
+
 // Route a lead to the least-loaded active coordinator who speaks its language.
-// No-op if already assigned or no coordinator covers that language (AI bridges).
+// Prefer same-şube coordinators when the lead already has a branch_id; fall
+// back to any language match so the AI bridge behaviour is unchanged.
 export async function assignCoordinatorByLanguage(leadId, langCode) {
   if (!langCode) return null;
-  const existing = await pool.query('SELECT coordinator_id FROM leads WHERE id = $1', [leadId]);
+  const existing = await pool.query('SELECT coordinator_id, branch_id FROM leads WHERE id = $1', [leadId]);
   if (existing.rows[0]?.coordinator_id) return existing.rows[0].coordinator_id;
+  const leadBranch = existing.rows[0]?.branch_id || null;
 
   const pick = await pool.query(
-    `SELECT co.id, count(l.id) AS load
+    `SELECT co.id, count(l.id) AS load,
+            CASE WHEN $2::uuid IS NOT NULL AND co.branch_id = $2 THEN 0 ELSE 1 END AS branch_rank
        FROM coordinators co
        LEFT JOIN leads l ON l.coordinator_id = co.id
       WHERE co.active AND $1 = ANY(co.languages)
       GROUP BY co.id
-      ORDER BY load ASC
+      ORDER BY branch_rank ASC, load ASC
       LIMIT 1`,
-    [langCode],
+    [langCode, leadBranch],
   );
   const coordinatorId = pick.rows[0]?.id;
   if (!coordinatorId) return null;
@@ -949,27 +1154,36 @@ export async function assignCoordinatorByLanguage(leadId, langCode) {
   return coordinatorId;
 }
 
-export async function getConsultantMetrics() {
-  const coords = await pool.query(`
-    SELECT co.id, co.name, co.languages, co.active,
-      count(l.id)                                       AS assigned,
-      count(l.id) FILTER (WHERE l.status='hot')         AS hot,
-      count(l.id) FILTER (WHERE l.status='handed_over') AS handed_over,
-      count(l.id) FILTER (WHERE l.status='booked')      AS booked
+export async function getConsultantMetrics({ branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  const coords = await pool.query(
+    `
+    SELECT co.id, co.name, co.languages, co.active, co.branch_id,
+      count(l.id) FILTER (WHERE ($1::uuid IS NULL OR l.branch_id = $1)) AS assigned,
+      count(l.id) FILTER (WHERE l.status='hot' AND ($1::uuid IS NULL OR l.branch_id = $1)) AS hot,
+      count(l.id) FILTER (WHERE l.status='handed_over' AND ($1::uuid IS NULL OR l.branch_id = $1)) AS handed_over,
+      count(l.id) FILTER (WHERE l.status='booked' AND ($1::uuid IS NULL OR l.branch_id = $1)) AS booked
     FROM coordinators co
     LEFT JOIN leads l ON l.coordinator_id = co.id
+    WHERE ($1::uuid IS NULL OR co.branch_id = $1 OR co.branch_id IS NULL)
     GROUP BY co.id
     ORDER BY assigned DESC, co.name
-  `);
+  `,
+    [bid],
+  );
   // Languages present in leads that NO active coordinator can serve.
-  const gaps = await pool.query(`
+  const gaps = await pool.query(
+    `
     SELECT DISTINCT l.language
     FROM leads l
     WHERE l.language IS NOT NULL
+      AND ($1::uuid IS NULL OR l.branch_id = $1)
       AND NOT EXISTS (
         SELECT 1 FROM coordinators c WHERE c.active AND l.language = ANY(c.languages)
       )
-  `);
+  `,
+    [bid],
+  );
   return {
     coordinators: coords.rows.map((c) => {
       const assigned = Number(c.assigned);

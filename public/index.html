@@ -636,6 +636,9 @@ const I18N = {
     "gate.enter":"Enter","gate.checking":"Checking…","gate.wrongToken":"That token is not valid.",
     "gate.sessionExpired":"Session expired — enter the token again.","shell.signOut":"Sign out",
     "inbox.loadMore":"Load more","inbox.showingOf":"Showing {shown} of {total}",
+    "branch.all":"All branches","branch.label":"Branch","branch.unassigned":"Unassigned",
+    "branch.none":"No branch","toast.branchSaved":"Branch updated",
+    "analytics.byBranch":"By branch","analytics.branchBooked":"booked","analytics.branchRevenue":"revenue",
   },
   tr: {
     "nav.command":"Komuta Merkezi","nav.inbox":"Tüm Kanallar Gelen Kutusu","nav.analytics":"CAC & ROAS Analizi",
@@ -776,6 +779,9 @@ const I18N = {
     "gate.enter":"Giriş","gate.checking":"Kontrol ediliyor…","gate.wrongToken":"Bu jeton geçersiz.",
     "gate.sessionExpired":"Oturum sona erdi — jetonu yeniden girin.","shell.signOut":"Çıkış",
     "inbox.loadMore":"Daha fazla yükle","inbox.showingOf":"{shown} / {total} gösteriliyor",
+    "branch.all":"Tüm şubeler","branch.label":"Şube","branch.unassigned":"Atanmamış",
+    "branch.none":"Şube yok","toast.branchSaved":"Şube güncellendi",
+    "analytics.byBranch":"Şubeye göre","analytics.branchBooked":"rezervasyon","analytics.branchRevenue":"gelir",
   },
 };
 
@@ -960,7 +966,7 @@ function CommandCenter({ stats, analytics, handovers, risks, onOpenLead }){
 }
 
 // ── Inbox ───────────────────────────────────────────────────────────────────
-function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pendingDeposits, convTotal, onLoadMore, loadingMore }){
+function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pendingDeposits, convTotal, onLoadMore, loadingMore, branches }){
   const [detail, setDetail] = useState(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1111,6 +1117,20 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
             <div class="pf-row" style="margin-top:12px"><span class="k">${T("pf.status")}</span><span>${lead.status||"–"}</span></div>
             <div class="pf-row"><span class="k">${T("pf.readiness")}</span><span>${lead.readiness||"–"}</span></div>
             <div class="pf-row"><span class="k">${T("pf.language")}</span><span>${lead.language||"–"}</span></div>
+            <div class="pf-row" style=${{alignItems:"center"}}>
+              <span class="k">${T("branch.label")}</span>
+              <select style=${{maxWidth:"160px",fontSize:"12.5px"}} value=${lead.branch_id||""}
+                onChange=${async (e)=>{
+                  const v = e.target.value || null;
+                  try{
+                    await api("/conversations/"+lead.id+"/branch",{method:"PUT",body:JSON.stringify({branch_id:v})});
+                    showToast(T("toast.branchSaved")); await loadDetail(lead.id); await reloadShared();
+                  }catch(ex){ showToast(ex.message,"error"); }
+                }}>
+                <option value="">${T("branch.none")}</option>
+                ${(branches||[]).map((b)=> html`<option key=${b.id} value=${b.id}>${b.name}</option>`)}
+              </select>
+            </div>
             <div class="pf-row"><span class="k">${T("pf.treatment")}</span><span style="text-align:right;max-width:150px">${lead.treatment_interest||"–"}</span></div>
             <div class="pf-row"><span class="k">${T("pf.budget")}</span><span>${lead.budget_hint||"–"}</span></div>
             <div class="pf-row"><span class="k">${T("pf.crmId")}</span><span>${lead.crm_lead_id||T("pf.notSynced")}</span></div>
@@ -1377,6 +1397,15 @@ function Analytics({ analytics }){
     <div class="glass" style="padding:16px 18px">
       <div class="section-title" style="margin-top:0">${T("analytics.bySource")}</div>
       ${(analytics.by_source||[]).map((s,i)=> html`<div key=${i} class="pf-row"><span class="k">${s.source}</span><span>${s.count}</span></div>`)}
+    </div>
+    <div class="glass" style="padding:16px 18px;margin-top:16px">
+      <div class="section-title" style="margin-top:0">${T("analytics.byBranch")}</div>
+      ${(analytics.by_branch||[]).length===0
+        ? html`<div class="sub" style="margin:0">${T("branch.unassigned")}</div>`
+        : (analytics.by_branch||[]).map((b,i)=> html`<div key=${i} class="pf-row">
+            <span class="k">${b.unassigned?T("branch.unassigned"):(b.name||"—")}</span>
+            <span>${b.leads} · ${b.booked} ${T("analytics.branchBooked")} · €${Number(b.revenue||0).toLocaleString()} ${T("analytics.branchRevenue")}</span>
+          </div>`)}
     </div>
     <div class="glass" style="padding:16px 18px;margin-top:16px">
       <div class="section-title" style="margin-top:0">${T("analytics.byChannel")}</div>
@@ -1709,6 +1738,8 @@ function App(){
   const [convTotal, setConvTotal] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const convLimitRef = useRef(50);
+  const [branches, setBranches] = useState([]);
+  const [branchId, setBranchId] = useState(()=> store("mv-branch", "all"));
   const [handovers, setHandovers] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [templates, setTemplates] = useState([]);
@@ -1718,32 +1749,38 @@ function App(){
   const [selectedId, setSelectedId] = useState(null);
   const [fatal, setFatal] = useState(null);
 
+  const branchQs = branchId && branchId!=="all" ? "&branch_id="+encodeURIComponent(branchId) : "";
+
   const reloadShared = useCallback(async ()=>{
     try{
       const limit = Math.max(50, convLimitRef.current);
-      const [s,c,h,a,co,pd,rk] = await Promise.all([
-        api("/stats"),
-        api("/conversations?limit="+limit+"&offset=0"),
-        api("/handovers"),
-        api("/analytics"),
-        api("/consultants"),
-        api("/payments/pending"),
-        api("/risk"),
+      const qs = branchId && branchId!=="all" ? "?branch_id="+encodeURIComponent(branchId) : "";
+      const convQs = "?limit="+limit+"&offset=0"+(branchId && branchId!=="all" ? "&branch_id="+encodeURIComponent(branchId) : "");
+      const [s,c,h,a,co,pd,rk,br] = await Promise.all([
+        api("/stats"+qs),
+        api("/conversations"+convQs),
+        api("/handovers"+qs),
+        api("/analytics"+qs),
+        api("/consultants"+qs),
+        api("/payments/pending"+qs),
+        api("/risk"+qs),
+        api("/branches"),
       ]);
       setStats(s);
       setConversations(c.items||[]);
       setConvTotal(c.total||0);
       convLimitRef.current = Math.max(50, (c.items||[]).length);
-      setHandovers(h); setAnalytics(a); setConsultants(co); setPendingDeposits(pd); setRisks(rk); setFatal(null);
+      setHandovers(h); setAnalytics(a); setConsultants(co); setPendingDeposits(pd); setRisks(rk);
+      setBranches(br||[]); setFatal(null);
     }catch(e){ setFatal(e.message); }
-  }, []);
+  }, [branchId]);
 
   const loadMoreConversations = useCallback(async ()=>{
     if(loadingMore) return;
     setLoadingMore(true);
     try{
       const offset = conversations.length;
-      const page = await api("/conversations?limit=50&offset="+offset);
+      const page = await api("/conversations?limit=50&offset="+offset+branchQs);
       const incoming = page.items||[];
       setConversations((prev)=>{
         const seen = new Set(prev.map((x)=>x.lead_id));
@@ -1754,13 +1791,18 @@ function App(){
       setConvTotal(page.total||0);
     }catch(e){ showToast(e.message,"error"); }
     finally{ setLoadingMore(false); }
-  }, [conversations.length, loadingMore]);
+  }, [conversations.length, loadingMore, branchQs]);
 
   useEffect(()=>{ reloadShared(); api("/templates").then(setTemplates).catch(()=>{}); }, [reloadShared]);
   useInterval(reloadShared, 8000);
 
   const openLead = async (id)=>{ setSelectedId(id); setTab("inbox"); await api("/conversations/"+id+"/takeover",{method:"POST"}).catch(()=>{}); reloadShared(); };
   const signOut = ()=>{ TOKEN=""; remember("mv-panel-token",""); NEEDS_AUTH=true; renderApp(); };
+  const changeBranch = (next)=>{
+    setBranchId(next);
+    remember("mv-branch", next);
+    convLimitRef.current = 50;
+  };
 
   return html`
     <div class="topbar">
@@ -1770,6 +1812,11 @@ function App(){
       </div>
       <div class="live"><span class="dot"></span> ${T("shell.aiLive")}</div>
       <div style="flex:1"></div>
+      <select aria-label=${T("branch.label")} value=${branchId} onChange=${(e)=>changeBranch(e.target.value)}
+        style=${{marginRight:"8px",maxWidth:"180px",fontSize:"12.5px"}}>
+        <option value="all">${T("branch.all")}</option>
+        ${branches.map((b)=> html`<option key=${b.id} value=${b.id}>${b.name}</option>`)}
+      </select>
       <div class="seg">
         <button class="segbtn ${LANG==="tr"?"on":""}" aria-pressed=${LANG==="tr"} onClick=${()=>setLang("tr")}>TR</button>
         <button class="segbtn ${LANG==="en"?"on":""}" aria-pressed=${LANG==="en"} onClick=${()=>setLang("en")}>EN</button>
@@ -1796,7 +1843,7 @@ function App(){
         <div class="view" key=${tab}>
         <${ErrorBoundary} key=${"eb-"+tab}>
         ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} onOpenLead=${openLead} />`
-          : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} convTotal=${convTotal} onLoadMore=${loadMoreConversations} loadingMore=${loadingMore} />`
+          : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} convTotal=${convTotal} onLoadMore=${loadMoreConversations} loadingMore=${loadingMore} branches=${branches} />`
           : tab==="analytics" ? html`<${Analytics} analytics=${analytics} />`
           : tab==="campaigns" ? html`<${Campaigns} templates=${templates} reloadShared=${reloadShared} />`
           : tab==="studio" ? html`<${PromptStudio} />`

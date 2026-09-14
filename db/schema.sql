@@ -93,6 +93,29 @@ CREATE TABLE IF NOT EXISTS coordinators (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ── branches (physical sites under a clinic — Öncelik 4) ───────────────
+-- Klinik = tenant / WhatsApp hattı. Şube = o kliniğin fiziksel lokasyonu.
+CREATE TABLE IF NOT EXISTS branches (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id   UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  code        TEXT,
+  city        TEXT,
+  active      BOOLEAN NOT NULL DEFAULT true,
+  is_default  BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_branches_one_default
+  ON branches (clinic_id) WHERE is_default;
+CREATE INDEX IF NOT EXISTS idx_branches_clinic ON branches (clinic_id);
+
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
+ALTER TABLE coordinators
+  ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_branch ON leads (branch_id) WHERE branch_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_coordinators_branch ON coordinators (branch_id) WHERE branch_id IS NOT NULL;
+
 -- Webhook retry'larında aynı Meta mesajını iki kere işlememek için (idempotency).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_wamid ON messages(whatsapp_message_id)
   WHERE whatsapp_message_id IS NOT NULL;

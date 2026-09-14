@@ -526,6 +526,10 @@ const I18N = {
     "badge.urgent":"URGENT","btn.openNow":"Open now","cmd.actionCenter":"⚡ Action Center — leads waiting for a human",
     "cmd.allClear":"All clear 🎉","cmd.allClearSub":"No sales conversations need a human right now.",
     "cmd.needsAttention":"Needs attention","badge.score":"score","btn.openTakeOver":"Open & take over",
+    "cmd.atRisk":"⚠️ At risk — likely to cancel or not show up",
+    "risk.label":"risk","risk.silence":"days quiet","risk.daysLeft":"days away",
+    "risk.depositOverdue":"deposit overdue","risk.depositPending":"deposit pending","risk.depositNone":"no deposit recorded",
+    "risk.wording":"hesitation wording",
     "inbox.sub":"Every patient conversation in one place. The AI concierge replies automatically until you take over.",
     "inbox.search":"Search name or number…","filter.all":"All","filter.urgent":"Urgent","filter.needsHuman":"Needs human",
     "filter.ai":"AI","filter.awaiting":"Awaiting reply","inbox.noMatch":"No conversations match.",
@@ -652,6 +656,10 @@ const I18N = {
     "cmd.actionCenter":"⚡ Aksiyon Merkezi — insan bekleyen lead'ler",
     "cmd.allClear":"Her şey yolunda 🎉","cmd.allClearSub":"Şu an insan gerektiren satış görüşmesi yok.",
     "cmd.needsAttention":"İlgi bekliyor","badge.score":"skor","btn.openTakeOver":"Aç & devral",
+    "cmd.atRisk":"⚠️ Risk altında — iptal veya gelmeme ihtimali yüksek",
+    "risk.label":"risk","risk.silence":"gün sessiz","risk.daysLeft":"gün kaldı",
+    "risk.depositOverdue":"depozito vadesi geçti","risk.depositPending":"depozito bekliyor","risk.depositNone":"depozito kaydı yok",
+    "risk.wording":"tereddüt ifadesi",
     "inbox.sub":"Tüm hasta görüşmeleri tek yerde. Siz devralana kadar AI konsiyerj otomatik yanıtlar.",
     "inbox.search":"İsim veya numara ara…","filter.all":"Tümü","filter.urgent":"Acil",
     "filter.needsHuman":"İnsan gerekli","filter.ai":"AI","filter.awaiting":"Yanıt bekliyor","inbox.noMatch":"Eşleşen görüşme yok.",
@@ -836,8 +844,22 @@ function useInterval(fn, ms){
   useEffect(()=>{ const id=setInterval(()=>ref.current(), ms); return ()=>clearInterval(id); }, [ms]);
 }
 
+// Turns one scored factor back into a sentence a coordinator can argue with.
+// The score is only useful if the reasoning behind it is visible.
+function riskReasonText(r){
+  if(r.factor === "silence")   return `${r.detail} ${T("risk.silence")}`;
+  if(r.factor === "imminence") return `${r.detail} ${T("risk.daysLeft")}`;
+  if(r.factor === "wording")   return `${T("risk.wording")}: ${r.detail}`;
+  if(r.factor === "deposit"){
+    if(r.detail === "overdue") return T("risk.depositOverdue");
+    if(r.detail === "pending") return T("risk.depositPending");
+    return T("risk.depositNone");
+  }
+  return r.factor;
+}
+
 // ── Command Center ──────────────────────────────────────────────────────────
-function CommandCenter({ stats, analytics, handovers, onOpenLead }){
+function CommandCenter({ stats, analytics, handovers, risks, onOpenLead }){
   const s = stats||{};
   const n = (v)=> v==null? "–" : v;
   return html`
@@ -874,6 +896,24 @@ function CommandCenter({ stats, analytics, handovers, onOpenLead }){
                 <button class="btn warn" onClick=${()=>onOpenLead(h.lead_id)}>${T("btn.openNow")}</button>
               </div>`)}
           `:null}
+
+          ${(()=>{ 
+            // Shown from 40 up, not just at the 60 notify threshold: a
+            // coordinator should see risk building before it trips an alert.
+            const atRisk = (risks||[]).filter((r)=>r.score >= 40);
+            return atRisk.length? html`
+              <div class="section-title">${T("cmd.atRisk")}</div>
+              ${atRisk.map((r)=> html`
+                <div class="glass action-card" key=${r.lead_id}>
+                  <div class="action-left">
+                    <div class="action-name">${flag(r.language)} ${r.name||r.phone}
+                      <span class="badge ${r.score>=60?"hot":"awaiting"}">${r.score}/100 ${T("risk.label")}</span></div>
+                    <div class="action-reason">${(r.reasons||[]).map(riskReasonText).join(" · ")}</div>
+                  </div>
+                  <button class="btn" onClick=${()=>onOpenLead(r.lead_id)}>${T("btn.openNow")}</button>
+                </div>`)}
+            `:null;
+          })()}
 
           <div class="section-title">${T("cmd.actionCenter")}</div>
           ${normal.length===0
@@ -1633,13 +1673,14 @@ function App(){
   const [templates, setTemplates] = useState([]);
   const [consultants, setConsultants] = useState(null);
   const [pendingDeposits, setPendingDeposits] = useState([]);
+  const [risks, setRisks] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [fatal, setFatal] = useState(null);
 
   const reloadShared = useCallback(async ()=>{
     try{
-      const [s,c,h,a,co,pd] = await Promise.all([api("/stats"),api("/conversations"),api("/handovers"),api("/analytics"),api("/consultants"),api("/payments/pending")]);
-      setStats(s); setConversations(c); setHandovers(h); setAnalytics(a); setConsultants(co); setPendingDeposits(pd); setFatal(null);
+      const [s,c,h,a,co,pd,rk] = await Promise.all([api("/stats"),api("/conversations"),api("/handovers"),api("/analytics"),api("/consultants"),api("/payments/pending"),api("/risk")]);
+      setStats(s); setConversations(c); setHandovers(h); setAnalytics(a); setConsultants(co); setPendingDeposits(pd); setRisks(rk); setFatal(null);
     }catch(e){ setFatal(e.message); }
   }, []);
 
@@ -1680,7 +1721,7 @@ function App(){
         ${fatal? html`<div class="err">${T("shell.backendDown")}: ${fatal}. ${T("shell.backendHint")}</div>`:null}
         <div class="view" key=${tab}>
         <${ErrorBoundary} key=${"eb-"+tab}>
-        ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} onOpenLead=${openLead} />`
+        ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} onOpenLead=${openLead} />`
           : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} />`
           : tab==="analytics" ? html`<${Analytics} analytics=${analytics} />`
           : tab==="campaigns" ? html`<${Campaigns} templates=${templates} reloadShared=${reloadShared} />`

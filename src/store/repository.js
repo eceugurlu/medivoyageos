@@ -574,6 +574,163 @@ export async function markQuoteAccepted(quoteId) {
   return q.rows[0];
 }
 
+// ── No-show / cancellation risk ─────────────────────────────────────────────
+// Rule-based and deliberately transparent: no model, no opaque number. Every
+// point added carries a reason string, and the API hands those reasons to the
+// panel — a coordinator should be able to see *why* a patient is flagged and
+// disagree with it. The four factors are the ones the clinic actually has real
+// data for; nothing here is inferred from a guess.
+//
+// Maximum contributions add up to exactly 100:
+//   silence     40   (5 pts per day quiet, capped at 8 days)
+//   deposit     30   (overdue > pending > none recorded > paid = 0)
+//   imminence   15   (≤3 days out, or ≤7)
+//   wording     15   (5 pts per hesitation/cancellation phrase, max 3)
+const RISK_WEIGHTS = { silence: 40, deposit: 30, imminence: 15, wording: 15 };
+
+// Patients write in their own language, so the list covers the ones the clinic
+// serves. Substring matching is crude on purpose — a false positive here costs
+// a coordinator ten seconds of reading, a false negative costs a no-show.
+const HESITATION_PHRASES = [
+  'cancel', 'refund', 'not sure', 'changed my mind', 'too expensive', 'postpone', 'reschedule',
+  'iptal', 'vazgeç', 'geri ödeme', 'çok pahalı', 'erteleyebilir',
+  'stornier', 'absagen', 'erstattung', 'zu teuer', 'verschieben',
+  'annuler', 'remboursement', 'trop cher', 'reporter',
+  'отмен', 'возврат', 'слишком дорого', 'перенести',
+  'إلغاء', 'استرداد', 'غالي',
+];
+
+const DAY_MS = 86400000;
+function daysBetween(fromMs, toMs) {
+  return Math.max(0, Math.floor((toMs - fromMs) / DAY_MS));
+}
+
+export function computeNoShowRisk(row, now = Date.now()) {
+  // "No-show" only means something when there is something to not show up to.
+  // A lead with no appointment and no inbound flight gets null, not a zero —
+  // the distinction matters: one is "low risk", the other is "not applicable".
+  const scheduledAt = row.next_appointment || row.flight_arrival;
+  if (!scheduledAt) return null;
+
+  const reasons = [];
+  let score = 0;
+
+  // 1) Silence. A lead that never wrote at all is treated as fully silent:
+  //    the clinic has an appointment booked for someone it has never heard from.
+  const daysSilent = row.last_message_at
+    ? daysBetween(new Date(row.last_message_at).getTime(), now)
+    : 8;
+  const silencePts = Math.min(RISK_WEIGHTS.silence, daysSilent * 5);
+  if (silencePts > 0) {
+    score += silencePts;
+    reasons.push({ factor: 'silence', points: silencePts, detail: String(daysSilent) });
+  }
+
+  // 2) Deposit. Money already collected is the strongest signal a patient will
+  //    turn up, so a paid deposit contributes nothing at all.
+  let depositPts = 0;
+  let depositDetail = null;
+  if (row.has_paid) {
+    depositPts = 0;
+  } else if (row.earliest_pending_due && new Date(row.earliest_pending_due).getTime() < now) {
+    depositPts = RISK_WEIGHTS.deposit;
+    depositDetail = 'overdue';
+  } else if (row.earliest_pending_due || row.has_pending) {
+    depositPts = 15;
+    depositDetail = 'pending';
+  } else {
+    depositPts = 20;
+    depositDetail = 'none';
+  }
+  if (depositPts > 0) {
+    score += depositPts;
+    reasons.push({ factor: 'deposit', points: depositPts, detail: depositDetail });
+  }
+
+  // 3) Imminence. Not risk on its own — it is what makes the other signals
+  //    urgent rather than merely worth watching.
+  const daysUntil = daysBetween(now, new Date(scheduledAt).getTime());
+  let imminencePts = 0;
+  if (daysUntil <= 3) imminencePts = RISK_WEIGHTS.imminence;
+  else if (daysUntil <= 7) imminencePts = 8;
+  if (imminencePts > 0) {
+    score += imminencePts;
+    reasons.push({ factor: 'imminence', points: imminencePts, detail: String(daysUntil) });
+  }
+
+  // 4) Wording, from the patient's own messages only — never from the clinic's.
+  const haystack = (row.recent_patient_texts || []).join(' \n ').toLowerCase();
+  const hits = HESITATION_PHRASES.filter((phrase) => haystack.includes(phrase));
+  const wordingPts = Math.min(RISK_WEIGHTS.wording, hits.length * 5);
+  if (wordingPts > 0) {
+    score += wordingPts;
+    reasons.push({ factor: 'wording', points: wordingPts, detail: hits.slice(0, 3).join(', ') });
+  }
+
+  return {
+    score: Math.min(100, score),
+    reasons,
+    days_until: daysUntil,
+    days_silent: daysSilent,
+    scheduled_at: scheduledAt,
+  };
+}
+
+export async function getNoShowRisks() {
+  const q = await pool.query(`
+    SELECT l.id, l.name, l.phone, l.language, l.country, l.status, l.risk_notified_at,
+      (SELECT max(m.created_at) FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+        WHERE c.lead_id = l.id)                                        AS last_message_at,
+      (SELECT min(a.starts_at) FROM appointments a
+        WHERE a.lead_id = l.id AND a.status = 'booked' AND a.starts_at > now()) AS next_appointment,
+      (SELECT lg.arrival_at FROM logistics lg
+        WHERE lg.lead_id = l.id AND lg.arrival_at > now())             AS flight_arrival,
+      EXISTS(SELECT 1 FROM payments p WHERE p.lead_id = l.id AND p.status = 'paid')    AS has_paid,
+      EXISTS(SELECT 1 FROM payments p WHERE p.lead_id = l.id AND p.status = 'pending') AS has_pending,
+      (SELECT min(p.due_date) FROM payments p
+        WHERE p.lead_id = l.id AND p.status = 'pending')               AS earliest_pending_due,
+      COALESCE((
+        SELECT array_agg(t.content) FROM (
+          SELECT m.content FROM messages m
+            JOIN conversations c ON c.id = m.conversation_id
+           WHERE c.lead_id = l.id AND m.role = 'user'
+           ORDER BY m.created_at DESC LIMIT 5
+        ) t
+      ), ARRAY[]::text[])                                              AS recent_patient_texts
+    FROM leads l
+    WHERE l.status <> 'lost'
+  `);
+
+  return q.rows
+    .map((row) => {
+      const risk = computeNoShowRisk(row);
+      if (!risk) return null;
+      return {
+        lead_id: row.id,
+        name: row.name,
+        phone: row.phone,
+        language: row.language,
+        country: row.country,
+        risk_notified_at: row.risk_notified_at,
+        ...risk,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+}
+
+// The scheduler notifies once per threshold crossing, not once per scan.
+export async function markRiskNotified(leadId) {
+  await pool.query('UPDATE leads SET risk_notified_at = now() WHERE id = $1', [leadId]);
+}
+export async function clearRiskNotified(leadId) {
+  await pool.query(
+    'UPDATE leads SET risk_notified_at = NULL WHERE id = $1 AND risk_notified_at IS NOT NULL',
+    [leadId],
+  );
+}
+
 // Set a conversation's status (takeover / hand back to AI / close).
 export async function setConversationStatus(leadId, status) {
   const q = await pool.query(

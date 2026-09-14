@@ -2,10 +2,10 @@ import express from 'express';
 import { config, aiEnabled, sendEnabled } from './config.js';
 import { dbEnabled } from './db/pool.js';
 import { zohoEnabled } from './services/zoho.js';
-import { notifyEnabled } from './services/notify.js';
+import { notifyEnabled, notifyNoShowRisk } from './services/notify.js';
 import { webhookRouter } from './routes/webhook.js';
 import { apiRouter, publicRouter } from './routes/api.js';
-import { seedCampaignsIfEmpty, seedCoordinatorsIfEmpty, seedDevicesIfEmpty, getDuePostOpTasks, markPostOpSent } from './store/repository.js';
+import { seedCampaignsIfEmpty, seedCoordinatorsIfEmpty, seedDevicesIfEmpty, getDuePostOpTasks, markPostOpSent, getNoShowRisks, markRiskNotified, clearRiskNotified } from './store/repository.js';
 import { seedProfileIfEmpty } from './services/profile.js';
 import { sendTemplate } from './services/whatsapp.js';
 
@@ -105,5 +105,39 @@ app.listen(config.port, () => {
     };
     setTimeout(processPostOp, 5000);
     setInterval(processPostOp, 60000);
+
+    // No-show watch: score every lead with something scheduled, and ping the
+    // team the first time one crosses the threshold. Notifying once per
+    // *crossing* rather than once per scan is the whole point of
+    // leads.risk_notified_at — otherwise a single at-risk patient would
+    // generate a Slack message every minute until their appointment.
+    const RISK_THRESHOLD = 60;
+    const processNoShowRisk = async () => {
+      try {
+        for (const r of await getNoShowRisks()) {
+          if (r.score >= RISK_THRESHOLD && !r.risk_notified_at) {
+            try {
+              await notifyNoShowRisk({
+                name: r.name, phone: r.phone, score: r.score,
+                reasons: r.reasons, daysUntil: r.days_until, language: r.language,
+              });
+              console.log(`[risk] ${r.name || r.phone} at ${r.score}/100 — team notified`);
+            } catch (err) {
+              console.error('[risk] notify failed:', err.message);
+            }
+            // Marked regardless of whether the ping got through: a webhook
+            // outage must not turn into a notification loop.
+            try { await markRiskNotified(r.lead_id); } catch (e) { console.error('[risk] mark failed:', e.message); }
+          } else if (r.score < RISK_THRESHOLD && r.risk_notified_at) {
+            // Recovered — reset so a future crossing alerts again.
+            try { await clearRiskNotified(r.lead_id); } catch (e) { console.error('[risk] clear failed:', e.message); }
+          }
+        }
+      } catch (err) {
+        console.error('[risk] scheduler error:', err.message);
+      }
+    };
+    setTimeout(processNoShowRisk, 8000);
+    setInterval(processNoShowRisk, 60000);
   }
 });

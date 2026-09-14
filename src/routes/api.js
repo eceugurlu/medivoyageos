@@ -30,6 +30,7 @@ import {
   createPayment,
   updatePayment,
   listPendingDeposits,
+  getNoShowRisks,
   listQuotesForLead,
   draftQuoteFromLead,
   createQuote,
@@ -199,6 +200,13 @@ apiRouter.put('/payments/:paymentId', h(async (req, res) => {
 // Cross-lead list for the Inbox's "Awaiting deposit" filter.
 apiRouter.get('/payments/pending', h(async (_req, res) => {
   res.json(await listPendingDeposits());
+}));
+
+// Rule-based no-show risk, recomputed per request — it is derived entirely
+// from data that already exists (silence, deposits, dates, wording), so there
+// is nothing to store and nothing to go stale.
+apiRouter.get('/risk', h(async (_req, res) => {
+  res.json(await getNoShowRisks());
 }));
 
 // ── Quotes (Treatment Plan Builder) ───────────────────────────────────────

@@ -14,11 +14,14 @@
 // ever wins a given row, so a patient can't be sent the same WhatsApp
 // template twice. See markPostOpSent/markHotFollowupSent/markRiskNotified in
 // repository.js for the actual atomic UPDATE.
+import { config } from '../config.js';
 import { sendTemplate } from './whatsapp.js';
-import { notifyNoShowRisk } from './notify.js';
+import { notifyNoShowRisk, notifySlaFirstReminder, notifySlaEscalation } from './notify.js';
 import {
   getDuePostOpTasks, markPostOpSent, getNoShowRisks, markRiskNotified, clearRiskNotified,
   getSilentHotLeads, markHotFollowupSent, recordAgentMessage,
+  getHandoversNeedingFirstReminder, markSlaFirstReminderSent,
+  getHandoversNeedingEscalation, markSlaEscalated,
 } from '../store/repository.js';
 
 // Guards against the same job overlapping itself specifically (belt-and-
@@ -116,3 +119,48 @@ async function _processHotLeadFollowup() {
   return sent;
 }
 export const processHotLeadFollowup = guarded('hot-followup', _processHotLeadFollowup);
+
+// Devir SLA Alarmı: a handover sitting unanswered in the Action Center queue
+// past the configured thresholds gets a reminder (naming the assigned
+// coordinator), then — if STILL unanswered — a separate, more visible
+// escalation. Both tiers are claimed atomically per conversation (same
+// reasoning as every job above), so overlapping runs can't double-ping.
+async function _processHandoverSla() {
+  let reminded = 0;
+  const dueForReminder = await getHandoversNeedingFirstReminder(config.notify.slaFirstReminderMinutes);
+  for (const h of dueForReminder) {
+    const claimed = await markSlaFirstReminderSent(h.conversation_id).catch((e) => { console.error('[handover-sla] reminder claim failed:', e.message); return false; });
+    if (!claimed) continue; // another run already claimed this reminder
+    const minutesWaiting = Math.round((Date.now() - new Date(h.escalated_at).getTime()) / 60000);
+    try {
+      await notifySlaFirstReminder({
+        name: h.name, phone: h.phone, reason: h.handover_reason, urgent: h.urgent,
+        score: h.score, language: h.language, coordinatorName: h.coordinator_name, minutesWaiting,
+      });
+      reminded++;
+    } catch (err) {
+      // Already claimed above — a webhook outage must not turn into a retry loop.
+      console.error(`[handover-sla] reminder notify failed for ${h.phone} (already claimed, won't retry):`, err.message);
+    }
+  }
+
+  let escalated = 0;
+  const dueForEscalation = await getHandoversNeedingEscalation(config.notify.slaEscalateMinutes);
+  for (const h of dueForEscalation) {
+    const claimed = await markSlaEscalated(h.conversation_id).catch((e) => { console.error('[handover-sla] escalation claim failed:', e.message); return false; });
+    if (!claimed) continue;
+    const minutesWaiting = Math.round((Date.now() - new Date(h.escalated_at).getTime()) / 60000);
+    try {
+      await notifySlaEscalation({
+        name: h.name, phone: h.phone, reason: h.handover_reason, urgent: h.urgent,
+        score: h.score, language: h.language, coordinatorName: h.coordinator_name, minutesWaiting,
+      });
+      escalated++;
+    } catch (err) {
+      console.error(`[handover-sla] escalation notify failed for ${h.phone} (already claimed, won't retry):`, err.message);
+    }
+  }
+
+  return { reminded, escalated };
+}
+export const processHandoverSla = guarded('handover-sla', _processHandoverSla);

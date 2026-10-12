@@ -12,6 +12,7 @@
   "crons": [
     { "path": "/api/cron/postop", "schedule": "0 7 * * *" },
     { "path": "/api/cron/risk", "schedule": "30 7 * * *" },
-    { "path": "/api/cron/hotleads", "schedule": "0 8 * * *" }
+    { "path": "/api/cron/hotleads", "schedule": "0 8 * * *" },
+    { "path": "/api/cron/handoversla", "schedule": "*/5 * * * *" }
   ]
 }

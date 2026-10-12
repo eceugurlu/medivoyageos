@@ -1,9 +1,12 @@
 import { Router } from 'express';
+import { waitUntil } from '@vercel/functions';
 import { config } from '../config.js';
 import { verifySignature } from '../middleware/verifySignature.js';
-import { sendText } from '../services/whatsapp.js';
+import { sendText, downloadMedia, sendTypingIndicator } from '../services/whatsapp.js';
+import { sendInstagramText, sendMessengerText, sendTypingAction } from '../services/metaMessaging.js';
 import { generateReply } from '../services/concierge.js';
-import { loadContext, saveExchange, saveInboundMessage, getLead, setCrmLeadId } from '../store/index.js';
+import { transcribeAudio, transcriptionEnabled } from '../services/audioTranscriber.js';
+import { loadContext, saveExchange, getLead, setCrmLeadId } from '../store/index.js';
 import { assignCoordinatorByLanguage } from '../store/repository.js';
 import { zohoEnabled, syncLeadToCrm } from '../services/zoho.js';
 import { notifyHandover } from '../services/notify.js';
@@ -11,7 +14,10 @@ import { notifyHandover } from '../services/notify.js';
 export const webhookRouter = Router();
 
 // ── 1) Verification handshake ──────────────────────────────────────────────
-// Meta calls this once, when you save the webhook URL in the App Dashboard.
+// Meta calls this once per product, when you save the webhook URL in the App
+// Dashboard. One Meta App can subscribe WhatsApp, Instagram, and Messenger to
+// this SAME callback URL — Meta tells them apart later via body.object on the
+// POST below, not here, so this handshake and its verify token are shared.
 webhookRouter.get('/', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
@@ -26,10 +32,19 @@ webhookRouter.get('/', (req, res) => {
 });
 
 // ── 2) Incoming events (messages, delivery statuses, …) ────────────────────
+// Acknowledge Meta immediately, THEN process — but on Vercel a serverless
+// function can freeze the instant its response is sent, which would silently
+// kill the in-flight AI call/send. waitUntil() tells the platform to keep
+// this invocation alive until the promise settles, so we get both: a fast
+// ack (Meta's retry timeout is a real risk once transcription/vision steps
+// are in the critical path — a slow synchronous response here can trigger a
+// duplicate delivery) and reliable completion of the background work.
+// Outside Vercel (local dev) waitUntil() is a safe no-op — see
+// @vercel/functions' getContext().waitUntil?.(); the promise still runs to
+// completion because the local process stays alive regardless.
 webhookRouter.post('/', verifySignature, (req, res) => {
-  // Acknowledge immediately so Meta doesn't retry; then process asynchronously.
   res.sendStatus(200);
-  handleEvent(req.body).catch((err) => console.error('[webhook] handler error', err));
+  waitUntil(handleEvent(req.body).catch((err) => console.error('[webhook] handler error', err)));
 });
 
 // If the AI call fails for ANY reason (no credits, rate limit, Anthropic
@@ -38,7 +53,7 @@ webhookRouter.post('/', verifySignature, (req, res) => {
 // that reads fine in the languages the clinic serves, and we always flag the
 // conversation for a human to pick up when this path fires.
 const FALLBACK_REPLY =
-  "Thank you for your message — our team will get back to you shortly. 🙏\n" +
+  "Thank you for your message — our team will get back to you shortly.\n" +
   "Vielen Dank für Ihre Nachricht – unser Team meldet sich in Kürze.\n" +
   "شكراً لرسالتك، سيتواصل معك فريقنا قريباً.\n" +
   "Спасибо за ваше сообщение, наша команда скоро свяжется с вами.\n" +
@@ -46,9 +61,19 @@ const FALLBACK_REPLY =
 
 // In-process guard: prevents the same Meta message from being processed twice
 // concurrently (belt-and-braces on top of the DB-level idempotency dedup).
+// Shared across all three channels — a WhatsApp wamid, an Instagram mid, and
+// a Messenger mid are never going to collide with each other.
 const inFlight = new Set();
 
 async function handleEvent(body) {
+  if (body?.object === 'whatsapp_business_account') return handleWhatsAppEntry(body);
+  if (body?.object === 'instagram') return handleMetaMessagingEntry(body, 'instagram');
+  if (body?.object === 'page') return handleMetaMessagingEntry(body, 'messenger');
+  // Unknown object — nothing this app subscribes to; ignore rather than error.
+}
+
+// ── WhatsApp ─────────────────────────────────────────────────────────────
+async function handleWhatsAppEntry(body) {
   const wamid = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.id;
   if (wamid) {
     if (inFlight.has(wamid)) {
@@ -58,13 +83,13 @@ async function handleEvent(body) {
     inFlight.add(wamid);
   }
   try {
-    await _handleEvent(body);
+    await _handleWhatsAppEvent(body);
   } finally {
     if (wamid) inFlight.delete(wamid);
   }
 }
 
-async function _handleEvent(body) {
+async function _handleWhatsAppEvent(body) {
   const value = body?.entry?.[0]?.changes?.[0]?.value;
 
   // Ignore delivery/read status callbacks (they have `statuses`, not `messages`).
@@ -74,52 +99,208 @@ async function _handleEvent(body) {
   const from = message.from; // patient's number in E.164 without '+'
   const profileName = value?.contacts?.[0]?.profile?.name || null;
 
-  // MVP handles text. Media (photos/audio) → a later step with Claude vision.
+  // Text, photos, and voice notes are all handled directly (photos are the
+  // core intake signal for hair/dental/aesthetic triage — see concierge.js's
+  // vision section; voice notes are common for patients typing in a foreign
+  // keyboard is awkward). Other media (documents, video) still falls back to
+  // a text nudge.
   let userText;
+  let image = null;
   if (message.type === 'text') {
     userText = message.text.body;
+  } else if (message.type === 'image') {
+    userText = (message.image?.caption || '').trim() || '[the patient sent a photo with no caption]';
+    try {
+      image = await downloadMedia(message.image.id, 'image/jpeg');
+    } catch (err) {
+      console.error(`[whatsapp] failed to download photo from ${from}:`, err.message);
+    }
+  } else if (message.type === 'audio') {
+    // This branch is the one path that chains FOUR separately-timed-out
+    // external calls in a single invocation — downloadMedia, transcribeAudio
+    // below, then generateReply and the reply send further down this same
+    // handler — each kept tight for exactly this reason, but their sum can
+    // still exceed Vercel's 30s function budget (vercel.json) in a true
+    // worst case where every one of them is independently slow, not hung.
+    // A hung step still fails cleanly (that's what those timeouts guarantee);
+    // only that specific compounding-slowness scenario isn't fully covered,
+    // and closing it for real would need a shared deadline threaded through
+    // this whole chain rather than each step's own fixed budget.
+    if (!transcriptionEnabled) {
+      userText = '[the patient sent a voice message — transcription is not configured on this clinic; acknowledge warmly and ask them to type or call instead]';
+    } else {
+      try {
+        const audio = await downloadMedia(message.audio.id, 'audio/ogg');
+        const text = audio ? (await transcribeAudio(audio.buffer, audio.mimeType)).trim() : '';
+        userText = text || '[the patient sent a voice message that transcribed empty — acknowledge warmly and ask them to type instead]';
+      } catch (err) {
+        console.error(`[whisper] failed to transcribe voice note from ${from}:`, err.message);
+        userText = '[the patient sent a voice message that could not be transcribed — acknowledge warmly and ask them to type instead]';
+      }
+    }
   } else {
-    userText = '[the patient sent a non-text message, e.g. a photo — acknowledge it warmly and ask them to also describe their goal in text]';
+    userText = '[the patient sent a non-text, non-photo, non-voice message — acknowledge it warmly and ask them to describe their goal in text, or send a photo]';
   }
 
-  console.log(`[msg] from ${profileName || from} (${from}): ${userText}`);
+  console.log(`[msg:whatsapp] from ${profileName || from} (${from}): ${userText}`);
 
-  // Idempotency + history in one call. Meta retries webhooks; if we've already
-  // processed this exact message id, bail before spending an AI call.
-  const { duplicate, history, ctx } = await loadContext(from, {
+  // Idempotency + history in one call — this is also where the inbound
+  // message actually gets claimed/inserted (atomically), BEFORE the AI call
+  // below, which is what makes the dedup safe under concurrent retries.
+  // Meta retries webhooks; if we've already processed this exact message id,
+  // bail before spending an AI call.
+  const { duplicate, history, ctx } = await loadContext({
+    phone: from,
+    source: 'whatsapp',
     name: profileName,
     wamid: message.id,
+    userText,
+    image,
   });
   if (duplicate) {
     console.log(`[dedup] message ${message.id} already handled — skipping`);
     return;
   }
 
-  // If a human agent has taken over this conversation, don't auto-reply.
-  // Just record the patient's message so the agent sees it in the panel.
-  if (ctx?.conversationStatus === 'human_handling') {
-    await saveInboundMessage(ctx, { userText, wamid: message.id });
-    console.log(`[takeover] ${from} is human-handled — inbound saved, AI paused`);
+  await processConversationTurn({
+    channel: 'whatsapp',
+    identity: from,
+    profileName,
+    userText,
+    image,
+    history,
+    ctx,
+    sendReply: (text) => sendText(from, text),
+    showTyping: () => sendTypingIndicator(message.id),
+  });
+}
+
+// ── Instagram DM / Facebook Messenger ───────────────────────────────────
+// Both ride Meta's Messenger Platform "messaging" event shape — identical
+// enough (sender.id, message.mid, message.text, message.attachments) that
+// one handler covers both, branching only on which Send API/channel label
+// to use. Distinguished up front by body.object: "instagram" vs "page".
+async function handleMetaMessagingEntry(body, channel) {
+  const messaging = body?.entry?.[0]?.messaging?.[0];
+  const mid = messaging?.message?.mid;
+  if (mid) {
+    if (inFlight.has(mid)) {
+      console.log(`[dedup] ${mid} already processing — skipping`);
+      return;
+    }
+    inFlight.add(mid);
+  }
+  try {
+    await _handleMetaMessagingEvent(body, channel);
+  } finally {
+    if (mid) inFlight.delete(mid);
+  }
+}
+
+async function _handleMetaMessagingEvent(body, channel) {
+  const messaging = body?.entry?.[0]?.messaging?.[0];
+  // Ignore delivery receipts, read receipts, and echoes of our own sent
+  // messages (is_echo) — only a genuine inbound message has `message` without it.
+  if (!messaging?.message || messaging.message.is_echo) return;
+
+  const senderId = messaging.sender?.id;
+  if (!senderId) return;
+
+  // Instagram/Messenger hand you the attachment as a direct, already-hosted
+  // URL — no separate "resolve media id → CDN url" round trip like WhatsApp
+  // needs (see services/whatsapp.js's downloadMedia).
+  let userText;
+  let image = null;
+  const attachment = messaging.message.attachments?.[0];
+  if (attachment?.type === 'image') {
+    userText = (messaging.message.text || '').trim() || '[the patient sent a photo with no caption]';
+    try {
+      const res = await fetch(attachment.payload.url, { signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      image = { buffer: Buffer.from(await res.arrayBuffer()), mimeType: res.headers.get('content-type') || 'image/jpeg' };
+    } catch (err) {
+      console.error(`[${channel}] failed to download photo from ${senderId}:`, err.message);
+    }
+  } else if (attachment) {
+    userText = `[the patient sent a ${attachment.type} attachment — acknowledge it warmly and ask them to describe their goal in text, or send a photo]`;
+  } else {
+    userText = (messaging.message.text || '').trim();
+  }
+  if (!userText && !image) return; // e.g. a "like" sticker with no text or attachment — nothing to act on
+
+  console.log(`[msg:${channel}] from ${senderId}: ${userText}`);
+
+  const { duplicate, history, ctx } = await loadContext({
+    externalId: senderId,
+    source: channel,
+    wamid: messaging.message.mid, // same idempotency column, channel-agnostic in practice
+    userText,
+    image,
+  });
+  if (duplicate) {
+    console.log(`[dedup] message ${messaging.message.mid} already handled — skipping`);
     return;
   }
+
+  const sendReply = channel === 'instagram'
+    ? (text) => sendInstagramText(senderId, text)
+    : (text) => sendMessengerText(senderId, text);
+
+  await processConversationTurn({
+    channel,
+    identity: senderId,
+    profileName: null, // neither platform hands over a display name on the message event
+    userText,
+    image,
+    history,
+    ctx,
+    sendReply,
+    showTyping: () => sendTypingAction(senderId, channel),
+  });
+}
+
+// ── Shared pipeline ──────────────────────────────────────────────────────
+// Everything past "we have a userText and a conversation context" is
+// identical regardless of which platform the message arrived on: run the AI
+// (or fall back), persist the exchange, reply on the right channel, notify a
+// human on handover, route to a language-matched coordinator, sync to CRM.
+// Only sendReply (and the identity/profileName used for logging) differs.
+async function processConversationTurn({ channel, identity, profileName, userText, image, history, ctx, sendReply, showTyping }) {
+  // If a human agent has taken over this conversation, don't auto-reply.
+  // The patient's message is already saved — loadContext() claimed/inserted
+  // it atomically before this function was even called — so there's nothing
+  // left to do here but stop before the AI pipeline runs.
+  if (ctx?.conversationStatus === 'human_handling') {
+    console.log(`[takeover] ${identity} is human-handled — inbound saved, AI paused`);
+    return;
+  }
+
+  // Start the "typing…" bubble before the model call, not after: the whole
+  // point is to cover the seconds the patient would otherwise spend looking at
+  // a dead thread. Deliberately not awaited — its own latency would land on
+  // top of the reply's, inside the same shared 30s budget — and its promise is
+  // given a catch so an unhandled rejection can never take the turn down.
+  showTyping?.()?.catch?.(() => {});
 
   let reply;
   let meta;
   try {
-    ({ reply, meta } = await generateReply({ history, userText }));
+    ({ reply, meta } = await generateReply({ history, userText, image }));
   } catch (err) {
     // AI failed — don't leave the patient hanging. Send a holding message and
     // force a human handover so nothing falls through the cracks.
-    console.error(`[concierge] AI call failed for ${from}, using fallback reply:`, err.message);
+    console.error(`[concierge] AI call failed for ${identity}, using fallback reply:`, err.message);
     reply = FALLBACK_REPLY;
     meta = {
       detected_language: null,
       lead: null,
       handover: {
         needed: true,
-        // This lands in the panel's Action Center in front of a coordinator, so
-        // it has to read as a sentence. The provider's raw error body — which
-        // used to be pasted in here verbatim — stays in the log line above.
+        // Not urgent: this is an infrastructure failure, not a clinical signal.
+        // Still set explicitly — notifyHandover and the panel both read it, and
+        // the AI path always supplies it, so leaving it undefined here would be
+        // the one shape downstream never sees.
+        urgent: false,
         reason: 'AI could not answer (service error) — needs a human reply',
       },
     };
@@ -130,29 +311,22 @@ async function _handleEvent(body) {
       `[lead] score=${meta.lead?.score ?? '?'} lang=${meta.detected_language ?? '?'} readiness=${meta.lead?.readiness ?? '?'}`,
     );
     if (meta.handover?.needed) {
-      console.log(`[HANDOVER] ${meta.handover.reason} — patient ${profileName || from}`);
-      // Next step plugs in here:
-      //   • CRM  → upsert this lead into Zoho (meta.lead maps to Lead fields)
-      //   • Ping → notify a human via Slack/email/WhatsApp template
+      console.log(`[HANDOVER] ${meta.handover.reason} — patient ${profileName || identity}`);
     }
   }
 
-  // Persist the exchange (Postgres when DATABASE_URL is set, else in-memory).
-  // Includes the inbound message id so retries can be deduped next time.
-  await saveExchange(from, {
-    userText,
-    inboundWamid: message.id,
-    reply,
-    meta,
-    ctx,
-  });
+  // Persist the assistant's reply (Postgres when DATABASE_URL is set, else
+  // in-memory) and update the lead from the AI's read of the conversation.
+  // The inbound side is already saved — loadContext() claimed/inserted it
+  // atomically before the AI call above ever ran.
+  await saveExchange(identity, { userText, reply, meta, ctx });
 
   try {
-    await sendText(from, reply);
+    await sendReply(reply);
   } catch (err) {
-    // WhatsApp send itself failed (e.g. bad token, 24h window closed).
-    // Don't throw — the turn is already recorded and handover already flagged.
-    console.error(`[whatsapp] failed to deliver reply to ${from}:`, err.message);
+    // Send itself failed (bad token, expired session, rate limit, …). Don't
+    // throw — the turn is already recorded and handover already flagged.
+    console.error(`[${channel}] failed to deliver reply to ${identity}:`, err.message);
   }
 
   // Fetch the freshest merged lead row once, for both notification and CRM sync.
@@ -172,7 +346,7 @@ async function _handleEvent(body) {
   if (meta?.handover?.needed && !wasEscalated) {
     notifyHandover({
       name: leadRow?.name || profileName,
-      phone: from,
+      phone: leadRow?.phone || identity, // Instagram/Messenger leads have no phone — the platform id is the closest identifier
       reason: meta.handover.reason,
       urgent: meta.handover?.urgent,
       medicalNote: leadRow?.medical_note,

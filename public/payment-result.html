@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Payment — MediVoyage</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M5 16h5l3 7 5-14 3 7h6' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Public+Sans:wght@400;500;600&family=Azeret+Mono:wght@400;500&display=swap">
+<style>
+  /* Same "clinic ledger" system as itinerary.html/widget.html — this is the
+     other page a patient (not staff) lands on, purely a confirmation: the
+     actual payment happened on Stripe's own hosted page before this loads. */
+  :root{
+    --ground:#eaedef; --paper:#ffffff; --paper-2:#f4f6f8;
+    --ink:#0c1316; --ink-2:#4b555b; --ink-3:#5f666b;
+    --rule:#dde3e6; --rule-2:#c3ccd1;
+    --accent:#0e5750; --accent-2:#126b60; /* darkened from #157a6f — 4.42:1 vs the wash background, needs 4.5:1; this passes at 5.42:1 */ --accent-wash:#e4efed; --accent-line:#9dc3bc;
+    --warn:#8c6415; --warn-wash:#f6efe1; --warn-line:#d9c393;
+    --display:"Fraunces",Georgia,"Times New Roman",serif;
+    --ui:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --r:3px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#0e1315; --paper:#161c1f; --paper-2:#1b2225;
+      --ink:#e6eaec; --ink-2:#9aa4a9; --ink-3:#818b91;
+      --rule:#232b2e; --rule-2:#323c40;
+      --accent:#5fb3a4; --accent-2:#7cc9ba; --accent-wash:#152825; --accent-line:#2c4b46;
+      --warn:#d3a45c; --warn-wash:#241d10; --warn-line:#4a3a1e;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--ground);color:var(--ink);font-family:var(--ui);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;display:flex;align-items:center}
+  .wrap{max-width:440px;margin:0 auto;padding:32px 20px 60px;width:100%}
+  [dir=rtl] .wrap{direction:rtl}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:28px;justify-content:center}
+  .mark{width:26px;height:26px;border-radius:2px;display:grid;place-items:center;flex:none;background:var(--accent);color:var(--paper)}
+  .brand span{font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:-.015em}
+  .card{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);padding:32px 26px;text-align:center;box-shadow:0 1px 0 rgba(12,19,22,.03)}
+  .card.ok{border-color:var(--accent-line);box-shadow:inset 0 3px 0 var(--accent)}
+  .card.warn{border-color:var(--warn-line);box-shadow:inset 0 3px 0 var(--warn)}
+  .icon{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;margin:0 auto 16px}
+  .card.ok .icon{background:var(--accent-wash);color:var(--accent-2)}
+  .card.warn .icon{background:var(--warn-wash);color:var(--warn)}
+  h1{font-family:var(--display);font-weight:600;font-size:21px;margin:0 0 10px;letter-spacing:-.01em}
+  p{color:var(--ink-2);margin:0;font-size:13.5px}
+  .foot{margin-top:24px;color:var(--ink-3);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+  <div class="wrap" id="wrap"></div>
+<script>
+  const LABELS = {
+    en:{brand:"MediVoyage",
+      ok:{title:"Payment received — thank you", body:"Your coordinator has been notified and will confirm your booking shortly."},
+      warn:{title:"Payment not completed", body:"No charge was made. If you'd still like to secure your booking, just ask your coordinator to send a new payment link."},
+      foot:"You can close this page and return to your conversation."},
+    tr:{brand:"MediVoyage",
+      ok:{title:"Ödemeniz alındı — teşekkürler", body:"Koordinatörünüz bilgilendirildi ve kısa süre içinde randevunuzu onaylayacak."},
+      warn:{title:"Ödeme tamamlanmadı", body:"Herhangi bir tahsilat yapılmadı. Randevunuzu yine de kesinleştirmek isterseniz koordinatörünüzden yeni bir ödeme linki isteyebilirsiniz."},
+      foot:"Bu sayfayı kapatıp sohbetinize dönebilirsiniz."},
+    de:{brand:"MediVoyage",
+      ok:{title:"Zahlung erhalten — vielen Dank", body:"Ihr Koordinator wurde benachrichtigt und bestätigt Ihre Buchung in Kürze."},
+      warn:{title:"Zahlung nicht abgeschlossen", body:"Es wurde keine Zahlung vorgenommen. Bitten Sie Ihren Koordinator einfach um einen neuen Zahlungslink."},
+      foot:"Sie können diese Seite schließen und zu Ihrem Gespräch zurückkehren."},
+    ar:{brand:"MediVoyage",
+      ok:{title:"تم استلام الدفعة — شكراً لك", body:"تم إبلاغ منسقك وسيقوم بتأكيد حجزك قريباً."},
+      warn:{title:"لم تكتمل عملية الدفع", body:"لم يتم أي تحصيل. إذا كنت ترغب في تأكيد حجزك، يمكنك طلب رابط دفع جديد من منسقك."},
+      foot:"يمكنك إغلاق هذه الصفحة والعودة إلى محادثتك."},
+    ru:{brand:"MediVoyage",
+      ok:{title:"Платёж получен — спасибо", body:"Ваш координатор уведомлён и вскоре подтвердит запись."},
+      warn:{title:"Платёж не завершён", body:"Списание не производилось. Если вы всё же хотите подтвердить запись, попросите координатора отправить новую ссылку на оплату."},
+      foot:"Вы можете закрыть эту страницу и вернуться к переписке."},
+    fr:{brand:"MediVoyage",
+      ok:{title:"Paiement reçu — merci", body:"Votre coordinateur a été notifié et confirmera votre rendez-vous sous peu."},
+      warn:{title:"Paiement non finalisé", body:"Aucun prélèvement n'a été effectué. Si vous souhaitez tout de même confirmer votre rendez-vous, demandez un nouveau lien de paiement à votre coordinateur."},
+      foot:"Vous pouvez fermer cette page et retourner à votre conversation."},
+  };
+  const RTL = new Set(["ar","he","fa","ur"]);
+  const OK_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
+  const WARN_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>`;
+  const MARK = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 5 4-10 2 5h4"/></svg>`;
+
+  const params = new URLSearchParams(location.search);
+  const status = params.get("status") === "success" ? "ok" : "warn";
+  const lang = LABELS[params.get("lang")] ? params.get("lang") : "en";
+  const L = LABELS[lang];
+  if (RTL.has(lang)) document.documentElement.setAttribute("dir", "rtl");
+  document.title = L[status].title + " — MediVoyage";
+
+  document.getElementById("wrap").innerHTML = `
+    <div class="brand"><div class="mark">${MARK}</div><span>${L.brand}</span></div>
+    <div class="card ${status}">
+      <div class="icon">${status === "ok" ? OK_ICON : WARN_ICON}</div>
+      <h1>${L[status].title}</h1>
+      <p>${L[status].body}</p>
+    </div>
+    <div class="foot">${L.foot}</div>`;
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "check:ai": "node scripts/ai-quality-check.mjs",
+    "check:voice": "node scripts/test-voice-helpers.mjs && node scripts/simulate-call.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

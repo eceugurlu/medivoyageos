@@ -14,6 +14,7 @@
 import { scanForSafetySignal, getSafetyScript } from '../src/voice/safety.js';
 import { timezoneForPhone, isWithinLocalHours, resolveVoiceId, DEFAULT_VOICE_ID_BY_LANGUAGE } from '../src/voice/languages.js';
 import { computeCallCost, DEFAULT_VOICE_PRICING } from '../src/voice/costs.js';
+import { createSentenceChunker } from '../src/voice/brain.js';
 
 let failed = 0;
 function check(name, condition, detail = '') {
@@ -110,6 +111,49 @@ console.log('\n▶ costs.js — computeCallCost()');
   // costs.js never hardcodes a rate internally.
   const custom = computeCallCost({ ttsCharacters: 1000 }, { ...DEFAULT_VOICE_PRICING, ttsPerKCharUsd: 1 });
   check('custom pricing overrides the default rate', custom.tts === 1);
+}
+
+console.log('\n▶ brain.js — createSentenceChunker() (no API call, pure chunking logic)');
+{
+  // Simulates how Anthropic's streaming SDK actually delivers tokens: small,
+  // arbitrarily-split fragments, not whole words or sentences.
+  function runStreamed(fragments) {
+    const sentences = [];
+    const chunker = createSentenceChunker((s) => sentences.push(s));
+    for (const f of fragments) chunker.push(f);
+    chunker.flush();
+    return sentences;
+  }
+
+  check(
+    'splits two punctuated sentences delivered as odd-sized fragments',
+    JSON.stringify(runStreamed(['Me', 'rha', 'ba! ', 'Nasıl ', 'yard', 'ımcı ', 'ol', 'abilir', 'im?']))
+      === JSON.stringify(['Merhaba!', 'Nasıl yardımcı olabilirim?']),
+  );
+
+  check(
+    'Arabic question mark (؟) is recognized as a sentence end',
+    JSON.stringify(runStreamed(['مرحبا', '؟ ', 'كيف حالك؟']))
+      === JSON.stringify(['مرحبا؟', 'كيف حالك؟']),
+  );
+
+  check(
+    'colon counts as a sentence end (price lead-ins, e.g. "Price range:")',
+    JSON.stringify(runStreamed(['Price range: ', 'two thousand euros.']))
+      === JSON.stringify(['Price range:', 'two thousand euros.']),
+  );
+
+  const longUnpunctuated = Array.from({ length: 20 }, (_, i) => `word${i} `);
+  const forced = runStreamed(longUnpunctuated);
+  check('an unpunctuated run still flushes via the word-count fallback (never blocks forever)', forced.length >= 1 && forced[0].split(/\s+/).length >= 12);
+
+  check('nothing pushed, only flush() → no sentences emitted', runStreamed([]).length === 0);
+
+  // A sentence split mid-fragment across push() calls still comes out whole and trimmed.
+  check(
+    'a sentence split across many small pushes is reassembled correctly',
+    JSON.stringify(runStreamed(['  Hel', 'lo', ' there', '.', '  '])) === JSON.stringify(['Hello there.']),
+  );
 }
 
 console.log(`\n${failed ? `${failed} check(s) FAILED` : 'all checks passed'}`);

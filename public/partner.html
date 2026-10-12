@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Partner Portal — MediVoyage</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M5 16h5l3 7 5-14 3 7h6' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Public+Sans:wght@400;500;600&family=Azeret+Mono:wght@400;500&display=swap">
+<style>
+  /* Same "clinic ledger" system as the panel/widget — this page is the one
+     external, non-staff surface besides the widget, so it keeps that family
+     look rather than borrowing the internal panel's glass/dark shell. */
+  :root{
+    --ground:#eaedef; --paper:#ffffff; --paper-2:#f4f6f8;
+    --ink:#0c1316; --ink-2:#4b555b; --ink-3:#5f666b;
+    --rule:#dde3e6; --rule-2:#c3ccd1;
+    --accent:#0e5750; --accent-2:#126b60; /* darkened from #157a6f — 4.42:1 vs the wash background, needs 4.5:1; this passes at 5.42:1 */ --accent-wash:#e4efed; --accent-line:#9dc3bc;
+    --brass:#8c6415; --alert:#a02e21; --alert-ink:#82251a; --alert-wash:#fbe8e5; --alert-line:#e6bdb5;
+    --display:"Fraunces",Georgia,"Times New Roman",serif;
+    --ui:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --r:3px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#0e1315; --paper:#161c1f; --paper-2:#1b2225;
+      --ink:#e6eaec; --ink-2:#9aa4a9; --ink-3:#818b91;
+      --rule:#232b2e; --rule-2:#323c40;
+      --accent:#5fb3a4; --accent-2:#7cc9ba; --accent-wash:#152825; --accent-line:#2c4b46;
+      --brass:#d3a45c; --alert:#e07a68; --alert-ink:#f0a396; --alert-wash:#2d1a17; --alert-line:#4b2a25;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--ground);color:var(--ink);font-family:var(--ui);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:32px 20px 60px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:26px}
+  .mark{width:26px;height:26px;border-radius:2px;display:grid;place-items:center;flex:none;background:var(--accent);color:var(--paper)}
+  .brand span{font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:-.015em}
+  .brand small{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-left:2px}
+
+  .card{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);box-shadow:0 1px 0 rgba(12,19,22,.03),0 10px 30px rgba(12,19,22,.07)}
+  .gate{max-width:380px;margin:14vh auto 0;padding:28px}
+  .gate h2{font-family:var(--display);font-weight:600;font-size:22px;margin:0 0 6px}
+  .gate p{color:var(--ink-2);font-size:13.5px;margin:0 0 18px}
+  input{width:100%;background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r);color:var(--ink);padding:10px 12px;font-family:var(--mono);font-size:13px}
+  input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}
+  button{border:1px solid var(--accent);border-radius:var(--r);padding:10px 16px;font-family:var(--ui);font-size:13.5px;font-weight:600;cursor:pointer;color:#fff;background:var(--accent)}
+  @media (prefers-color-scheme:dark){ button{color:#0e1315} }
+  button:hover{background:var(--accent-2);border-color:var(--accent-2)}
+  button:disabled{opacity:.5;cursor:default}
+  .err{color:var(--alert-ink);background:var(--alert-wash);border:1px solid var(--alert-line);box-shadow:inset 2px 0 0 var(--alert);font-size:12.5px;margin-top:12px;padding:9px 12px;border-radius:var(--r)}
+  .err:empty{display:none}
+
+  h1{font-family:var(--display);font-weight:600;font-size:24px;margin:0 0 2px;letter-spacing:-.015em}
+  .sub{color:var(--ink-2);font-size:13.5px;margin:0 0 22px}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:20px}
+  .kpi{padding:14px 16px}
+  .kpi .cap{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+  .kpi .val{font-family:var(--display);font-weight:600;font-size:22px;letter-spacing:-.01em}
+  .kpi .val.brass{color:var(--brass)}
+
+  .refbox{padding:14px 16px;margin-bottom:20px;background:var(--accent-wash);border:1px solid var(--accent-line);box-shadow:inset 2px 0 0 var(--accent)}
+  .refbox .cap{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+  .refrow{display:flex;gap:8px;align-items:center}
+  .refrow input{font-size:12px}
+  .refrow button{flex:none;padding:9px 14px}
+
+  /* Six columns of real data (name, treatment, status, two money columns,
+     a date) don't fit a ~375px phone screen at any font size worth reading —
+     scoping the horizontal scroll to just the table, not the page, is the
+     standard fix: every other element on this page stays fully responsive. */
+  .table-scroll{overflow-x:auto}
+  table{width:100%;min-width:460px;border-collapse:collapse}
+  th{font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule)}
+  th.num,td.num{text-align:right}
+  td{padding:11px 14px;border-bottom:1px solid var(--rule);font-size:13px}
+  tr:last-child td{border-bottom:none}
+  .status{font-family:var(--mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2)}
+  .empty{padding:24px;text-align:center;color:var(--ink-3);font-size:13px}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand"><div class="mark"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 5 4-10 2 5h4"/></svg></div><span>MediVoyage</span><small>Partner Portal</small></div>
+
+    <main id="gate" class="card gate">
+      <h2>Partner sign in</h2>
+      <p>Enter the access token your clinic contact gave you.</p>
+      <input id="tokenInput" type="password" placeholder="Partner access token" autofocus />
+      <div style="margin-top:12px"><button id="gateBtn">View my dashboard →</button></div>
+      <div class="err" id="gateErr" role="alert"></div>
+    </main>
+
+    <main id="dash" hidden></main>
+  </div>
+
+<script>
+  const API_BASE = "";
+  const params = new URLSearchParams(location.search);
+  let TOKEN = params.get("token") || "";
+
+  const gate = document.getElementById("gate");
+  const dash = document.getElementById("dash");
+  const gateErr = document.getElementById("gateErr");
+
+  function fmtMoney(n){ return "€" + Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2}); }
+  function fmtDate(s){ try{ return new Date(s).toLocaleDateString(); }catch{ return "—"; } }
+
+  async function loadDashboard(){
+    gateErr.textContent = "";
+    let data;
+    try{
+      const res = await fetch(API_BASE + "/api/partner/dashboard", { headers: { Authorization: "Bearer " + TOKEN } });
+      if(!res.ok){
+        const body = await res.json().catch(()=>({}));
+        throw new Error(body.error || ("HTTP " + res.status));
+      }
+      data = await res.json();
+    }catch(e){
+      gateErr.textContent = e.message === "Invalid or inactive partner token" ? "That token isn't valid. Check it and try again." : e.message;
+      gate.hidden = false; dash.hidden = true;
+      return;
+    }
+    render(data);
+    gate.hidden = true; dash.hidden = false;
+    // Keep the token in the URL so the portal can be bookmarked/shared as one link.
+    const url = new URL(location.href); url.searchParams.set("token", TOKEN);
+    history.replaceState(null, "", url);
+  }
+
+  function render(d){
+    // Public referral code, NOT the portal token above — this link is meant
+    // to be published (on the partner's own site, shared with prospective
+    // patients), so it must never carry the value that logs into this
+    // dashboard.
+    const refLink = location.origin + "/panel/widget.html?ref=" + encodeURIComponent(d.partner.referral_code);
+    dash.innerHTML = `
+      <h1>${escapeHtml(d.partner.name)}</h1>
+      <div class="sub">Commission rate: ${d.partner.commission_rate}% · earned on collected payments only</div>
+
+      <div class="kpis">
+        <div class="card kpi"><span class="cap">Referred patients</span><div class="val">${d.leads.length}</div></div>
+        <div class="card kpi"><span class="cap">Total collected</span><div class="val">${fmtMoney(d.total_paid)}</div></div>
+        <div class="card kpi"><span class="cap">Your commission</span><div class="val brass">${fmtMoney(d.earned_commission)}</div></div>
+      </div>
+
+      <div class="refbox">
+        <span class="cap">Your referral link — share it, every lead through it is credited to you</span>
+        <div class="refrow">
+          <input id="refInput" readonly aria-label="Your referral link" value="${escapeHtml(refLink)}" />
+          <button id="copyBtn" type="button">Copy</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Patient</th><th>Treatment</th><th>Status</th><th class="num">Paid</th><th class="num">Commission</th><th>Referred</th></tr></thead>
+          <tbody>
+            ${d.leads.length === 0 ? `<tr><td colspan="6"><div class="empty">No referrals yet — share your link above to start earning.</div></td></tr>` : ''}
+            ${d.leads.map((l)=>`<tr>
+              <td>${escapeHtml(l.name || "—")}${l.country ? ` <span style="color:var(--ink-3);font-size:12px">· ${escapeHtml(l.country)}</span>` : ''}</td>
+              <td>${escapeHtml(l.treatment_interest || "—")}</td>
+              <td><span class="status">${escapeHtml(l.status)}</span></td>
+              <td class="num">${fmtMoney(l.paid)}</td>
+              <td class="num">${fmtMoney(l.commission)}</td>
+              <td>${fmtDate(l.created_at)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>`;
+    document.getElementById("copyBtn").onclick = async () => {
+      const btn = document.getElementById("copyBtn");
+      try{ await navigator.clipboard.writeText(refLink); btn.textContent = "Copied ✓"; setTimeout(()=>btn.textContent="Copy", 1600); }
+      catch{ document.getElementById("refInput").select(); }
+    };
+  }
+
+  function escapeHtml(s){ return String(s ?? "").replace(/[&<>"']/g, (c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  document.getElementById("gateBtn").onclick = () => {
+    const v = document.getElementById("tokenInput").value.trim();
+    if(!v){ gateErr.textContent = "Enter your access token."; return; }
+    TOKEN = v; loadDashboard();
+  };
+  document.getElementById("tokenInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") document.getElementById("gateBtn").click(); });
+
+  if (TOKEN) loadDashboard();
+</script>
+</body>
+</html>

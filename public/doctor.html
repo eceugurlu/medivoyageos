@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Doctor Portal — MediVoyage</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M5 16h5l3 7 5-14 3 7h6' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Public+Sans:wght@400;500;600&family=Azeret+Mono:wght@400;500&display=swap">
+<style>
+  /* Same "clinic ledger" system as widget.html/partner.html — the doctor is
+     another non-staff, non-panel visitor. */
+  :root{
+    --ground:#eaedef; --paper:#ffffff; --paper-2:#f4f6f8;
+    --ink:#0c1316; --ink-2:#4b555b; --ink-3:#5f666b;
+    --rule:#dde3e6; --rule-2:#c3ccd1;
+    --accent:#0e5750; --accent-2:#126b60; /* darkened from #157a6f — 4.42:1 vs the wash background, needs 4.5:1; this passes at 5.42:1 */ --accent-wash:#e4efed; --accent-line:#9dc3bc;
+    --brass:#8c6415; --alert:#a02e21; --alert-ink:#82251a; --alert-wash:#fbe8e5; --alert-line:#e6bdb5;
+    --pos:#126b60; /* darkened from #157a6f — 4.41:1 vs the badge's wash background, needs 4.5:1; this passes at 5.42:1 */
+    --display:"Fraunces",Georgia,"Times New Roman",serif;
+    --ui:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --r:3px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#0e1315; --paper:#161c1f; --paper-2:#1b2225;
+      --ink:#e6eaec; --ink-2:#9aa4a9; --ink-3:#818b91;
+      --rule:#232b2e; --rule-2:#323c40;
+      --accent:#5fb3a4; --accent-2:#7cc9ba; --accent-wash:#152825; --accent-line:#2c4b46;
+      --brass:#d3a45c; --alert:#e07a68; --alert-ink:#f0a396; --alert-wash:#2d1a17; --alert-line:#4b2a25;
+      --pos:#5fb3a4;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--ground);color:var(--ink);font-family:var(--ui);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:720px;margin:0 auto;padding:32px 20px 60px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:26px}
+  .mark{width:26px;height:26px;border-radius:2px;display:grid;place-items:center;flex:none;background:var(--accent);color:var(--paper)}
+  .brand span{font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:-.015em}
+  .brand small{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-left:2px}
+
+  .card{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);box-shadow:0 1px 0 rgba(12,19,22,.03),0 10px 30px rgba(12,19,22,.07)}
+  .gate{max-width:380px;margin:14vh auto 0;padding:28px}
+  .gate h2{font-family:var(--display);font-weight:600;font-size:22px;margin:0 0 6px}
+  .gate p{color:var(--ink-2);font-size:13.5px;margin:0 0 18px}
+  input,textarea,select{width:100%;background:var(--paper);border:1px solid var(--rule-2);border-radius:var(--r);color:var(--ink);padding:10px 12px;font-family:var(--ui);font-size:13.5px}
+  input[type=password]{font-family:var(--mono)}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}
+  textarea{min-height:70px;resize:vertical}
+  button{border:1px solid var(--accent);border-radius:var(--r);padding:10px 16px;font-family:var(--ui);font-size:13.5px;font-weight:600;cursor:pointer;color:#fff;background:var(--accent)}
+  @media (prefers-color-scheme:dark){ button{color:#0e1315} }
+  button:hover:not(:disabled){background:var(--accent-2);border-color:var(--accent-2)}
+  button.ghost{background:transparent;color:var(--accent)}
+  button:disabled{opacity:.5;cursor:default}
+  .err{color:var(--alert-ink);background:var(--alert-wash);border:1px solid var(--alert-line);box-shadow:inset 2px 0 0 var(--alert);font-size:12.5px;margin-top:12px;padding:9px 12px;border-radius:var(--r)}
+  .err:empty{display:none}
+
+  h1{font-family:var(--display);font-weight:600;font-size:24px;margin:0 0 2px;letter-spacing:-.015em}
+  .sub{color:var(--ink-2);font-size:13.5px;margin:0 0 22px}
+  .back{display:inline-block;margin-bottom:16px;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:none}
+
+  .row{padding:16px 18px;border-bottom:1px solid var(--rule);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .row:last-child{border-bottom:none}
+  .row:hover{background:var(--paper-2)}
+  .row-name{font-weight:700}
+  .row-sub{color:var(--ink-3);font-size:12px;margin-top:2px}
+  .badge{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:2px;flex:none}
+  .badge.pending{background:var(--paper-2);color:var(--ink-2);border:1px solid var(--rule-2)}
+  .badge.approved{background:var(--accent-wash);color:var(--pos);border:1px solid var(--accent-line)}
+  .badge.needs_info{background:var(--alert-wash);color:var(--alert-ink);border:1px solid var(--alert-line)}
+  .empty{padding:24px;text-align:center;color:var(--ink-3);font-size:13px}
+
+  .photos{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+  .photos img{width:150px;height:150px;object-fit:cover;border-radius:var(--r);border:1px solid var(--rule)}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand"><div class="mark"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 5 4-10 2 5h4"/></svg></div><span>MediVoyage</span><small>Doctor Portal</small></div>
+
+    <main id="gate" class="card gate">
+      <h2>Doctor sign in</h2>
+      <p>Enter the access token your clinic contact gave you.</p>
+      <input id="tokenInput" type="password" placeholder="Doctor access token" autofocus />
+      <div style="margin-top:12px"><button id="gateBtn">View my patients →</button></div>
+      <div class="err" id="gateErr" role="alert"></div>
+    </main>
+
+    <main id="app" hidden></main>
+  </div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  let TOKEN = params.get("token") || "";
+  const gate = document.getElementById("gate");
+  const app = document.getElementById("app");
+  const gateErr = document.getElementById("gateErr");
+  let DOCTOR_NAME = "";
+  let LEADS = [];
+
+  function escapeHtml(s){ return String(s ?? "").replace(/[&<>"']/g, (c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function fmtDate(s){ try{ return new Date(s).toLocaleDateString(); }catch{ return "—"; } }
+  const REVIEW_LABEL = { pending: "Pending review", approved: "Approved", needs_info: "Needs more info" };
+
+  async function authedFetch(path, opts={}){
+    const res = await fetch(path, { ...opts, headers: { "Content-Type":"application/json", Authorization: "Bearer "+TOKEN, ...(opts.headers||{}) } });
+    if(!res.ok){ const b = await res.json().catch(()=>({})); throw new Error(b.error || ("HTTP "+res.status)); }
+    return res;
+  }
+
+  async function loadList(){
+    gateErr.textContent = "";
+    try{
+      const res = await authedFetch("/api/doctor/leads");
+      const data = await res.json();
+      DOCTOR_NAME = data.doctor.name; LEADS = data.leads;
+    }catch(e){
+      gateErr.textContent = e.message === "Invalid or inactive doctor token" ? "That token isn't valid. Check it and try again." : e.message;
+      gate.hidden = false; app.hidden = true;
+      return;
+    }
+    renderList();
+    gate.hidden = true; app.hidden = false;
+    const url = new URL(location.href); url.searchParams.set("token", TOKEN);
+    history.replaceState(null, "", url);
+  }
+
+  function renderList(){
+    app.innerHTML = `
+      <h1>${escapeHtml(DOCTOR_NAME)}</h1>
+      <div class="sub">Patients assigned to you for a suitability review.</div>
+      <div class="card">
+        ${LEADS.length===0 ? `<div class="empty">No patients assigned yet.</div>` : LEADS.map((l)=>`
+          <div class="row" data-id="${l.id}">
+            <div>
+              <div class="row-name">${escapeHtml(l.name || "—")}${l.country? ` <span style="color:var(--ink-3);font-weight:400;font-size:12px">· ${escapeHtml(l.country)}</span>`:''}</div>
+              <div class="row-sub">${escapeHtml(l.treatment_interest || "—")}${l.budget_hint? ' · '+escapeHtml(l.budget_hint):''} · ${fmtDate(l.created_at)}</div>
+            </div>
+            <span class="badge ${l.doctor_review_status||'pending'}">${REVIEW_LABEL[l.doctor_review_status||'pending']}</span>
+          </div>`).join('')}
+      </div>`;
+    app.querySelectorAll('.row').forEach((row)=> row.onclick = ()=> loadDetail(row.dataset.id));
+  }
+
+  async function loadDetail(leadId){
+    let detail;
+    try{ detail = await (await authedFetch("/api/doctor/leads/"+leadId)).json(); }
+    catch(e){ alert(e.message); return; }
+    const photos = (detail.messages||[]).filter(m=>m.has_media);
+    app.innerHTML = `
+      <a class="back" id="backLink">← All patients</a>
+      <h1>${escapeHtml(detail.lead.name || "—")}</h1>
+      <div class="sub">${escapeHtml(detail.lead.treatment_interest||"—")}${detail.lead.budget_hint? ' · '+escapeHtml(detail.lead.budget_hint):''}${detail.lead.country? ' · '+escapeHtml(detail.lead.country):''}</div>
+      <div class="card" style="padding:18px">
+        <div class="field"><label>Photos on file</label></div>
+        <div class="photos" id="photos">${photos.length===0 ? '<span style="color:var(--ink-3);font-size:13px">No photos on this conversation yet.</span>' : ''}</div>
+        <div class="field" style="margin-top:18px">
+          <label>Your assessment</label>
+          <select id="statusSel">
+            <option value="approved" ${detail.lead.doctor_review_status==='approved'?'selected':''}>Suitable — approved</option>
+            <option value="needs_info" ${detail.lead.doctor_review_status==='needs_info'?'selected':''}>Needs more information</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Note (visible to the clinic team, not the patient)</label>
+          <textarea id="noteInput" placeholder="e.g. graft count estimate, suitability notes, what's still needed...">${escapeHtml(detail.lead.doctor_note||"")}</textarea>
+        </div>
+        <button id="submitBtn">Submit review</button>
+        <div class="err" id="detailErr"></div>
+      </div>`;
+    document.getElementById("backLink").onclick = renderList;
+    const photosEl = document.getElementById("photos");
+    // Fetched in parallel (independent requests, no reason to wait on them one
+    // at a time), appended in original order regardless of which resolves first.
+    const slots = photos.map(()=>{ const img = document.createElement("img"); photosEl.appendChild(img); return img; });
+    await Promise.all(photos.map(async (m, i) => {
+      try{
+        const res = await authedFetch("/api/doctor/leads/"+leadId+"/media/"+m.id);
+        const blob = await res.blob();
+        slots[i].src = URL.createObjectURL(blob);
+      }catch{ slots[i].remove(); }
+    }));
+    document.getElementById("submitBtn").onclick = async ()=>{
+      const btn = document.getElementById("submitBtn");
+      const errEl = document.getElementById("detailErr");
+      btn.disabled = true; errEl.textContent = "";
+      try{
+        await authedFetch("/api/doctor/leads/"+leadId+"/review", {
+          method:"PUT",
+          body: JSON.stringify({ status: document.getElementById("statusSel").value, note: document.getElementById("noteInput").value }),
+        });
+        await loadList();
+      }catch(e){ errEl.textContent = e.message; btn.disabled = false; }
+    };
+  }
+
+  document.getElementById("gateBtn").onclick = () => {
+    const v = document.getElementById("tokenInput").value.trim();
+    if(!v){ gateErr.textContent = "Enter your access token."; return; }
+    TOKEN = v; loadList();
+  };
+  document.getElementById("tokenInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") document.getElementById("gateBtn").click(); });
+
+  if (TOKEN) loadList();
+</script>
+</body>
+</html>

@@ -14,18 +14,25 @@ import { getHistory, appendTurn } from './conversations.js';
 
 export { dbEnabled };
 
-export async function loadContext(phone, { name, wamid } = {}) {
-  if (dbEnabled) return db.loadContext(phone, { name, wamid });
+export async function loadContext({ phone, externalId, source, name, wamid, userText, image } = {}) {
+  if (dbEnabled) return db.loadContext({ phone, externalId, source, name, wamid, userText, image });
   // In-memory: no real dedup or lead rows, just prior turns for context.
-  return { duplicate: false, history: getHistory(phone), ctx: {} };
+  // Keyed by phone when present (WhatsApp/widget), else the platform id
+  // (Instagram/Messenger) — either way, one string identifies the thread.
+  return { duplicate: false, history: getHistory(phone || externalId), ctx: {} };
 }
 
-export async function saveExchange(phone, { userText, inboundWamid, reply, meta, ctx } = {}) {
+export async function saveExchange(identity, { userText, reply, meta, ctx } = {}) {
   if (dbEnabled) {
-    return db.saveExchange(phone, { userText, inboundWamid, reply, meta, ctx });
+    // The DB path's inbound-message insert already happened inside
+    // loadContext() (see its docstring) — db.saveExchange only needs
+    // reply/meta/ctx now; userText is simply ignored if passed.
+    return db.saveExchange(identity, { reply, meta, ctx });
   }
-  appendTurn(phone, 'user', userText);
-  appendTurn(phone, 'assistant', reply);
+  // In-memory fallback has no such claim mechanism (single-process, dev/test
+  // only) — both turns are appended here, same as before.
+  appendTurn(identity, 'user', userText);
+  appendTurn(identity, 'assistant', reply);
 }
 
 export async function getLead(leadId) {
@@ -35,9 +42,4 @@ export async function getLead(leadId) {
 
 export async function setCrmLeadId(leadId, crmId) {
   if (dbEnabled) return db.setCrmLeadId(leadId, crmId);
-}
-
-export async function saveInboundMessage(ctx, payload) {
-  if (dbEnabled) return db.saveInboundMessage(ctx, payload);
-  // in-memory takeover isn't tracked; nothing to do
 }

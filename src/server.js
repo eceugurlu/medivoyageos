@@ -1,48 +1,15 @@
-import express from 'express';
+import { app } from './app.js';
 import { config, aiEnabled, sendEnabled } from './config.js';
 import { dbEnabled } from './db/pool.js';
 import { zohoEnabled } from './services/zoho.js';
-import { notifyEnabled, notifyNoShowRisk } from './services/notify.js';
-import { webhookRouter } from './routes/webhook.js';
-import { apiRouter, publicRouter } from './routes/api.js';
-import { seedCampaignsIfEmpty, seedCoordinatorsIfEmpty, seedDevicesIfEmpty, seedBranchesIfEmpty, getDuePostOpTasks, markPostOpSent, getNoShowRisks, markRiskNotified, clearRiskNotified } from './store/repository.js';
+import { notifyEnabled } from './services/notify.js';
+import { seedCampaignsIfEmpty, seedCoordinatorsIfEmpty, seedDevicesIfEmpty, seedBranchesIfEmpty } from './store/repository.js';
 import { seedProfileIfEmpty } from './services/profile.js';
-import { sendTemplate } from './services/whatsapp.js';
+import { processPostOp, processNoShowRisk, processHotLeadFollowup } from './services/scheduler.js';
 
-const app = express();
-
-// Parse JSON, and keep the raw body so we can verify Meta's webhook signature.
-app.use(
-  express.json({
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
-
-app.get('/health', (_req, res) =>
-  res.json({ ok: true, ai: aiEnabled, whatsapp: sendEnabled, db: dbEnabled, zoho: zohoEnabled }),
-);
-
-app.use('/webhook', webhookRouter);
-app.use('/api/public', publicRouter); // unauthenticated widget endpoint (mounted first)
-app.use('/api', apiRouter);
-
-// Serve the management panel (static, no build step) at /panel.
-app.use('/panel', express.static('public'));
-
-// Unknown /api path → JSON. Express's default is an HTML error page, which the
-// panel's api() helper cannot parse, so a typo'd route surfaced as a confusing
-// "Unexpected token <" instead of a clear 404.
-app.use('/api', (_req, res) => res.status(404).json({ error: 'Unknown API route' }));
-
-// Last-resort error handler. Catches what the route wrappers miss — most often a
-// malformed JSON body rejected by express.json() — and answers in JSON too.
-app.use((err, _req, res, _next) => {
-  console.error('[http]', err.message);
-  if (res.headersSent) return;
-  res.status(err.status || err.statusCode || 500).json({ error: err.message || 'Internal error' });
-});
+// Local-dev entry only. Runs the app as one long-lived process: app.listen()
+// plus the setInterval timers that stand in for Vercel Cron in production
+// (see api/cron/*.js and vercel.json).
 
 // Background failures shouldn't take the server down. Modern Node terminates on
 // an unhandled rejection by default, which would kill the panel over one failed
@@ -87,62 +54,13 @@ app.listen(config.port, () => {
       .then((seeded) => seeded && console.log('[seed] demo devices inserted for booking'))
       .catch((err) => console.error('[seed] devices failed:', err.message));
 
-    // Post-op scheduler: every minute, send any due follow-up (thank-you, review
-    // request, day-7/30 check-in, fit-to-fly, 1-year checkup) as a WhatsApp
-    // template. Runs shortly after boot too, so freshly-due tasks fire promptly.
-    const processPostOp = async () => {
-      try {
-        const due = await getDuePostOpTasks();
-        for (const t of due) {
-          try {
-            await sendTemplate(t.phone, t.kind, t.language || 'en', [t.name || 'there']);
-            console.log(`[post-op] sent "${t.kind}" → ${t.name || t.phone}`);
-          } catch (err) {
-            console.error(`[post-op] "${t.kind}" send failed (marking done to avoid a retry loop):`, err.message);
-          }
-          // Mark processed regardless of send outcome — a permanent failure
-          // (e.g. an unapproved template) must not retry every minute forever.
-          try { await markPostOpSent(t.id); } catch (e) { console.error('[post-op] mark failed:', e.message); }
-        }
-      } catch (err) {
-        console.error('[post-op] scheduler error:', err.message);
-      }
-    };
-    setTimeout(processPostOp, 5000);
-    setInterval(processPostOp, 60000);
+    setTimeout(() => processPostOp().catch((err) => console.error('[post-op] scheduler error:', err.message)), 5000);
+    setInterval(() => processPostOp().catch((err) => console.error('[post-op] scheduler error:', err.message)), 60000);
 
-    // No-show watch: score every lead with something scheduled, and ping the
-    // team the first time one crosses the threshold. Notifying once per
-    // *crossing* rather than once per scan is the whole point of
-    // leads.risk_notified_at — otherwise a single at-risk patient would
-    // generate a Slack message every minute until their appointment.
-    const RISK_THRESHOLD = 60;
-    const processNoShowRisk = async () => {
-      try {
-        for (const r of await getNoShowRisks()) {
-          if (r.score >= RISK_THRESHOLD && !r.risk_notified_at) {
-            try {
-              await notifyNoShowRisk({
-                name: r.name, phone: r.phone, score: r.score,
-                reasons: r.reasons, daysUntil: r.days_until, language: r.language,
-              });
-              console.log(`[risk] ${r.name || r.phone} at ${r.score}/100 — team notified`);
-            } catch (err) {
-              console.error('[risk] notify failed:', err.message);
-            }
-            // Marked regardless of whether the ping got through: a webhook
-            // outage must not turn into a notification loop.
-            try { await markRiskNotified(r.lead_id); } catch (e) { console.error('[risk] mark failed:', e.message); }
-          } else if (r.score < RISK_THRESHOLD && r.risk_notified_at) {
-            // Recovered — reset so a future crossing alerts again.
-            try { await clearRiskNotified(r.lead_id); } catch (e) { console.error('[risk] clear failed:', e.message); }
-          }
-        }
-      } catch (err) {
-        console.error('[risk] scheduler error:', err.message);
-      }
-    };
-    setTimeout(processNoShowRisk, 8000);
-    setInterval(processNoShowRisk, 60000);
+    setTimeout(() => processNoShowRisk().catch((err) => console.error('[risk] scheduler error:', err.message)), 8000);
+    setInterval(() => processNoShowRisk().catch((err) => console.error('[risk] scheduler error:', err.message)), 60000);
+
+    setTimeout(() => processHotLeadFollowup().catch((err) => console.error('[hot-followup] scheduler error:', err.message)), 11000);
+    setInterval(() => processHotLeadFollowup().catch((err) => console.error('[hot-followup] scheduler error:', err.message)), 60000);
   }
 });

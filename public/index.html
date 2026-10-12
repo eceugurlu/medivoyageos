@@ -5,14 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <script>
   // Apply the saved theme before the first paint. The main script runs at the
-  // end of <body>, so without this a light-mode user sees a flash of the dark
-  // background on every load.
-  try { document.documentElement.setAttribute("data-theme", localStorage.getItem("mv-theme") || "dark"); } catch (e) {}
+  // end of <body>, so without this a returning dark-mode user would see a
+  // flash of the light background on every load. Light is the default for a
+  // first-ever visit (matches store("mv-theme","light") in the main script).
+  try { document.documentElement.setAttribute("data-theme", localStorage.getItem("mv-theme") || "light"); } catch (e) {}
 </script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M5 16h5l3 7 5-14 3 7h6' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=Azeret+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=Azeret+Mono:wght@400;500&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;0,6..96,600;1,6..96,400&family=Instrument+Sans:ital,wght@0,400;0,500;1,400&display=swap">
 <title>MediVoyage OS — Command Center</title>
 <style>
   /* ═══════════════════════════════════════════════════════════════════════
@@ -32,11 +33,11 @@
     --sunk:#e0e5e8;
     --ink:#0c1316;
     --ink-2:#4b555b;
-    --ink-3:#7f8a90;
+    --ink-3:#5f666b; /* darkened from #7f8a90 — that failed WCAG AA (3.5:1 vs white, needs 4.5:1); this passes at 5.8:1 */
     --rule:#dde3e6;
     --rule-2:#c3ccd1;
     --accent:#0e5750;
-    --accent-2:#157a6f;
+    --accent-2:#126b60; /* darkened from #157a6f — 4.42:1 vs the wash background, needs 4.5:1; this passes at 5.42:1 */
     --accent-wash:#e4efed;
     --accent-line:#9dc3bc;
     --brass:#8c6415;
@@ -64,7 +65,7 @@
     --sunk:#111618;
     --ink:#e6eaec;
     --ink-2:#9aa4a9;
-    --ink-3:#6c767b;
+    --ink-3:#818b91; /* lightened from #6c767b — that failed WCAG AA (3.7:1 vs the panel background, needs 4.5:1); this passes at 4.95:1 */
     --rule:#232b2e;
     --rule-2:#323c40;
     --accent:#5fb3a4;
@@ -126,6 +127,7 @@
     color:var(--ink-2);padding-left:16px;border-left:1px solid var(--rule);
   }
   .dot{width:6px;height:6px;border-radius:50%;background:var(--pos);flex:none}
+  .topbar-spacer{flex:1}
 
   /* Language switch: two words divided by a rule, not a pill toggle. */
   .seg{display:flex;align-items:center;border:1px solid var(--rule-2);border-radius:var(--r);overflow:hidden;flex:none}
@@ -156,6 +158,7 @@
   .btn.warn{color:var(--alert-ink);border-color:var(--alert-line);background:var(--alert-wash)}
   .btn.warn:hover{background:var(--alert-wash);border-color:var(--alert)}
   .iconbtn{padding:6px 10px;font-size:13px;line-height:1.2}
+  .iconbtn svg{width:15px;height:15px;display:block}
   /* Toolbar buttons must not wrap, but the full-width action in the patient
      profile carries a whole sentence and was being clipped by that rule. */
   .profile .btn{white-space:normal;line-height:1.35}
@@ -215,6 +218,7 @@
      Was six floating cards. Now one ruled band: shared baseline, hairline
      dividers, numbers set in the display serif. This is the change that makes
      the screen read as ordered rather than assembled. */
+  .kpis > *{min-width:0}
   .kpis{
     display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));
     gap:1px;background:var(--rule);
@@ -300,7 +304,16 @@
 
   /* ── Inbox ────────────────────────────────────────────────────────────── */
   .inbox{display:grid;grid-template-columns:300px 1fr 290px;gap:16px;height:calc(100vh - 178px);min-height:460px}
-  .col{overflow:auto;padding:0}
+  /* A grid item's default min-width is auto, i.e. it refuses to shrink below
+     its own min-content width. One long unbreakable string — an E.164 number,
+     an Arabic message with no spaces to break on — is then enough to push a
+     column past the screen edge, and because the overflow is clipped rather
+     than scrolled it reads as "the layout is fine" while content sits off
+     screen. min-width:0 lets these columns actually take the width they are
+     given; overflow-wrap handles the long strings inside them. */
+  .col{overflow:auto;padding:0;min-width:0}
+  .inbox > *{min-width:0}
+  .msgs,.msg,.conv-item{overflow-wrap:anywhere}
   .filters{display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap}
   /* Mono uppercase runs wide; tightened so the full filter set holds one line
      in the 300px column instead of orphaning the last chip. */
@@ -444,6 +457,68 @@
     *{animation:none!important;transition:none!important}
   }
 
+  /* ── Gate — the welcome screen, deliberately its own moment ─────────────
+     Fixed dark treatment regardless of the app's light/dark toggle (like a
+     hotel lobby, not a settings page) — Bodoni Moda's extreme thick/thin
+     contrast and Instrument Sans read as a private clinical brand, not a
+     generic SaaS login card. Everything else in the panel keeps Fraunces/
+     Public Sans; this screen is the one deliberate departure. */
+  .gate-screen{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:
+      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(211,164,92,.10), transparent 60%),
+      linear-gradient(160deg, #0a0f10 0%, #0d1517 46%, #0a1210 100%);
+    position:relative;overflow:hidden;
+  }
+  .gate-screen::before{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+    background-image:radial-gradient(rgba(255,255,255,.05) 1px, transparent 1px);
+    background-size:3px 3px;
+  }
+  .gate-card{position:relative;width:100%;max-width:400px;text-align:center}
+  .gate-mark{
+    width:46px;height:46px;margin:0 auto 26px;border-radius:1px;display:grid;place-items:center;
+    background:linear-gradient(155deg,#5fb3a4,#0e5750);color:#eaf4f1;
+    box-shadow:0 0 0 1px rgba(211,164,92,.35), 0 18px 40px -12px rgba(15,90,80,.55);
+  }
+  .gate-word{
+    font-family:"Bodoni Moda",Georgia,serif;font-weight:500;font-size:40px;letter-spacing:-.01em;
+    color:#f4efe6;line-height:1.05;margin-bottom:6px;
+  }
+  .gate-word i{font-style:italic;font-weight:400;color:#d3a45c}
+  .gate-kicker{
+    font-family:"Instrument Sans",-apple-system,sans-serif;font-size:11.5px;letter-spacing:.22em;
+    text-transform:uppercase;color:#7c9691;margin-bottom:34px;
+  }
+  .gate-rule{width:36px;height:1px;background:linear-gradient(90deg,transparent,#d3a45c,transparent);margin:0 auto 34px}
+  .gate-field{text-align:left;margin-bottom:18px}
+  .gate-field label{
+    display:block;font-family:"Instrument Sans",sans-serif;font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:#7c9691;margin-bottom:9px;
+  }
+  .gate-field input{
+    width:100%;background:rgba(255,255,255,.02);border:none;border-bottom:1px solid rgba(211,164,92,.3);
+    color:#f4efe6;padding:9px 2px;font-family:"Instrument Sans",sans-serif;font-size:15px;
+    border-radius:0;transition:border-color .18s;
+  }
+  .gate-field input:focus{outline:none;border-bottom-color:#d3a45c}
+  .gate-field input::placeholder{color:#465452}
+  .gate-btn{
+    width:100%;margin-top:8px;padding:13px;border:1px solid #d3a45c;border-radius:1px;
+    background:transparent;color:#eee0c4;font-family:"Instrument Sans",sans-serif;font-size:12.5px;
+    letter-spacing:.14em;text-transform:uppercase;cursor:pointer;transition:background .18s,color .18s;
+  }
+  .gate-btn:hover:not(:disabled){background:#d3a45c;color:#0a0f10}
+  .gate-btn:disabled{opacity:.45;cursor:default}
+  .gate-err{
+    margin-top:16px;font-family:"Instrument Sans",sans-serif;font-size:12.5px;color:#e0a99a;
+    border-left:2px solid #e0a99a;padding-left:10px;text-align:left;
+  }
+  .gate-foot{
+    margin-top:46px;font-family:"Instrument Sans",sans-serif;font-size:11px;color:#465452;
+    letter-spacing:.04em;
+  }
+
   /* ── Responsive ───────────────────────────────────────────────────────── */
   @media (max-width:1120px){
     .inbox{grid-template-columns:1fr;height:auto;min-height:0}
@@ -458,6 +533,46 @@
     .kpis{grid-template-columns:1fr 1fr}
     .topbar{padding:0 14px;gap:12px}
     .live{display:none}
+  }
+  /* The topbar's controls (branch picker, language toggle, theme, sign out,
+     refresh) are five separate fixed-size items with no room to sit on one
+     line under ~530px — forcing them onto one row pushed the whole page into
+     horizontal scroll (a real bug found by rendering the panel at real phone
+     widths, not just eyeballing the CSS). Letting the row wrap keeps every
+     control reachable instead of clipping any of them. */
+  @media (max-width:520px){
+    .topbar{flex-wrap:wrap;height:auto;min-height:58px;padding:10px 14px;row-gap:8px}
+    .topbar-spacer{display:none}
+    .topbar-branch{max-width:130px!important}
+  }
+
+  /* ── Management tables on small screens ─────────────────────────────────
+     The roster tables (consultants, devices, branches, partners, doctors,
+     bookings) are multi-column grids sized for a desktop panel. Left alone at
+     phone width the columns collapse to 24–35px — narrower than the words in
+     them — and the action buttons render a hundred-plus pixels outside the
+     viewport where they cannot be tapped at all. The page reported no
+     horizontal scroll the whole time, because the overflow was being clipped
+     rather than scrolled, which is exactly why this needed looking at rather
+     than measuring.
+
+     Below 900px each row becomes a stacked card instead: one field per line,
+     actions on their own row with real tap targets. The column headers are
+     hidden because a header row describes columns that no longer exist — each
+     value is legible on its own line without one. The !important is load-
+     bearing: the grid templates are inline styles on the rows themselves. */
+  @media (max-width:900px){
+    .rowgrid{grid-template-columns:1fr!important;gap:3px!important;padding:14px 16px!important}
+    .rowgrid > *{overflow-wrap:anywhere}
+    .rowgrid > *{justify-self:start!important;text-align:left!important;max-width:100%!important}
+    .rowgrid.rowhead{display:none!important}
+    .rowgrid .rowactions{
+      justify-content:flex-start!important;width:100%;margin-top:8px;gap:8px!important;
+    }
+    .rowgrid .rowactions .btn{padding:7px 12px!important;font-size:12px!important}
+    /* Chip filters and any other inline control strip wrap instead of
+       extending past the screen edge. */
+    .filters{flex-wrap:wrap}
   }
 </style>
 </head>
@@ -522,11 +637,11 @@ const I18N = {
     "analytics.byChannel":"Ad spend by channel","analytics.cpc":"CPC",
         "analytics.attributionNote":"CAC and ROAS are totals, not per channel: a lead records how it arrived (WhatsApp, widget), not which campaign paid for it. Per-channel CAC needs a campaign reference on the lead.",
     "tbl.conversion":"Conv.",
-    "cmd.chartTitle":"📈 Leads — last 14 days","cmd.clinicalAlerts":"Clinical alerts — urgent medical escalations",
-    "badge.urgent":"URGENT","btn.openNow":"Open now","cmd.actionCenter":"⚡ Action Center — leads waiting for a human",
-    "cmd.allClear":"All clear 🎉","cmd.allClearSub":"No sales conversations need a human right now.",
+    "cmd.chartTitle":"Leads — last 14 days","cmd.clinicalAlerts":"Clinical alerts — urgent medical escalations",
+    "badge.urgent":"URGENT","btn.openNow":"Open now","cmd.actionCenter":"Action Center — leads waiting for a human",
+    "cmd.allClear":"All clear","cmd.allClearSub":"No sales conversations need a human right now.",
     "cmd.needsAttention":"Needs attention","badge.score":"score","btn.openTakeOver":"Open & take over",
-    "cmd.atRisk":"⚠️ At risk — likely to cancel or not show up",
+    "cmd.atRisk":"At risk — likely to cancel or not show up",
     "risk.label":"risk","risk.silence":"days quiet","risk.daysLeft":"days away",
     "risk.depositOverdue":"deposit overdue","risk.depositPending":"deposit pending","risk.depositNone":"no deposit recorded",
     "risk.wording":"hesitation wording",
@@ -542,14 +657,19 @@ const I18N = {
     "payments.status.pending":"Pending","payments.status.paid":"Paid","payments.status.refunded":"Refunded",
     "payments.add":"Add payment","payments.markPaid":"Mark paid","payments.remind":"Mark reminder sent",
     "payments.reminded":"Reminded","payments.due":"Due","payments.pendingBadge":"awaiting a deposit",
+    "payments.createLink":"Create & send payment link","payments.linkSent":"Link sent","payments.copyLink":"Copy link","payments.copied":"Copied",
+    "payments.provider.stripe":"Stripe","payments.provider.iyzico":"İyzico",
     "toast.paymentAdded":"Payment added","toast.paymentPaid":"Marked as paid","toast.reminderSet":"Reminder marked",
+    "toast.paymentLinkSent":"Payment link sent to the patient",
     "quotes.title":"Quotes","quotes.empty":"No quotes yet.","quotes.suggest":"Suggest a draft",
     "quotes.status.draft":"Draft","quotes.status.sent":"Sent","quotes.status.viewed":"Viewed","quotes.status.accepted":"Accepted",
     "quotes.preview":"Preview PDF","quotes.send":"Send","quotes.accept":"Mark accepted",
     "quotes.itemLabel":"Description","quotes.qty":"Qty","quotes.price":"Unit price","quotes.addItem":"Add item",
     "quotes.remove":"Remove item","quotes.validUntil":"Valid until","quotes.noItems":"No items yet — add one below.",
-    "quotes.confirmSend":"Send this quote to the patient on WhatsApp?",
+    "quotes.confirmSend":"Send this quote to the patient?",
     "toast.quoteDrafted":"Draft quote created","toast.quoteUpdated":"Quote updated","toast.quoteSent":"Quote sent",
+    "toast.messageSent":"Message sent","toast.messageSaveFailedDelivery":"Saved, but delivery failed — the patient did not receive this message",
+    "common.currency":"Currency","payments.typeLabel":"Payment type","costs.categoryLabel":"Cost category",
     "toast.quoteAccepted":"Marked as accepted",
     "analytics.pendingDeposits":"Pending deposits","analytics.roasFoot":"revenue ÷ ad spend",
     "analytics.noPaymentsNote":"No payments logged yet. Record a deposit on a lead's profile to see real revenue here.",
@@ -558,11 +678,12 @@ const I18N = {
     "notes.add":"Add note","notes.empty":"No notes yet.","notes.saved":"Note added",
     "confirm.discharge":"Mark this patient as discharged? This starts the post-op sequence and cannot be undone from the panel.","badge.human":"human","badge.agent":"agent",
     "inbox.noConversations":"No conversations yet. Send a WhatsApp message to your number to see it appear here.","msg.patient":"patient",
+    "msg.photoAlt":"Photo sent by the patient — opens full size in a new tab",
     "inbox.selectConv":"Select a conversation to view the thread.",
     "inbox.youHandling":"You are handling this conversation — the AI is paused.",
     "inbox.aiHandling":"AI concierge is handling this conversation.",
     "btn.handBack":"↩ Hand back to AI","btn.takeOver":"Take over",
-    "inbox.urgentEsc":"🚑 Urgent medical escalation — a clinician should respond.",
+    "inbox.urgentEsc":"Urgent medical escalation — a clinician should respond.",
     "inbox.noMessages":"No messages yet.","msg.conciergeAgent":"concierge / agent",
     "inbox.typeReply":"Type your reply…","inbox.takeOverHint":"Take over to reply manually, or send anyway",
     "btn.send":"Send","inbox.leadDetails":"Lead details appear here.","pf.leadScore":"Lead score","pf.status":"Status",
@@ -591,16 +712,16 @@ const I18N = {
     "studio.tone":"Concierge tone","studio.treatments":"Treatments & pricing","studio.treatmentN":"Treatment",
     "btn.remove":"Remove","studio.phName":"Name","studio.phPrice":"Price range","studio.phPackage":"Package details",
     "btn.addTreatment":"+ Add treatment","studio.availability":"Availability note","studio.bookingPolicy":"Booking policy",
-    "btn.saving":"Saving…","btn.saveTeach":"Save & teach the AI","studio.saved":"✅ Saved — live on the next reply",
+    "btn.saving":"Saving…","btn.saveTeach":"Save & teach the AI","studio.saved":"Saved — live on the next reply",
     "toast.profileSaved":"Clinic profile saved — live on the next reply",
     "consultants.sub":"Transparent, commission-ready performance for your sales coordinators.",
     "tbl.coordinator":"Coordinator","tbl.languages":"Languages","tbl.assigned":"Assigned","tbl.hot":"Hot",
     "tbl.handed":"Handed","tbl.booked":"Booked",
     "matching.title":"Multi-Language Coordinator Matching",
     "matching.sub":"Incoming language is auto-detected and routed to the right coordinator. When none is available, the AI concierge bridges.",
-    "matching.noCoverage":"⚠️ No coordinator covers:",
+    "matching.noCoverage":"No coordinator covers:",
     "matching.bridging":"— the AI is bridging. Add a coordinator to cover them.",
-    "matching.allCovered":"✅ Every incoming language is currently covered by a coordinator.",
+    "matching.allCovered":"Every incoming language is currently covered by a coordinator.",
     "matching.coverage":"Language coverage",
     "postop.title":"Fit-to-Fly & Post-Op Automation",
     "postop.sub":"Discharge a patient (from the Inbox profile) to auto-schedule the full aftercare sequence. Due steps are sent automatically on WhatsApp.",
@@ -613,7 +734,7 @@ const I18N = {
     "reviews.delivered":"delivered automatically","reviews.reputation":"Reputation","reviews.noRatingSource":"needs a Trustpilot / Google connection",
     "devices.sub":"Match empty operating-room / device slots to waiting patients automatically.",
     "devices.slotsToday":"slots today","devices.waitingList":"Waiting list — assign to a slot",
-    "btn.bookNextSlot":"Book next slot","devices.noOneWaiting":"No one waiting 🎉","toast.slotBooked":"Slot booked into",
+    "btn.bookNextSlot":"Book next slot","devices.noOneWaiting":"No one waiting","toast.slotBooked":"Slot booked into",
     "logistics.sub":"Flight → VIP transfer → hotel check-in → clinic appointment, coordinated on one board.",
     "logistics.empty":"No logistics yet. Discharge a patient from the Inbox to add them here.",
     "toast.logisticsUpdated":"Logistics updated",
@@ -627,6 +748,8 @@ const I18N = {
     "auto.5a":"Website widget submitted","auto.5b":"Create a lead and open a conversation",
     "auto.6a":"Patient discharged","auto.6b":"Schedule post-op sequence, review invite & logistics",
     "auto.7a":"Post-op step due","auto.7b":"Send the WhatsApp follow-up template automatically",
+    "auto.8a":"Hot lead silent for 48h","auto.8b":"Send an automatic WhatsApp check-in",
+    "auto.9a":"Patient sends a voice note","auto.9b":"Transcribe it (Whisper) and reply as if typed",
     "shell.aiLive":"AI concierge live","btn.refresh":"↻ Refresh",
     "shell.backendDown":"Backend unreachable","shell.backendHint":"Is the server running with DATABASE_URL set?",
     "shell.themeToggle":"Dark / light theme",
@@ -639,6 +762,74 @@ const I18N = {
     "branch.all":"All branches","branch.label":"Branch","branch.unassigned":"Unassigned",
     "branch.none":"No branch","toast.branchSaved":"Branch updated",
     "analytics.byBranch":"By branch","analytics.branchBooked":"booked","analytics.branchRevenue":"revenue",
+    "nav.partners":"Partners","partners.sub":"Referral partners — their own portal link, and what their referrals have earned them.",
+    "partners.name":"Partner name","partners.email":"Email (optional)","partners.commission":"Commission %",
+    "partners.create":"Create partner","partners.empty":"No partners yet. Add one below.",
+    "partners.tokenCreated":"Access token — copy it now, it won't be shown again:",
+    "partners.portalLink":"Portal link to share with them:","partners.copy":"Copy","partners.copied":"Copied ✓",
+    "tbl.partner":"Partner","tbl.email":"Email","tbl.rate":"Rate","tbl.active":"Active",
+    "pf.partner":"Partner","partner.none":"No partner","partner.label":"Partner",
+    "roi.title":"Return on investment — since going live",
+    "roi.hoursSaved":"Staff hours saved","roi.repliesFoot":"AI replies sent",
+    "roi.afterHours":"Replies outside business hours","roi.afterHoursFoot":"handled while your team was off",
+    "roi.revenue":"Revenue collected","roi.revenueFoot":"from bookings this AI helped qualify",
+    "roi.assumption":"Estimate: {min} min/reply — reading, pricing lookup and typing one WhatsApp reply by hand. Human-agent replies aren't counted.",
+    "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
+    "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
+    "admin.name":"Name","admin.languages":"Languages spoken","admin.branch":"Branch","admin.noBranch":"No branch",
+    "admin.type":"Type","admin.code":"Short code","admin.city":"City","admin.default":"Default",
+    "admin.activate":"Activate","admin.deactivate":"Deactivate","admin.inactive":"Inactive",
+    "btn.edit":"Edit","btn.delete":"Delete","btn.save":"Save","btn.cancel":"Cancel",
+    "workflow.live":"Live","workflow.blocked":"Not configured","workflow.needsCheck":"Needs a template",
+    "workflow.needs":"Waiting on:","workflow.liveCount":"{n} of {total} automations are running right now.",
+    "workflow.templateNote":"Runs automatically, but each message goes out as a WhatsApp template that must be approved by Meta first.",
+    "pf.editName":"Patient name","pf.editCountry":"Country","pf.editTreatment":"Treatment of interest","pf.editBudget":"Budget",
+    "quotes.confirmDelete":"Delete this draft quote? Sent and accepted quotes cannot be deleted.",
+    "appt.title":"Booked slots","appt.empty":"No upcoming bookings.",
+    "appt.when":"When","appt.patient":"Patient","appt.room":"Room","appt.status":"Status",
+    "appt.noPatient":"(no patient)","appt.cancel":"Cancel booking","appt.cancelled":"Booking cancelled",
+    "appt.confirmCancel":"Cancel the booking for {name}? The slot is freed, but the cancellation stays on record.",
+    "appt.confirmDelete":"Delete this booking entirely? It disappears from the record as if it never happened.",
+    "appt.status.booked":"Booked","appt.status.cancelled":"Cancelled","appt.status.completed":"Completed",
+    "admin.saved":"Saved","admin.deleted":"Deleted",
+    "admin.deletedUnassigned":"Deleted — {n} patient(s) are now unassigned",
+    "admin.confirmDeleteConsultant":"Delete consultant \"{name}\"? Patients assigned to them stay, but become unassigned.",
+    "admin.confirmDeleteDevice":"Delete \"{name}\"? Its past bookings go with it.",
+    "admin.confirmDeleteBranch":"Delete branch \"{name}\"? Its staff and patients stay, but become unassigned.",
+    "admin.confirmDeletePartner":"Delete partner \"{name}\"? Their referred patients stay, but stop being attributed to them.",
+    "admin.confirmDeleteDoctor":"Delete doctor \"{name}\"? Their reviews stay on the patient records.",
+    "inbox.deleteLead":"Delete this patient and their whole history",
+    "inbox.confirmDelete":"Permanently delete {name} and their entire history — messages, photos, quotes, payments and appointments? This cannot be undone.",
+    "inbox.confirmDeleteType":"To confirm, type the patient's name exactly: {name}",
+    "inbox.deleteNameMismatch":"Name did not match — nothing was deleted",
+    "inbox.deleted":"{name} deleted",
+    "admin.consultantRoster":"Your consultants","admin.addConsultant":"Add consultant",
+    "admin.noConsultants":"No consultants yet — add your first one above.",
+    "admin.consultantAdded":"Consultant added",
+    "admin.deviceRoster":"Your rooms & devices","admin.addDevice":"Add room / device",
+    "admin.noDevices":"No rooms or devices yet — add your first one above.",
+    "admin.deviceAdded":"Room / device added",
+    "admin.addBranch":"Add branch","admin.noBranches":"No branches yet — add your first one above.",
+    "admin.branchAdded":"Branch added",
+    "dev.type.operating_room":"Operating room","dev.type.device":"Device","dev.type.chair":"Chair",
+    "doctors.name":"Doctor name","doctors.email":"Email (optional)","doctors.specialty":"Specialty (optional)",
+    "doctors.create":"Add doctor","doctors.empty":"No doctors yet. Add one below.",
+    "doctors.tokenCreated":"Access token — copy it now, it won't be shown again:",
+    "partners.regenerate":"Regenerate token","partners.confirmRegenerate":"This invalidates their old token immediately — they'll need the new one to sign back in. Continue?",
+    "doctors.portalLink":"Portal link to share with them:",
+    "tbl.doctor":"Doctor","tbl.specialty":"Specialty","tbl.reviewStatus":"Review",
+    "pf.doctor":"Doctor","doctor.none":"No doctor",
+    "review.pending":"Pending review","review.approved":"Approved","review.needs_info":"Needs more info",
+    "costs.title":"Operation costs","costs.add":"Add cost","costs.empty":"No costs logged yet.","costs.remove":"Remove",
+    "costs.cat.hospital":"Hospital","costs.cat.driver":"Driver","costs.cat.hotel":"Hotel","costs.cat.other":"Other",
+    "toast.costAdded":"Cost logged",
+    "profit.title":"Net profitability","profit.revenue":"Revenue collected","profit.costs":"Costs logged","profit.net":"Net margin","profit.margin":"margin",
+    "profit.note":"All figures converted to EUR at the current ECB reference rate.",
+    "profit.stale":"Live exchange rates were unreachable — these figures use an approximate fallback rate and may be off.",
+    "logistics.itinerary":"Live tracking link","logistics.pickupAt":"Pickup time","logistics.pickupLoc":"Pickup location",
+    "logistics.pickupLocPh":"e.g. Hotel lobby","logistics.nextAt":"Next appointment time","logistics.nextNote":"Next appointment note",
+    "logistics.nextNotePh":"e.g. Consultation with Dr. Kaya","logistics.save":"Save","logistics.copyLink":"Copy link","logistics.sendLink":"Send to patient",
+    "logistics.sent":"Tracking link sent",
   },
   tr: {
     "nav.command":"Komuta Merkezi","nav.inbox":"Tüm Kanallar Gelen Kutusu","nav.analytics":"CAC & ROAS Analizi",
@@ -657,13 +848,13 @@ const I18N = {
     "analytics.byChannel":"Kanala göre reklam harcaması","analytics.cpc":"TBM",
         "analytics.attributionNote":"CAC ve ROAS toplamdır, kanal bazlı değildir: bir lead nasıl geldiğini (WhatsApp, widget) kaydeder, hangi kampanyanın parasını ödediğini değil. Kanal bazlı CAC için lead üzerinde kampanya referansı gerekir.",
     "tbl.conversion":"Dönüşüm",
-    "cmd.chartTitle":"📈 Lead'ler — son 14 gün",
+    "cmd.chartTitle":"Lead'ler — son 14 gün",
     "cmd.clinicalAlerts":"Klinik uyarılar — acil tıbbi yönlendirmeler",
     "badge.urgent":"ACİL","btn.openNow":"Şimdi aç",
-    "cmd.actionCenter":"⚡ Aksiyon Merkezi — insan bekleyen lead'ler",
-    "cmd.allClear":"Her şey yolunda 🎉","cmd.allClearSub":"Şu an insan gerektiren satış görüşmesi yok.",
+    "cmd.actionCenter":"Aksiyon Merkezi — insan bekleyen lead'ler",
+    "cmd.allClear":"Her şey yolunda","cmd.allClearSub":"Şu an insan gerektiren satış görüşmesi yok.",
     "cmd.needsAttention":"İlgi bekliyor","badge.score":"skor","btn.openTakeOver":"Aç & devral",
-    "cmd.atRisk":"⚠️ Risk altında — iptal veya gelmeme ihtimali yüksek",
+    "cmd.atRisk":"Risk altında — iptal veya gelmeme ihtimali yüksek",
     "risk.label":"risk","risk.silence":"gün sessiz","risk.daysLeft":"gün kaldı",
     "risk.depositOverdue":"depozito vadesi geçti","risk.depositPending":"depozito bekliyor","risk.depositNone":"depozito kaydı yok",
     "risk.wording":"tereddüt ifadesi",
@@ -679,14 +870,19 @@ const I18N = {
     "payments.status.pending":"Bekliyor","payments.status.paid":"Ödendi","payments.status.refunded":"İade edildi",
     "payments.add":"Ödeme ekle","payments.markPaid":"Ödendi işaretle","payments.remind":"Hatırlatma gönderildi işaretle",
     "payments.reminded":"Hatırlatıldı","payments.due":"Vade","payments.pendingBadge":"depozito bekliyor",
+    "payments.createLink":"Ödeme linki oluştur ve gönder","payments.linkSent":"Link gönderildi","payments.copyLink":"Linki kopyala","payments.copied":"Kopyalandı",
+    "payments.provider.stripe":"Stripe","payments.provider.iyzico":"İyzico",
+    "toast.paymentLinkSent":"Ödeme linki hastaya gönderildi",
     "toast.paymentAdded":"Ödeme eklendi","toast.paymentPaid":"Ödendi olarak işaretlendi","toast.reminderSet":"Hatırlatma işaretlendi",
     "quotes.title":"Teklifler","quotes.empty":"Henüz teklif yok.","quotes.suggest":"Taslak öner",
     "quotes.status.draft":"Taslak","quotes.status.sent":"Gönderildi","quotes.status.viewed":"Görüntülendi","quotes.status.accepted":"Onaylandı",
     "quotes.preview":"PDF önizle","quotes.send":"Gönder","quotes.accept":"Onaylandı işaretle",
     "quotes.itemLabel":"Açıklama","quotes.qty":"Adet","quotes.price":"Birim fiyat","quotes.addItem":"Kalem ekle",
     "quotes.remove":"Kalemi kaldır","quotes.validUntil":"Geçerlilik tarihi","quotes.noItems":"Henüz kalem yok — aşağıdan ekleyin.",
-    "quotes.confirmSend":"Bu teklif hastaya WhatsApp üzerinden gönderilsin mi?",
+    "quotes.confirmSend":"Bu teklif hastaya gönderilsin mi?",
     "toast.quoteDrafted":"Taslak teklif oluşturuldu","toast.quoteUpdated":"Teklif güncellendi","toast.quoteSent":"Teklif gönderildi",
+    "toast.messageSent":"Mesaj gönderildi","toast.messageSaveFailedDelivery":"Kaydedildi ama iletilemedi — hasta bu mesajı almadı",
+    "common.currency":"Para birimi","payments.typeLabel":"Ödeme türü","costs.categoryLabel":"Maliyet kategorisi",
     "toast.quoteAccepted":"Onaylandı olarak işaretlendi",
     "analytics.pendingDeposits":"Bekleyen depozitolar","analytics.roasFoot":"gelir ÷ reklam harcaması",
     "analytics.noPaymentsNote":"Henüz ödeme kaydı yok. Gerçek geliri burada görmek için bir lead profilinden depozito kaydedin.",
@@ -695,12 +891,13 @@ const I18N = {
     "notes.add":"Not ekle","notes.empty":"Henüz not yok.","notes.saved":"Not eklendi",
     "confirm.discharge":"Bu hasta taburcu olarak işaretlensin mi? Ameliyat sonrası dizisi başlar ve panelden geri alınamaz.",
     "inbox.noConversations":"Henüz görüşme yok. Numaranıza bir WhatsApp mesajı gönderin, burada görünsün.","msg.patient":"hasta",
+    "msg.photoAlt":"Hastanın gönderdiği fotoğraf — yeni sekmede tam boy açılır",
     "badge.human":"insan","badge.agent":"temsilci",
     "inbox.selectConv":"Konuşmayı görmek için bir görüşme seçin.",
     "inbox.youHandling":"Bu görüşmeyi siz yönetiyorsunuz — AI duraklatıldı.",
     "inbox.aiHandling":"Bu görüşmeyi AI konsiyerj yönetiyor.",
     "btn.handBack":"↩ AI'a geri ver","btn.takeOver":"Devral",
-    "inbox.urgentEsc":"🚑 Acil tıbbi yönlendirme — bir klinisyen yanıtlamalı.",
+    "inbox.urgentEsc":"Acil tıbbi yönlendirme — bir klinisyen yanıtlamalı.",
     "inbox.noMessages":"Henüz mesaj yok.","msg.conciergeAgent":"konsiyerj / temsilci",
     "inbox.typeReply":"Yanıtınızı yazın…",
     "inbox.takeOverHint":"Manuel yanıt için devralın veya yine de gönderin",
@@ -733,16 +930,16 @@ const I18N = {
     "btn.remove":"Kaldır","studio.phName":"Ad","studio.phPrice":"Fiyat aralığı","studio.phPackage":"Paket detayları",
     "btn.addTreatment":"+ Tedavi ekle","studio.availability":"Uygunluk notu","studio.bookingPolicy":"Rezervasyon politikası",
     "btn.saving":"Kaydediliyor…","btn.saveTeach":"Kaydet & AI'a öğret",
-    "studio.saved":"✅ Kaydedildi — bir sonraki yanıtta geçerli",
+    "studio.saved":"Kaydedildi — bir sonraki yanıtta geçerli",
     "toast.profileSaved":"Klinik profili kaydedildi — bir sonraki yanıtta geçerli",
     "consultants.sub":"Satış koordinatörleriniz için şeffaf, prim hesabına hazır performans.",
     "tbl.coordinator":"Koordinatör","tbl.languages":"Diller","tbl.assigned":"Atanan","tbl.hot":"Sıcak",
     "tbl.handed":"Devredilen","tbl.booked":"Rezervasyonlu",
     "matching.title":"Çok Dilli Koordinatör Eşleştirme",
     "matching.sub":"Gelen dil otomatik algılanır ve doğru koordinatöre yönlendirilir. Uygun kimse yoksa AI konsiyerj köprü kurar.",
-    "matching.noCoverage":"⚠️ Şu diller için koordinatör yok:",
+    "matching.noCoverage":"Şu diller için koordinatör yok:",
     "matching.bridging":"— AI köprü kuruyor. Bu dilleri kapsayan bir koordinatör ekleyin.",
-    "matching.allCovered":"✅ Gelen tüm diller şu an bir koordinatör tarafından kapsanıyor.",
+    "matching.allCovered":"Gelen tüm diller şu an bir koordinatör tarafından kapsanıyor.",
     "matching.coverage":"Dil kapsamı",
     "postop.title":"Uçuşa Uygunluk & Ameliyat Sonrası Otomasyonu",
     "postop.sub":"Bir hastayı (Gelen Kutusu profilinden) taburcu edin; tüm bakım dizisi otomatik planlanır. Vadesi gelen adımlar WhatsApp'tan otomatik gönderilir.",
@@ -755,7 +952,7 @@ const I18N = {
     "reviews.delivered":"otomatik iletildi","reviews.reputation":"İtibar","reviews.noRatingSource":"Trustpilot / Google bağlantısı gerekiyor",
     "devices.sub":"Boş ameliyathane / cihaz slotlarını bekleyen hastalarla otomatik eşleştirin.",
     "devices.slotsToday":"slot bugün","devices.waitingList":"Bekleme listesi — bir slota ata",
-    "btn.bookNextSlot":"Sonraki slotu ayır","devices.noOneWaiting":"Bekleyen kimse yok 🎉",
+    "btn.bookNextSlot":"Sonraki slotu ayır","devices.noOneWaiting":"Bekleyen kimse yok",
     "toast.slotBooked":"Slot ayrıldı:",
     "logistics.sub":"Uçuş → VIP transfer → otel girişi → klinik randevusu, tek panoda koordine edilir.",
     "logistics.empty":"Henüz lojistik kaydı yok. Gelen Kutusu'ndan bir hastayı taburcu ederek buraya ekleyin.",
@@ -770,6 +967,8 @@ const I18N = {
     "auto.5a":"Web sitesi widget'ı gönderildi","auto.5b":"Lead oluştur ve görüşme aç",
     "auto.6a":"Hasta taburcu edildi","auto.6b":"Ameliyat sonrası dizisi, değerlendirme daveti & lojistik planla",
     "auto.7a":"Ameliyat sonrası adım vadesi geldi","auto.7b":"WhatsApp takip şablonunu otomatik gönder",
+    "auto.8a":"Sıcak lead 48 saattir sessiz","auto.8b":"Otomatik bir WhatsApp kontrol mesajı gönder",
+    "auto.9a":"Hasta sesli mesaj atıyor","auto.9b":"Metne çevir (Whisper) ve yazılmış gibi yanıtla",
     "shell.aiLive":"AI konsiyerj aktif","btn.refresh":"↻ Yenile",
     "shell.backendDown":"Backend'e ulaşılamıyor","shell.backendHint":"Sunucu DATABASE_URL ayarıyken çalışıyor mu?",
     "shell.themeToggle":"Koyu / açık tema",
@@ -782,6 +981,74 @@ const I18N = {
     "branch.all":"Tüm şubeler","branch.label":"Şube","branch.unassigned":"Atanmamış",
     "branch.none":"Şube yok","toast.branchSaved":"Şube güncellendi",
     "analytics.byBranch":"Şubeye göre","analytics.branchBooked":"rezervasyon","analytics.branchRevenue":"gelir",
+    "nav.partners":"Partnerler","partners.sub":"Referans partnerleri — kendi portal linkleri ve yönlendirdikleri hastalardan kazandıkları.",
+    "partners.name":"Partner adı","partners.email":"E-posta (opsiyonel)","partners.commission":"Komisyon %",
+    "partners.create":"Partner oluştur","partners.empty":"Henüz partner yok. Aşağıdan ekleyin.",
+    "partners.tokenCreated":"Erişim jetonu — şimdi kopyalayın, bir daha gösterilmeyecek:",
+    "partners.portalLink":"Onlarla paylaşacağınız portal linki:","partners.copy":"Kopyala","partners.copied":"Kopyalandı ✓",
+    "tbl.partner":"Partner","tbl.email":"E-posta","tbl.rate":"Oran","tbl.active":"Aktif",
+    "pf.partner":"Partner","partner.none":"Partner yok","partner.label":"Partner",
+    "roi.title":"Yatırım getirisi — canlıya alındığından beri",
+    "roi.hoursSaved":"Kazanılan personel saati","roi.repliesFoot":"AI yanıtı gönderildi",
+    "roi.afterHours":"Mesai dışı yanıtlar","roi.afterHoursFoot":"ekibiniz çevrimdışıyken karşılandı",
+    "roi.revenue":"Tahsil edilen gelir","roi.revenueFoot":"AI'ın nitelendirdiği rezervasyonlardan",
+    "roi.assumption":"Varsayım: yanıt başına {min} dk — okuma, fiyat kontrolü ve elle bir WhatsApp yanıtı yazma. İnsan temsilcinin yanıtları sayılmıyor.",
+    "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
+    "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
+    "admin.name":"Ad","admin.languages":"Konuştuğu diller","admin.branch":"Şube","admin.noBranch":"Şube yok",
+    "admin.type":"Tip","admin.code":"Kısa kod","admin.city":"Şehir","admin.default":"Varsayılan",
+    "admin.activate":"Aktifleştir","admin.deactivate":"Pasifleştir","admin.inactive":"Pasif",
+    "btn.edit":"Düzenle","btn.delete":"Sil","btn.save":"Kaydet","btn.cancel":"Vazgeç",
+    "workflow.live":"Çalışıyor","workflow.blocked":"Yapılandırılmadı","workflow.needsCheck":"Şablon gerekiyor",
+    "workflow.needs":"Beklenen:","workflow.liveCount":"{total} otomasyonun {n} tanesi şu anda çalışıyor.",
+    "workflow.templateNote":"Otomatik çalışır, ancak mesajlar Meta onaylı WhatsApp şablonu olarak gider — önce şablonun onaylanması gerekir.",
+    "pf.editName":"Hasta adı","pf.editCountry":"Ülke","pf.editTreatment":"İlgilendiği tedavi","pf.editBudget":"Bütçe",
+    "quotes.confirmDelete":"Bu taslak teklif silinsin mi? Gönderilmiş ve onaylanmış teklifler silinemez.",
+    "appt.title":"Rezervasyonlar","appt.empty":"Yaklaşan rezervasyon yok.",
+    "appt.when":"Zaman","appt.patient":"Hasta","appt.room":"Oda","appt.status":"Durum",
+    "appt.noPatient":"(hasta yok)","appt.cancel":"Rezervasyonu iptal et","appt.cancelled":"Rezervasyon iptal edildi",
+    "appt.confirmCancel":"{name} için rezervasyon iptal edilsin mi? Slot boşalır, iptal kayıtta kalır.",
+    "appt.confirmDelete":"Bu rezervasyon tamamen silinsin mi? Hiç olmamış gibi kayıttan kalkar.",
+    "appt.status.booked":"Rezerve","appt.status.cancelled":"İptal","appt.status.completed":"Tamamlandı",
+    "admin.saved":"Kaydedildi","admin.deleted":"Silindi",
+    "admin.deletedUnassigned":"Silindi — {n} hastanın ataması kaldırıldı",
+    "admin.confirmDeleteConsultant":"\"{name}\" danışmanı silinsin mi? Atandığı hastalar kalır, ataması kaldırılır.",
+    "admin.confirmDeleteDevice":"\"{name}\" silinsin mi? Geçmiş rezervasyonları da silinir.",
+    "admin.confirmDeleteBranch":"\"{name}\" şubesi silinsin mi? Personeli ve hastaları kalır, şube ataması kaldırılır.",
+    "admin.confirmDeletePartner":"\"{name}\" partneri silinsin mi? Yönlendirdiği hastalar kalır, ona atfedilmeyi durdurur.",
+    "admin.confirmDeleteDoctor":"\"{name}\" doktoru silinsin mi? Verdiği değerlendirmeler hasta kayıtlarında kalır.",
+    "inbox.deleteLead":"Bu hastayı ve tüm geçmişini sil",
+    "inbox.confirmDelete":"{name} ve tüm geçmişi — mesajlar, fotoğraflar, teklifler, ödemeler ve randevular — kalıcı olarak silinsin mi? Bu geri alınamaz.",
+    "inbox.confirmDeleteType":"Onaylamak için hastanın adını birebir yazın: {name}",
+    "inbox.deleteNameMismatch":"Ad eşleşmedi — hiçbir şey silinmedi",
+    "inbox.deleted":"{name} silindi",
+    "admin.consultantRoster":"Danışman kadronuz","admin.addConsultant":"Danışman ekle",
+    "admin.noConsultants":"Henüz danışman yok — yukarıdan ilk danışmanınızı ekleyin.",
+    "admin.consultantAdded":"Danışman eklendi",
+    "admin.deviceRoster":"Oda ve cihazlarınız","admin.addDevice":"Oda / cihaz ekle",
+    "admin.noDevices":"Henüz oda veya cihaz yok — yukarıdan ilkini ekleyin.",
+    "admin.deviceAdded":"Oda / cihaz eklendi",
+    "admin.addBranch":"Şube ekle","admin.noBranches":"Henüz şube yok — yukarıdan ilk şubenizi ekleyin.",
+    "admin.branchAdded":"Şube eklendi",
+    "dev.type.operating_room":"Ameliyathane","dev.type.device":"Cihaz","dev.type.chair":"Koltuk",
+    "doctors.name":"Doktor adı","doctors.email":"E-posta (opsiyonel)","doctors.specialty":"Uzmanlık (opsiyonel)",
+    "doctors.create":"Doktor ekle","doctors.empty":"Henüz doktor yok. Aşağıdan ekleyin.",
+    "doctors.tokenCreated":"Erişim jetonu — şimdi kopyalayın, bir daha gösterilmeyecek:",
+    "partners.regenerate":"Jetonu yenile","partners.confirmRegenerate":"Bu, eski jetonu anında geçersiz kılar — tekrar giriş yapabilmeleri için yeni jetonu vermeniz gerekir. Devam edilsin mi?",
+    "doctors.portalLink":"Onlarla paylaşacağınız portal linki:",
+    "tbl.doctor":"Doktor","tbl.specialty":"Uzmanlık","tbl.reviewStatus":"Değerlendirme",
+    "pf.doctor":"Doktor","doctor.none":"Doktor yok",
+    "review.pending":"Değerlendirme bekliyor","review.approved":"Onaylandı","review.needs_info":"Daha fazla bilgi gerekiyor",
+    "costs.title":"Operasyon maliyetleri","costs.add":"Maliyet ekle","costs.empty":"Henüz maliyet girilmedi.","costs.remove":"Kaldır",
+    "costs.cat.hospital":"Hastane","costs.cat.driver":"Şoför","costs.cat.hotel":"Otel","costs.cat.other":"Diğer",
+    "toast.costAdded":"Maliyet kaydedildi",
+    "profit.title":"Net kârlılık","profit.revenue":"Tahsil edilen gelir","profit.costs":"Kaydedilen maliyet","profit.net":"Net kâr","profit.margin":"marj",
+    "profit.note":"Tüm tutarlar güncel ECB referans kuruyla EUR'a çevrilmiştir.",
+    "profit.stale":"Canlı döviz kurlarına ulaşılamadı — bu rakamlar yaklaşık bir yedek kurla hesaplandı, hatalı olabilir.",
+    "logistics.itinerary":"Canlı takip linki","logistics.pickupAt":"Alınış saati","logistics.pickupLoc":"Alınış yeri",
+    "logistics.pickupLocPh":"örn. Otel lobisi","logistics.nextAt":"Sonraki randevu saati","logistics.nextNote":"Sonraki randevu notu",
+    "logistics.nextNotePh":"örn. Dr. Kaya ile konsültasyon","logistics.save":"Kaydet","logistics.copyLink":"Linki kopyala","logistics.sendLink":"Hastaya gönder",
+    "logistics.sent":"Takip linki gönderildi",
   },
 };
 
@@ -793,7 +1060,7 @@ function store(key, fallback){
 function remember(key, value){ try { localStorage.setItem(key, value); } catch (e) {} }
 
 let LANG = store("mv-lang", "tr");
-let THEME = store("mv-theme", "dark");
+let THEME = store("mv-theme", "light");
 // PANEL_API_TOKEN korumalıysa panel ilk açılışta Gate ekranını gösterir; token
 // doğrulanınca burada saklanır ve her api() çağrısına eklenir. Sunucuda token
 // ayarlı değilse (lokal geliştirme) her şey normal 200 döner, NEEDS_AUTH hiç
@@ -847,7 +1114,19 @@ function patientClock(phone){
     return { time, offHours: hour < 8 || hour >= 21 };
   }catch(e){ return null; }
 }
-const flag = (l)=>({de:"🇩🇪",en:"🇬🇧",ar:"🇦🇪",ru:"🇷🇺",fr:"🇫🇷",tr:"🇹🇷",it:"🇮🇹",es:"🇪🇸"}[l]||"🌐");
+// Plain language code, not a flag emoji — a country flag maps awkwardly onto
+// a language anyway (AR/EN aren't one country), and this keeps the panel's
+// visual language consistent with its custom SVG icon set instead of relying
+// on the OS's emoji font.
+const flag = (l)=> l? String(l).toUpperCase() : "—";
+// Instagram/Messenger leads have no phone (see external_id) and often no
+// name yet either, until the AI extracts one from conversation — without a
+// fallback, that row would render blank in the Inbox/Action Center.
+const CHANNEL_LABEL = { whatsapp: "WhatsApp", widget: "Web", instagram: "Instagram", messenger: "Messenger" };
+const leadIdentity = (l)=> l.name || l.phone || (l.external_id ? `${CHANNEL_LABEL[l.source]||"Chat"} user` : "—");
+// A small neutral badge naming the channel — shown only for non-WhatsApp
+// sources, since WhatsApp is the default/implicit one and doesn't need calling out.
+const channelBadge = (source)=> (source && source!=="whatsapp") ? html`<span class="badge">${CHANNEL_LABEL[source]||source}</span>` : null;
 const fmtTime=(t)=>{ if(!t) return ""; const d=new Date(t); return d.toLocaleString(LANG, {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}); };
 const timeAgo=(t)=>{ if(!t) return ""; const s=(Date.now()-new Date(t).getTime())/1000; if(s<45) return T("time.justNow"); if(s<3600) return Math.floor(s/60)+T("time.m"); if(s<86400) return Math.floor(s/3600)+T("time.h"); if(s<604800) return Math.floor(s/86400)+T("time.d"); return new Date(t).toLocaleDateString(LANG); };
 function showToast(message,type){ window.dispatchEvent(new CustomEvent("mv-toast",{detail:{message,type:type||"success"}})); }
@@ -873,6 +1152,19 @@ async function api(path, opts={}){
   return res.json();
 }
 
+// A plain <a href="/api/..."> for a token-gated route 401s — a browser
+// navigation never carries the Authorization header api() adds. Fetch
+// authenticated, then open the bytes as a blob: url instead.
+async function openAuthed(path, { newTab = true } = {}){
+  try{
+    const res = await fetch("/api"+path, { headers: TOKEN? {"Authorization":"Bearer "+TOKEN} : {} });
+    if(!res.ok){ showToast("HTTP "+res.status, "error"); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    if(newTab) window.open(url, "_blank"); else return url;
+  }catch(e){ showToast(e.message, "error"); }
+}
+
 function useInterval(fn, ms){
   const ref = useRef(fn); ref.current = fn;
   useEffect(()=>{ const id=setInterval(()=>ref.current(), ms); return ()=>clearInterval(id); }, [ms]);
@@ -893,9 +1185,10 @@ function riskReasonText(r){
 }
 
 // ── Command Center ──────────────────────────────────────────────────────────
-function CommandCenter({ stats, analytics, handovers, risks, onOpenLead }){
+function CommandCenter({ stats, analytics, handovers, risks, roi, onOpenLead }){
   const s = stats||{};
   const n = (v)=> v==null? "–" : v;
+  const hoursSaved = roi? Math.round((roi.minutes_saved/60)*10)/10 : null;
   return html`
     <div>
       <h1>${T("nav.command")}</h1>
@@ -915,6 +1208,29 @@ function CommandCenter({ stats, analytics, handovers, risks, onOpenLead }){
           <${MiniBarChart} data=${analytics.trend} />
         </div>` : null}
 
+      ${roi? html`
+        <div style="margin-bottom:22px">
+          <div class="section-title" style="margin-top:0">${T("roi.title")}</div>
+          <div class="kpis" style="margin-bottom:0">
+            <div class="glass kpi" style="box-shadow:inset 3px 0 0 var(--brass)">
+              <div class="label">${T("roi.hoursSaved")}</div>
+              <div class="val" style="color:var(--brass)">${hoursSaved}h</div>
+              <div class="foot">${roi.ai_replies} ${T("roi.repliesFoot")}</div>
+            </div>
+            <div class="glass kpi">
+              <div class="label">${T("roi.afterHours")}</div>
+              <div class="val cyan">${roi.ai_replies_after_hours}</div>
+              <div class="foot">${T("roi.afterHoursFoot")} (${roi.business_hours})</div>
+            </div>
+            <div class="glass kpi">
+              <div class="label">${T("roi.revenue")}</div>
+              <div class="val mint">€${Number(roi.revenue_collected||0).toLocaleString()}</div>
+              <div class="foot">${T("roi.revenueFoot")}</div>
+            </div>
+          </div>
+          <div class="sub" style="margin:10px 0 0;font-size:11.5px">${T("roi.assumption").replace("{min}", roi.minutes_per_reply_assumption)}</div>
+        </div>` : null}
+
       ${(() => {
         const urgent = (handovers||[]).filter(h=>h.urgent);
         const normal = (handovers||[]).filter(h=>!h.urgent);
@@ -924,7 +1240,7 @@ function CommandCenter({ stats, analytics, handovers, risks, onOpenLead }){
             ${urgent.map((h)=> html`
               <div class="glass action-card alert-card" key=${h.lead_id}>
                 <div class="action-left">
-                  <div class="action-name">${flag(h.language)} ${h.name||h.phone} <span class="badge urgent">${T("badge.urgent")}</span></div>
+                  <div class="action-name">${flag(h.language)} ${leadIdentity(h)} ${channelBadge(h.source)} <span class="badge urgent">${T("badge.urgent")}</span></div>
                   <div class="action-reason">${h.medical_note || h.handover_reason || 'Needs a clinician now'} · ${h.country||'—'}</div>
                 </div>
                 <button class="btn warn" onClick=${()=>onOpenLead(h.lead_id)}>${T("btn.openNow")}</button>
@@ -940,7 +1256,7 @@ function CommandCenter({ stats, analytics, handovers, risks, onOpenLead }){
               ${atRisk.map((r)=> html`
                 <div class="glass action-card" key=${r.lead_id}>
                   <div class="action-left">
-                    <div class="action-name">${flag(r.language)} ${r.name||r.phone}
+                    <div class="action-name">${flag(r.language)} ${leadIdentity(r)} ${channelBadge(r.source)}
                       <span class="badge ${r.score>=60?"hot":"awaiting"}">${r.score}/100 ${T("risk.label")}</span></div>
                     <div class="action-reason">${(r.reasons||[]).map(riskReasonText).join(" · ")}</div>
                   </div>
@@ -955,7 +1271,7 @@ function CommandCenter({ stats, analytics, handovers, risks, onOpenLead }){
             : normal.map((h)=> html`
               <div class="glass action-card" key=${h.lead_id}>
                 <div class="action-left">
-                  <div class="action-name">${flag(h.language)} ${h.name||h.phone} ${h.score!=null?html`<span class="badge hot">${T("badge.score")} ${h.score}</span>`:null}</div>
+                  <div class="action-name">${flag(h.language)} ${leadIdentity(h)} ${channelBadge(h.source)} ${h.score!=null?html`<span class="badge hot">${T("badge.score")} ${h.score}</span>`:null}</div>
                   <div class="action-reason">${h.handover_reason||T("cmd.needsAttention")} · ${h.country||"—"}</div>
                 </div>
                 <button class="btn primary" onClick=${()=>onOpenLead(h.lead_id)}>${T("btn.openTakeOver")}</button>
@@ -966,7 +1282,27 @@ function CommandCenter({ stats, analytics, handovers, risks, onOpenLead }){
 }
 
 // ── Inbox ───────────────────────────────────────────────────────────────────
-function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pendingDeposits, convTotal, onLoadMore, loadingMore, branches }){
+// Photos a patient sent over WhatsApp — the core intake signal for hair/
+// dental/aesthetic triage. Fetched as an authenticated blob (plain <img src>
+// can't carry the panel's Bearer token) and shown inline in the thread.
+function MediaThumb({ messageId }){
+  const [src, setSrc] = useState(null);
+  useEffect(()=>{
+    let objectUrl = null;
+    let cancelled = false;
+    openAuthed("/messages/"+messageId+"/media", { newTab:false }).then((url)=>{
+      if(cancelled){ if(url) URL.revokeObjectURL(url); return; }
+      objectUrl = url; setSrc(url);
+    });
+    return ()=>{ cancelled = true; if(objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [messageId]);
+  if(!src) return html`<div class="sub" style=${{fontSize:"11px",margin:"4px 0 0"}}>Loading photo…</div>`;
+  return html`<a href=${src} target="_blank" rel="noopener" aria-label=${T("msg.photoAlt")}>
+    <img src=${src} alt=${T("msg.photoAlt")} style=${{maxWidth:"200px",borderRadius:"6px",display:"block",marginTop:"6px"}}/>
+  </a>`;
+}
+
+function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pendingDeposits, convTotal, onLoadMore, loadingMore, branches, partners, doctors }){
   const [detail, setDetail] = useState(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -975,10 +1311,24 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
   const [query, setQuery] = useState("");
   const msgsRef = useRef(null);
 
+  // Tracks the CURRENT selection so an in-flight loadDetail() can tell, once
+  // its response finally lands, whether it's still the one the coordinator
+  // is looking at. Without this: click lead A, click lead B before A's
+  // request resolves, and if A's response happens to land after B's (slower
+  // payload, network jitter — not exotic), it overwrites `detail` last — the
+  // list correctly highlights B, but the thread/profile/notes/payments panel
+  // on the right silently shows lead A's data under B's highlighted row.
+  const selectedIdRef = useRef(selectedId);
+  useEffect(()=>{ selectedIdRef.current = selectedId; }, [selectedId]);
+
   const loadDetail = useCallback(async (id)=>{
     if(!id){ setDetail(null); return; }
-    try{ setDetail(await api("/conversations/"+id)); setErr(null); }
-    catch(e){ setErr(e.message); }
+    try{
+      const data = await api("/conversations/"+id);
+      if(selectedIdRef.current !== id) return; // superseded by a newer selection — discard
+      setDetail(data); setErr(null);
+    }
+    catch(e){ if(selectedIdRef.current === id) setErr(e.message); }
   }, []);
 
   useEffect(()=>{ loadDetail(selectedId); }, [selectedId, loadDetail]);
@@ -992,10 +1342,54 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
       showToast(action==="takeover"?T("toast.takeover"):T("toast.handback")); }
     catch(e){ setErr(e.message); showToast(e.message,"error"); } finally{ setBusy(false); }
   };
+  // Deleting a patient is the only irreversible action in the panel, so it asks
+  // twice on purpose: once for intent, once for the name typed back. The API
+  // behind it also requires the lead's id echoed in the body, so a mis-fired
+  // request can't erase the wrong person even if both prompts are clicked past.
+  const removeLead = async ()=>{
+    if(!selectedId || !lead) return;
+    const who = leadIdentity(lead);
+    if(!window.confirm(T("inbox.confirmDelete").replace("{name}", who))) return;
+    const typed = window.prompt(T("inbox.confirmDeleteType").replace("{name}", who));
+    if(typed === null) return;
+    if(typed.trim() !== who){ showToast(T("inbox.deleteNameMismatch"),"error"); return; }
+    setBusy(true); setErr(null);
+    try{
+      await api("/conversations/"+selectedId, {method:"DELETE", body:JSON.stringify({confirmLeadId:selectedId})});
+      setSelectedId(null); setDetail(null);
+      await reloadShared();
+      showToast(T("inbox.deleted").replace("{name}", who));
+    }catch(e){ setErr(e.message); showToast(e.message,"error"); } finally{ setBusy(false); }
+  };
+
+  // The AI fills these fields in from what the patient writes, so a misheard
+  // name or a country guessed from a phone prefix lands on the record — and
+  // then on the quote PDF and the itinerary the patient actually receives.
+  // This is the only way to correct them.
+  const editLeadField = async (field, labelKey, current)=>{
+    if(!selectedId) return;
+    const v = window.prompt(T(labelKey), current || "");
+    if(v === null) return;
+    setBusy(true); setErr(null);
+    try{
+      await api("/conversations/"+selectedId, {method:"PATCH", body:JSON.stringify({[field]: v.trim()})});
+      await loadDetail(selectedId); await reloadShared();
+      showToast(T("admin.saved"));
+    }catch(e){ setErr(e.message); showToast(e.message,"error"); } finally{ setBusy(false); }
+  };
+
   const send = async ()=>{
     const t = text.trim(); if(!t||!selectedId) return;
     setBusy(true); setErr(null);
-    try{ await api("/conversations/"+selectedId+"/reply", {method:"POST", body:JSON.stringify({text:t})}); setText(""); await loadDetail(selectedId); await reloadShared(); showToast("Message sent"); }
+    try{
+      const res = await api("/conversations/"+selectedId+"/reply", {method:"POST", body:JSON.stringify({text:t})});
+      setText(""); await loadDetail(selectedId); await reloadShared();
+      // The backend already tracks whether the actual send succeeded
+      // (res.delivered) — a coordinator seeing a green "sent" toast when the
+      // patient never received anything is worse than no toast at all.
+      if(res.delivered===false) showToast(T("toast.messageSaveFailedDelivery"),"error");
+      else showToast(T("toast.messageSent"));
+    }
     catch(e){ setErr(e.message); showToast(e.message,"error"); } finally{ setBusy(false); }
   };
   const discharge = async ()=>{
@@ -1025,7 +1419,7 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
     // The patient spoke last, so the ball is on the clinic's side of the net.
     if(filter==="awaiting" && c.last_role!=="user") return false;
     if(filter==="deposit" && !depositLeadIds.has(c.lead_id)) return false;
-    if(q && !((c.name||"").toLowerCase().includes(q) || (c.phone||"").includes(q))) return false;
+    if(q && !((c.name||"").toLowerCase().includes(q) || (c.phone||"").includes(q) || (c.external_id||"").toLowerCase().includes(q))) return false;
     return true;
   });
   const urgentCount = (conversations||[]).filter(c=>c.urgent).length;
@@ -1060,7 +1454,7 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
             : filtered.map((c)=> html`
               <div class="conv-item ${c.lead_id===selectedId?"sel":""} ${c.last_role==="user"?"awaits":""}" key=${c.lead_id} onClick=${()=>setSelectedId(c.lead_id)}>
                 <div class="conv-top">
-                  <span class="conv-name">${flag(c.language)} ${c.name||c.phone}</span>
+                  <span class="conv-name">${flag(c.language)} ${leadIdentity(c)} ${channelBadge(c.source)}</span>
                   ${c.urgent?html`<span class="badge urgent">${T("badge.urgent")}</span>`
                     : c.conv_status==="needs_human"?html`<span class="badge hot">${T("badge.human")}</span>`
                     : c.last_role==="user"?html`<span class="badge awaiting" title=${T("inbox.awaitingMark")}>${T("filter.awaiting")}</span>`
@@ -1081,10 +1475,14 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
         <div class="glass thread">
           ${!detail? html`<div class="empty">${T("inbox.selectConv")}</div>` : html`
             <div class="thread-head">
-              <div><b>${flag(lead.language)} ${lead.name||lead.phone}</b> <span class="sub" style="margin:0">· ${lead.phone}</span></div>
-              ${isHuman
-                ? html`<button class="btn" disabled=${busy} onClick=${()=>act("handback")}>${T("btn.handBack")}</button>`
-                : html`<button class="btn warn" disabled=${busy} onClick=${()=>act("takeover")}>${T("btn.takeOver")}</button>`}
+              <div><b>${flag(lead.language)} ${leadIdentity(lead)}</b> ${channelBadge(lead.source)} ${lead.phone?html`<span class="sub" style="margin:0">· ${lead.phone}</span>`:null}</div>
+              <div style="display:flex;gap:6px;align-items:center">
+                ${isHuman
+                  ? html`<button class="btn" disabled=${busy} onClick=${()=>act("handback")}>${T("btn.handBack")}</button>`
+                  : html`<button class="btn warn" disabled=${busy} onClick=${()=>act("takeover")}>${T("btn.takeOver")}</button>`}
+                <button class="btn warn" title=${T("inbox.deleteLead")} aria-label=${T("inbox.deleteLead")}
+                  style=${{fontSize:"11px",padding:"5px 10px"}} disabled=${busy} onClick=${removeLead}>${T("btn.delete")}</button>
+              </div>
             </div>
             <div class="banner ${isHuman?"human":""}">
               ${isHuman ? T("inbox.youHandling") : T("inbox.aiHandling")}
@@ -1094,6 +1492,7 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
               ${(detail.messages||[]).map((m,i)=> html`
                 <div class="bubble ${m.role} ${rtl?"rtl":""}" key=${i}>
                   ${m.content}
+                  ${m.has_media? html`<${MediaThumb} messageId=${m.id}/>`:null}
                   <span class="meta">${m.role==="assistant"?T("msg.conciergeAgent"):T("msg.patient")} · ${fmtTime(m.created_at)}</span>
                 </div>`)}
               ${(detail.messages||[]).length===0?html`<div class="empty">${T("inbox.noMessages")}</div>`:null}
@@ -1110,8 +1509,14 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
         <!-- lead profile -->
         <div class="glass profile">
           ${!lead? html`<div class="empty">${T("inbox.leadDetails")}</div>` : html`
-            <div class="pf-name">${flag(lead.language)} ${lead.name||T("pf.unknown")}</div>
-            <div class="sub" style="margin:2px 0 14px">${lead.country||"—"} · ${lead.phone}</div>
+            <div class="pf-name">${flag(lead.language)} ${lead.name||T("pf.unknown")} ${channelBadge(lead.source)}</div>
+            <div class="sub" style="margin:2px 0 10px">${lead.country||"—"} · ${lead.phone || (lead.external_id ? `${CHANNEL_LABEL[lead.source]||lead.source} ID: ${lead.external_id}` : "—")}</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px">
+              <button class="btn" style=${{fontSize:"10.5px",padding:"3px 8px"}} disabled=${busy}
+                onClick=${()=>editLeadField("name","pf.editName",lead.name)}>${T("pf.editName")}</button>
+              <button class="btn" style=${{fontSize:"10.5px",padding:"3px 8px"}} disabled=${busy}
+                onClick=${()=>editLeadField("country","pf.editCountry",lead.country)}>${T("pf.editCountry")}</button>
+            </div>
             <div class="pf-row"><span class="k">${T("pf.leadScore")}</span><span>${lead.score??"–"}/100</span></div>
             <div class="scorebar"><i style=${{width:(lead.score||0)+"%"}}></i></div>
             <div class="pf-row" style="margin-top:12px"><span class="k">${T("pf.status")}</span><span>${lead.status||"–"}</span></div>
@@ -1119,7 +1524,7 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
             <div class="pf-row"><span class="k">${T("pf.language")}</span><span>${lead.language||"–"}</span></div>
             <div class="pf-row" style=${{alignItems:"center"}}>
               <span class="k">${T("branch.label")}</span>
-              <select style=${{maxWidth:"160px",fontSize:"12.5px"}} value=${lead.branch_id||""}
+              <select aria-label=${T("branch.label")} style=${{maxWidth:"160px",fontSize:"12.5px"}} value=${lead.branch_id||""}
                 onChange=${async (e)=>{
                   const v = e.target.value || null;
                   try{
@@ -1131,8 +1536,51 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
                 ${(branches||[]).map((b)=> html`<option key=${b.id} value=${b.id}>${b.name}</option>`)}
               </select>
             </div>
-            <div class="pf-row"><span class="k">${T("pf.treatment")}</span><span style="text-align:right;max-width:150px">${lead.treatment_interest||"–"}</span></div>
-            <div class="pf-row"><span class="k">${T("pf.budget")}</span><span>${lead.budget_hint||"–"}</span></div>
+            <div class="pf-row" style=${{alignItems:"center"}}>
+              <span class="k">${T("pf.partner")}</span>
+              <select aria-label=${T("pf.partner")} style=${{maxWidth:"160px",fontSize:"12.5px"}} value=${lead.partner_id||""}
+                onChange=${async (e)=>{
+                  const v = e.target.value || null;
+                  try{
+                    await api("/conversations/"+lead.id+"/partner",{method:"PUT",body:JSON.stringify({partner_id:v})});
+                    showToast(T("toast.branchSaved")); await loadDetail(lead.id); await reloadShared();
+                  }catch(ex){ showToast(ex.message,"error"); }
+                }}>
+                <option value="">${T("partner.none")}</option>
+                ${(partners||[]).map((p)=> html`<option key=${p.id} value=${p.id}>${p.name}</option>`)}
+              </select>
+            </div>
+            <div class="pf-row" style=${{alignItems:"center"}}>
+              <span class="k">${T("pf.doctor")}</span>
+              <select aria-label=${T("pf.doctor")} style=${{maxWidth:"160px",fontSize:"12.5px"}} value=${lead.doctor_id||""}
+                onChange=${async (e)=>{
+                  const v = e.target.value || null;
+                  try{
+                    await api("/conversations/"+lead.id+"/doctor",{method:"PUT",body:JSON.stringify({doctor_id:v})});
+                    showToast(T("toast.branchSaved")); await loadDetail(lead.id); await reloadShared();
+                  }catch(ex){ showToast(ex.message,"error"); }
+                }}>
+                <option value="">${T("doctor.none")}</option>
+                ${(doctors||[]).map((d)=> html`<option key=${d.id} value=${d.id}>${d.name}</option>`)}
+              </select>
+            </div>
+            ${lead.doctor_review_status? html`
+              <div class="pf-row"><span class="k">${T("tbl.reviewStatus")}</span>
+                <span class="badge ${lead.doctor_review_status==='approved'?'human':lead.doctor_review_status==='needs_info'?'urgent':''}">${T("review."+lead.doctor_review_status)}</span></div>
+              ${lead.doctor_note? html`<div class="med-note"><span class="lbl">${T("pf.doctor")}</span>${lead.doctor_note}</div>`:null}
+            `:null}
+            <div class="pf-row" style=${{alignItems:"center"}}><span class="k">${T("pf.treatment")}</span>
+              <span style="text-align:right;max-width:150px;display:flex;gap:5px;align-items:center;justify-content:flex-end">
+                ${lead.treatment_interest||"–"}
+                <button class="btn" title=${T("btn.edit")} aria-label=${T("pf.editTreatment")} style=${{fontSize:"10px",padding:"2px 6px",flex:"none"}}
+                  disabled=${busy} onClick=${()=>editLeadField("treatmentInterest","pf.editTreatment",lead.treatment_interest)}>✎</button>
+              </span></div>
+            <div class="pf-row" style=${{alignItems:"center"}}><span class="k">${T("pf.budget")}</span>
+              <span style="display:flex;gap:5px;align-items:center;justify-content:flex-end">
+                ${lead.budget_hint||"–"}
+                <button class="btn" title=${T("btn.edit")} aria-label=${T("pf.editBudget")} style=${{fontSize:"10px",padding:"2px 6px",flex:"none"}}
+                  disabled=${busy} onClick=${()=>editLeadField("budgetHint","pf.editBudget",lead.budget_hint)}>✎</button>
+              </span></div>
             <div class="pf-row"><span class="k">${T("pf.crmId")}</span><span>${lead.crm_lead_id||T("pf.notSynced")}</span></div>
             ${(()=>{ const clock = patientClock(lead.phone); return clock? html`
               <div class="pf-row"><span class="k">${T("pf.localTime")}</span>
@@ -1141,6 +1589,7 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
             <button class="btn" style="width:100%;margin-top:14px" disabled=${busy} onClick=${discharge}>${T("btn.markDischarged")}</button>
             <${Notes} leadId=${lead.id} notes=${detail.notes} onAdded=${()=>loadDetail(lead.id)} />
             <${Payments} leadId=${lead.id} payments=${detail.payments} onChanged=${()=>{ loadDetail(lead.id); reloadShared(); }} />
+            <${Costs} leadId=${lead.id} costs=${detail.costs} onChanged=${()=>{ loadDetail(lead.id); reloadShared(); }} />
             <${Quotes} leadId=${lead.id} quotes=${detail.quotes} onChanged=${()=>loadDetail(lead.id)} />
           `}
         </div>
@@ -1181,23 +1630,41 @@ function Notes({ leadId, notes, onAdded }){
 
 // Payments: the one number the rest of the app's "real" figures depend on.
 // A pending row can be marked paid or nudged with a reminder; nothing here is
-// ever visible to the patient.
+// ever visible to the patient — except the hosted Stripe checkout link itself,
+// which is the one thing that IS meant to reach them.
 const PAYMENT_TYPES = ["deposit","balance","full"];
+const PAYMENT_CURRENCIES = ["EUR","USD","GBP","TRY"];
 function Payments({ leadId, payments, onChanged }){
   const [amount,setAmount] = useState("");
+  const [currency,setCurrency] = useState("EUR");
   const [type,setType] = useState("deposit");
   const [dueDate,setDueDate] = useState("");
   const [busy,setBusy] = useState(false);
+  const [linkBusy,setLinkBusy] = useState(false);
 
   const add = async ()=>{
     const amt = Number(amount);
     if(!amt || amt<=0) return;
     setBusy(true);
     try{
-      await api("/conversations/"+leadId+"/payments", { method:"POST", body: JSON.stringify({ amount: amt, type, dueDate: dueDate||null }) });
+      await api("/conversations/"+leadId+"/payments", { method:"POST", body: JSON.stringify({ amount: amt, currency, type, dueDate: dueDate||null }) });
       setAmount(""); setDueDate(""); showToast(T("toast.paymentAdded")); await onChanged();
     }catch(e){ showToast(e.message,"error"); }
     finally{ setBusy(false); }
+  };
+  // One click: creates the payment row, generates a checkout link (Stripe or
+  // İyzico, picked by currency — see `provider` below) in the chosen
+  // currency, and sends it straight to the patient's own channel
+  // (WhatsApp/Instagram/Messenger) — no IBAN, no manual follow-up.
+  const createLink = async ()=>{
+    const amt = Number(amount);
+    if(!amt || amt<=0) return;
+    setLinkBusy(true);
+    try{
+      await api("/conversations/"+leadId+"/payments/link", { method:"POST", body: JSON.stringify({ amount: amt, currency, type, dueDate: dueDate||null }) });
+      setAmount(""); setDueDate(""); showToast(T("toast.paymentLinkSent")); await onChanged();
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setLinkBusy(false); }
   };
   const markPaid = async (id)=>{
     try{ await api("/payments/"+id, { method:"PUT", body: JSON.stringify({ status:"paid" }) }); showToast(T("toast.paymentPaid")); await onChanged(); }
@@ -1207,19 +1674,31 @@ function Payments({ leadId, payments, onChanged }){
     try{ await api("/payments/"+id, { method:"PUT", body: JSON.stringify({ reminder:true }) }); showToast(T("toast.reminderSet")); await onChanged(); }
     catch(e){ showToast(e.message,"error"); }
   };
+  const copyLink = async (url)=>{
+    try{ await navigator.clipboard.writeText(url); showToast(T("payments.copied")); }catch{}
+  };
+  // Mirrors the server's defaultProviderFor(): TRY → İyzico (the gateway a
+  // Turkish clinic entity can actually hold an account with), everything
+  // else → Stripe. Shown on the button so the coordinator isn't surprised by
+  // which one fires.
+  const provider = currency==="TRY" ? "iyzico" : "stripe";
 
   return html`<div class="notes">
     <div class="section-title" style=${{marginTop:"20px",marginBottom:"10px",fontSize:"13px"}}>${T("payments.title")}</div>
     <div style=${{display:"flex",gap:"6px"}}>
       <input type="number" min="0" step="0.01" placeholder=${T("payments.amount")} value=${amount}
         onInput=${(e)=>setAmount(e.target.value)} style=${{flex:"1",minWidth:"0"}}/>
-      <select value=${type} onChange=${(e)=>setType(e.target.value)} style=${{flex:"none"}}>
+      <select aria-label=${T("common.currency")} value=${currency} onChange=${(e)=>setCurrency(e.target.value)} style=${{flex:"none"}}>
+        ${PAYMENT_CURRENCIES.map((c)=> html`<option key=${c} value=${c}>${c}</option>`)}
+      </select>
+      <select aria-label=${T("payments.typeLabel")} value=${type} onChange=${(e)=>setType(e.target.value)} style=${{flex:"none"}}>
         ${PAYMENT_TYPES.map((t)=> html`<option key=${t} value=${t}>${T("payments.type."+t)}</option>`)}
       </select>
     </div>
     <input type="date" value=${dueDate} onInput=${(e)=>setDueDate(e.target.value)}
       style=${{width:"100%",marginTop:"6px"}} title=${T("payments.due")}/>
-    <button class="btn" style=${{marginTop:"8px",width:"100%"}} disabled=${busy||!amount} onClick=${add}>${T("payments.add")}</button>
+    <button class="btn primary" style=${{marginTop:"8px",width:"100%"}} disabled=${linkBusy||busy||!amount} onClick=${createLink}>${T("payments.createLink")} · ${T("payments.provider."+provider)}</button>
+    <button class="btn" style=${{marginTop:"6px",width:"100%"}} disabled=${busy||linkBusy||!amount} onClick=${add}>${T("payments.add")}</button>
     ${(payments||[]).length===0
       ? html`<div class="note-empty">${T("payments.empty")}</div>`
       : (payments||[]).map((pmt)=> html`<div class="note" key=${pmt.id}>
@@ -1227,13 +1706,62 @@ function Payments({ leadId, payments, onChanged }){
             ${T("payments.type."+pmt.type)} · ${pmt.currency} ${Number(pmt.amount).toLocaleString()}
             · <span class="badge ${pmt.status==='paid'?'human':pmt.status==='pending'?'awaiting':''}">${T("payments.status."+pmt.status)}</span>
             ${pmt.due_date? html` · ${T("payments.due")}: ${pmt.due_date}`:null}
+            ${pmt.provider? html` · <span class="badge">${T("payments.provider."+pmt.provider)||pmt.provider}</span>`:null}
           </div>
-          ${pmt.status==="pending"? html`<div style=${{display:"flex",gap:"6px",marginTop:"6px"}}>
+          ${pmt.status==="pending"? html`<div style=${{display:"flex",gap:"6px",marginTop:"6px",flexWrap:"wrap"}}>
             <button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} onClick=${()=>markPaid(pmt.id)}>${T("payments.markPaid")}</button>
             <button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${!!pmt.reminder_sent_at} onClick=${()=>remind(pmt.id)}>
               ${pmt.reminder_sent_at? T("payments.reminded")+" · "+fmtTime(pmt.reminder_sent_at) : T("payments.remind")}
             </button>
+            ${pmt.checkout_url? html`<button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} onClick=${()=>copyLink(pmt.checkout_url)}>${T("payments.copyLink")}</button>`:null}
           </div>`:null}
+          ${pmt.link_sent_at? html`<div class="note-meta" style=${{marginTop:"4px",fontSize:"11px"}}>${T("payments.linkSent")} · ${fmtTime(pmt.link_sent_at)}</div>`:null}
+        </div>`)}
+  </div>`;
+}
+
+const COST_CATEGORIES = ["hospital","driver","hotel","other"];
+function Costs({ leadId, costs, onChanged }){
+  const [amount,setAmount] = useState("");
+  const [category,setCategory] = useState("hospital");
+  const [currency,setCurrency] = useState("TRY");
+  const [busy,setBusy] = useState(false);
+
+  const add = async ()=>{
+    const amt = Number(amount);
+    if(!amt || amt<=0) return;
+    setBusy(true);
+    try{
+      await api("/conversations/"+leadId+"/costs", { method:"POST", body: JSON.stringify({ amount: amt, category, currency }) });
+      setAmount(""); showToast(T("toast.costAdded")); await onChanged();
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(false); }
+  };
+  const remove = async (id)=>{
+    try{ await api("/costs/"+id, { method:"DELETE" }); await onChanged(); }
+    catch(e){ showToast(e.message,"error"); }
+  };
+
+  return html`<div class="notes">
+    <div class="section-title" style=${{marginTop:"20px",marginBottom:"10px",fontSize:"13px"}}>${T("costs.title")}</div>
+    <div style=${{display:"flex",gap:"6px"}}>
+      <select aria-label=${T("costs.categoryLabel")} value=${category} onChange=${(e)=>setCategory(e.target.value)} style=${{flex:"1",fontSize:"12px"}}>
+        ${COST_CATEGORIES.map((c)=> html`<option key=${c} value=${c}>${T("costs.cat."+c)}</option>`)}
+      </select>
+      <input type="number" min="0" step="0.01" placeholder=${T("payments.amount")} value=${amount}
+        onInput=${(e)=>setAmount(e.target.value)} style=${{width:"80px"}}/>
+      <select aria-label=${T("common.currency")} value=${currency} onChange=${(e)=>setCurrency(e.target.value)} style=${{flex:"none",fontSize:"12px"}}>
+        ${["TRY","EUR","USD","GBP"].map((c)=> html`<option key=${c} value=${c}>${c}</option>`)}
+      </select>
+    </div>
+    <button class="btn" style=${{marginTop:"8px",width:"100%"}} disabled=${busy||!amount} onClick=${add}>${T("costs.add")}</button>
+    ${(costs||[]).length===0
+      ? html`<div class="note-empty">${T("costs.empty")}</div>`
+      : (costs||[]).map((c)=> html`<div class="note" key=${c.id}>
+          <div class="note-meta" style=${{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span>${T("costs.cat."+c.category)} · ${c.currency} ${Number(c.amount).toLocaleString()}</span>
+            <button class="btn" title=${T("costs.remove")} style=${{padding:"1px 6px",fontSize:"11px",flex:"none"}} onClick=${()=>remove(c.id)}>×</button>
+          </div>
         </div>`)}
   </div>`;
 }
@@ -1297,6 +1825,12 @@ function QuoteCard({ quote, open, onToggle, onChanged }){
     try{ await api("/quotes/"+quote.id+"/accept", { method:"POST" }); showToast(T("toast.quoteAccepted")); await onChanged(); }
     catch(e){ showToast(e.message,"error"); }
   };
+  const removeQuote = async ()=>{
+    if(!window.confirm(T("quotes.confirmDelete"))) return;
+    setBusy(true);
+    try{ await api("/quotes/"+quote.id, { method:"DELETE" }); showToast(T("admin.deleted")); await onChanged(); }
+    catch(e){ showToast(e.message,"error"); } finally{ setBusy(false); }
+  };
 
   const isDraft = quote.status === "draft";
   return html`<div class="note">
@@ -1319,9 +1853,21 @@ function QuoteCard({ quote, open, onToggle, onChanged }){
       <button class="btn" style=${{marginTop:"6px",width:"100%",fontSize:"11px",padding:"4px"}} disabled=${busy||!label.trim()||!price} onClick=${addItem}>${T("quotes.addItem")}</button>`:null}
       <div style=${{display:"flex",gap:"6px",marginTop:"8px",alignItems:"center"}}>
         ${isDraft? html`<select value=${quote.language} onChange=${(e)=>setLang(e.target.value)} style=${{fontSize:"11px",flex:"none"}}>
-          ${QUOTE_LANGS.map((l)=> html`<option key=${l} value=${l}>${flag(l)} ${l.toUpperCase()}</option>`)}
+          ${QUOTE_LANGS.map((l)=> html`<option key=${l} value=${l}>${flag(l)}</option>`)}
         </select>`:null}
-        <a href=${"/api/quotes/"+quote.id+"/pdf"} target="_blank" rel="noopener" class="btn" style=${{fontSize:"11px",padding:"4px 8px",textDecoration:"none"}}>${T("quotes.preview")}</a>
+        ${/* Opened as a plain link to the quote's own public token URL rather
+             than fetched-then-window.open'd like the panel's other downloads.
+             The PDF is rendered by headless Chromium and can take seconds on a
+             cold start; a window.open() that far past the click has lost its
+             user-gesture context and browsers silently block it as a popup, so
+             the button appeared to do nothing. This carries no bearer token by
+             design — the /file variant is the same unauthenticated, unguessable
+             URL the patient already receives, and unlike the bare token URL it
+             does NOT mark the quote "viewed", so previewing it internally can't
+             fake a patient having opened it. */ null}
+        <a class="btn" style=${{fontSize:"11px",padding:"4px 8px",textDecoration:"none",display:"inline-flex",alignItems:"center"}}
+           href=${"/api/public/quote/"+quote.view_token+"/file"} target="_blank" rel="noopener">${T("quotes.preview")}</a>
+        ${isDraft? html`<button class="btn warn" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${busy} onClick=${removeQuote}>${T("btn.delete")}</button>`:null}
         ${isDraft? html`<button class="btn primary" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${busy||!(quote.items||[]).length} onClick=${send}>${T("quotes.send")}</button>`
           : quote.status!=="accepted"? html`<button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} onClick=${accept}>${T("quotes.accept")}</button>`:null}
       </div>
@@ -1367,13 +1913,13 @@ function MiniBarChart({ data }){
       return html`<g key=${i}>
         <rect class=${cls} x=${x+2} y=${base-drawn} width=${Math.max(1,bw-5)} height=${drawn}>
           <title>${d.count} ${T("chart.leads")}</title></rect>
-        <text class="chart-label" x=${x+bw/2} y=${h-8} textAnchor="middle">${new Date(d.day).getDate()}</text>
+        <text class="chart-label" x=${x+bw/2} y=${h-8} textAnchor="middle">${Number(d.day.slice(8,10))}</text>
       </g>`;
     })}
   </svg>`;
 }
 
-function Analytics({ analytics }){
+function Analytics({ analytics, profitability }){
   if(!analytics) return html`<div class="empty">${T("load.analytics")}</div>`;
   const f=analytics.funnel||{};
   const stages=[[T("funnel.leads"),f.leads],[T("funnel.qualified"),f.qualified],[T("funnel.handedOver"),f.handed_over],[T("funnel.booked"),f.booked]];
@@ -1388,6 +1934,19 @@ function Analytics({ analytics }){
       <div class="glass kpi"><div class="label">${T("analytics.revenue")}</div><div class="val">€${analytics.revenue.toLocaleString()}</div><div class="foot">${T("analytics.fromBooked")}</div></div>
       <div class="glass kpi"><div class="label">${T("analytics.pendingDeposits")}</div><div class="val alert">€${(analytics.payments_pending||0).toLocaleString()}</div><div class="foot">${analytics.payments_pending_count||0} ${T("payments.pendingBadge")}</div></div>
     </div>
+
+    ${profitability? html`
+      <div style="margin-bottom:16px">
+        <div class="section-title" style="margin-top:0">${T("profit.title")}</div>
+        <div class="kpis" style="margin-bottom:0">
+          <div class="glass kpi"><div class="label">${T("profit.revenue")}</div><div class="val">€${profitability.revenue_eur.toLocaleString()}</div></div>
+          <div class="glass kpi"><div class="label">${T("profit.costs")}</div><div class="val alert">€${profitability.costs_eur.toLocaleString()}</div></div>
+          <div class="glass kpi"><div class="label">${T("profit.net")}</div><div class="val" style="color:var(--brass)">€${profitability.net_margin_eur.toLocaleString()}</div><div class="foot">${profitability.margin_pct==null?"–":profitability.margin_pct+"% "+T("profit.margin")}</div></div>
+        </div>
+        <div class="sub" style="margin:10px 0 0;font-size:11.5px">${T("profit.note")}</div>
+        ${profitability.rates_live===false? html`<div class="err" style="margin-top:8px;font-size:11.5px">${T("profit.stale")}</div>`:null}
+      </div>`:null}
+
     <div class="glass" style="padding:16px 18px;margin-bottom:16px">
       <div class="section-title" style="margin-top:0">${T("analytics.funnel")}</div>
       ${stages.map((s,i)=> html`<div key=${i} style="margin:9px 0">
@@ -1441,14 +2000,14 @@ function Campaigns({ templates, reloadShared }){
     <h1>${T("campaigns.title")}</h1>
     <div class="sub">${T("campaigns.sub")}</div>
     <div class="glass" style="padding:18px;max-width:620px">
-      <label style="display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px">${T("campaigns.template")}</label>
-      <select value=${tpl||""} onChange=${(e)=>setTpl(e.target.value)} style="width:100%;margin-bottom:14px">
+      <label for="campaigns-template" style="display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px">${T("campaigns.template")}</label>
+      <select id="campaigns-template" value=${tpl||""} onChange=${(e)=>setTpl(e.target.value)} style="width:100%;margin-bottom:14px">
         ${templates.map(t=> html`<option key=${t.key} value=${t.key}>${t.label}</option>`)}
       </select>
-      ${needsOffer? html`<label style="display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px">${T("campaigns.offerText")}</label>
-        <input value=${offer} onInput=${(e)=>setOffer(e.target.value)} style="width:100%;margin-bottom:14px"/>`:null}
-      <label style="display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px">${T("campaigns.segment")}</label>
-      <select value=${segment} onChange=${(e)=>setSegment(e.target.value)} style="width:100%;margin-bottom:14px">
+      ${needsOffer? html`<label for="campaigns-offer" style="display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px">${T("campaigns.offerText")}</label>
+        <input id="campaigns-offer" value=${offer} onInput=${(e)=>setOffer(e.target.value)} style="width:100%;margin-bottom:14px"/>`:null}
+      <label for="campaigns-segment" style="display:block;font-size:12px;color:var(--ink-2);margin-bottom:5px">${T("campaigns.segment")}</label>
+      <select id="campaigns-segment" value=${segment} onChange=${(e)=>setSegment(e.target.value)} style="width:100%;margin-bottom:14px">
         <option value="past">${T("seg.past")}</option>
         <option value="hot">${T("kpi.hotLeads")}</option>
         <option value="new">${T("seg.new")}</option>
@@ -1459,7 +2018,7 @@ function Campaigns({ templates, reloadShared }){
       <button class="btn primary" disabled=${busy||!tpl} onClick=${send}>${busy?T("btn.sending"):T("btn.sendBroadcast")}</button>
       ${result? (result.error
         ? html`<div class="err" style="margin-top:12px">${result.error}</div>`
-        : html`<div class="est" style="margin-top:12px">✅ ${T("campaigns.sentTo")} ${result.sent}/${result.recipients} ${T("campaigns.recipients")} (${T("campaigns.templateLabel")}: ${result.template}).</div>`):null}
+        : html`<div class="est" style="margin-top:12px">${T("campaigns.sentTo")} ${result.sent}/${result.recipients} ${T("campaigns.recipients")} (${T("campaigns.templateLabel")}: ${result.template}).</div>`):null}
     </div>
   </div>`;
 }
@@ -1498,10 +2057,10 @@ function PromptStudio(){
     <div class="sub">${T("studio.sub")}</div>
     <div style="max-width:720px">
       <div class="glass" style="padding:18px;margin-bottom:14px">
-        <label class="fl">${T("studio.clinicName")}</label><input value=${p.name||""} onInput=${e=>set("name",e.target.value)} style="width:100%;margin-bottom:12px"/>
-        <label class="fl">${T("studio.city")}</label><input value=${p.city||""} onInput=${e=>set("city",e.target.value)} style="width:100%;margin-bottom:12px"/>
-        <label class="fl">${T("studio.languages")}</label><input value=${langs} onInput=${e=>set("languages",e.target.value)} style="width:100%;margin-bottom:12px"/>
-        <label class="fl">${T("studio.tone")}</label><textarea onInput=${e=>set("tone",e.target.value)} style="width:100%;min-height:54px">${p.tone||""}</textarea>
+        <label class="fl" for="studio-name">${T("studio.clinicName")}</label><input id="studio-name" value=${p.name||""} onInput=${e=>set("name",e.target.value)} style="width:100%;margin-bottom:12px"/>
+        <label class="fl" for="studio-city">${T("studio.city")}</label><input id="studio-city" value=${p.city||""} onInput=${e=>set("city",e.target.value)} style="width:100%;margin-bottom:12px"/>
+        <label class="fl" for="studio-langs">${T("studio.languages")}</label><input id="studio-langs" value=${langs} onInput=${e=>set("languages",e.target.value)} style="width:100%;margin-bottom:12px"/>
+        <label class="fl" for="studio-tone">${T("studio.tone")}</label><textarea id="studio-tone" onInput=${e=>set("tone",e.target.value)} style="width:100%;min-height:54px">${p.tone||""}</textarea>
       </div>
       <div class="glass" style="padding:18px;margin-bottom:14px">
         <div class="section-title" style="margin-top:0">${T("studio.treatments")}</div>
@@ -1517,8 +2076,8 @@ function PromptStudio(){
         <button class="btn" onClick=${addTr}>${T("btn.addTreatment")}</button>
       </div>
       <div class="glass" style="padding:18px;margin-bottom:14px">
-        <label class="fl">${T("studio.availability")}</label><input value=${p.availabilityNote||""} onInput=${e=>set("availabilityNote",e.target.value)} style="width:100%;margin-bottom:12px"/>
-        <label class="fl">${T("studio.bookingPolicy")}</label><textarea onInput=${e=>set("bookingPolicy",e.target.value)} style="width:100%;min-height:54px">${p.bookingPolicy||""}</textarea>
+        <label class="fl" for="studio-avail">${T("studio.availability")}</label><input id="studio-avail" value=${p.availabilityNote||""} onInput=${e=>set("availabilityNote",e.target.value)} style="width:100%;margin-bottom:12px"/>
+        <label class="fl" for="studio-booking">${T("studio.bookingPolicy")}</label><textarea id="studio-booking" onInput=${e=>set("bookingPolicy",e.target.value)} style="width:100%;min-height:54px">${p.bookingPolicy||""}</textarea>
       </div>
       <button class="btn primary" disabled=${busy} onClick=${save}>${busy?T("btn.saving"):T("btn.saveTeach")}</button>
       ${saved? html`<span style="margin-left:12px;color:var(--pos)">${T("studio.saved")}</span>`:null}
@@ -1527,17 +2086,339 @@ function PromptStudio(){
   </div>`;
 }
 
-function Consultants({ data }){
+function Partners({ partners, reloadShared }){
+  const [name,setName]=useState("");
+  const [email,setEmail]=useState("");
+  const [rate,setRate]=useState("10");
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState(null);
+  const [justCreated,setJustCreated]=useState(null); // { name, api_token } — shown once
+  const [copied,setCopied]=useState(false);
+
+  const create=async(e)=>{
+    e.preventDefault();
+    if(!name.trim()) return;
+    setBusy(true); setErr(null);
+    try{
+      const p = await api("/partners",{method:"POST",body:JSON.stringify({name:name.trim(),email:email.trim()||undefined,commissionRate:Number(rate)})});
+      setJustCreated(p); setName(""); setEmail(""); setRate("10");
+      await reloadShared();
+    }catch(ex){ setErr(ex.message); } finally{ setBusy(false); }
+  };
+
+  const portalLink = justCreated ? location.origin+"/panel/partner.html?token="+encodeURIComponent(justCreated.api_token) : "";
+  const copyLink = async ()=>{
+    try{ await navigator.clipboard.writeText(portalLink); setCopied(true); setTimeout(()=>setCopied(false),1600); }catch{}
+  };
+  const regenerate=async(p)=>{
+    if(!window.confirm(T("partners.confirmRegenerate"))) return;
+    setBusy(true); setErr(null);
+    try{
+      const r = await api("/partners/"+p.id+"/regenerate",{method:"POST"});
+      setJustCreated(r); await reloadShared();
+    }catch(ex){ showToast(ex.message,"error"); } finally{ setBusy(false); }
+  };
+  const edit=async(p)=>{
+    const name=window.prompt(T("admin.name"), p.name); if(name===null||!name.trim()) return;
+    const rate=window.prompt(T("partners.commission"), p.commission_rate); if(rate===null) return;
+    setBusy(true);
+    try{
+      await api("/partners/"+p.id,{method:"PATCH",body:JSON.stringify({name:name.trim(),commissionRate:Number(rate)})});
+      await reloadShared(); showToast(T("admin.saved"));
+    }catch(ex){ showToast(ex.message,"error"); } finally{ setBusy(false); }
+  };
+  const remove=async(p)=>{
+    if(!window.confirm(T("admin.confirmDeletePartner").replace("{name}", p.name))) return;
+    setBusy(true);
+    try{ await api("/partners/"+p.id,{method:"DELETE"}); await reloadShared(); showToast(T("admin.deleted")); }
+    catch(ex){ showToast(ex.message,"error"); } finally{ setBusy(false); }
+  };
+
+  return html`<div>
+    <h1>${T("nav.partners")}</h1>
+    <div class="sub">${T("partners.sub")}</div>
+
+    ${justCreated? html`
+      <div class="glass" style=${{padding:"16px 18px",marginBottom:"18px",borderLeft:"3px solid var(--brass)"}}>
+        <div style=${{fontWeight:700,marginBottom:8}}>${T("partners.tokenCreated")}</div>
+        <div class="note-input" style=${{fontFamily:"var(--mono)",fontSize:"12px",padding:"8px 10px",wordBreak:"break-all"}}>${justCreated.api_token}</div>
+        <div style=${{marginTop:10,fontSize:"12px",color:"var(--ink-2)"}}>${T("partners.portalLink")}</div>
+        <div style=${{display:"flex",gap:8,marginTop:4}}>
+          <div class="note-input" style=${{flex:1,fontFamily:"var(--mono)",fontSize:"11.5px",padding:"8px 10px",wordBreak:"break-all"}}>${portalLink}</div>
+          <button class="btn" style=${{flex:"none"}} onClick=${copyLink}>${copied?T("partners.copied"):T("partners.copy")}</button>
+        </div>
+      </div>`:null}
+
+    <div class="glass" style="padding:18px;max-width:520px;margin-bottom:20px">
+      <form onSubmit=${create}>
+        <label class="fl" for="partner-name">${T("partners.name")}</label>
+        <input id="partner-name" value=${name} onInput=${e=>setName(e.target.value)} style="width:100%;margin-bottom:10px" required/>
+        <label class="fl" for="partner-email">${T("partners.email")}</label>
+        <input id="partner-email" type="email" value=${email} onInput=${e=>setEmail(e.target.value)} style="width:100%;margin-bottom:10px"/>
+        <label class="fl" for="partner-rate">${T("partners.commission")}</label>
+        <input id="partner-rate" type="number" min="0" max="100" step="0.5" value=${rate} onInput=${e=>setRate(e.target.value)} style="width:100%;margin-bottom:12px"/>
+        <button class="btn primary" type="submit" disabled=${busy||!name.trim()}>${busy?T("btn.saving"):T("partners.create")}</button>
+        ${err? html`<div class="err" style="margin-top:10px">${err}</div>`:null}
+      </form>
+    </div>
+
+    <div class="glass" style="padding:4px 0">
+      ${(partners||[]).length===0 ? html`<div class="empty">${T("partners.empty")}</div>` : html`
+        <div class="rowgrid rowhead" style="display:grid;grid-template-columns:1.1fr 1.1fr .5fr .45fr 1.5fr;gap:8px;padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+          <span>${T("tbl.partner")}</span><span>${T("tbl.email")}</span><span>${T("tbl.rate")}</span><span>${T("tbl.active")}</span><span></span>
+        </div>
+        ${(partners||[]).map((p,i)=> html`<div key=${i} class="rowgrid" style="display:grid;grid-template-columns:1.1fr 1.1fr .5fr .45fr 1.5fr;gap:8px;padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+          <span style="font-weight:700">${p.name}</span>
+          <span style="color:var(--ink-2);font-size:12.5px">${p.email||"—"}</span>
+          <span>${p.commission_rate}%</span>
+          <span>${p.active? "✓" : "—"}</span>
+          <span class="rowactions" style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap">
+            <button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${busy} onClick=${()=>edit(p)}>${T("btn.edit")}</button>
+            <button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${busy} onClick=${()=>regenerate(p)}>${T("partners.regenerate")}</button>
+            <button class="btn warn" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${busy} onClick=${()=>remove(p)}>${T("btn.delete")}</button>
+          </span>
+        </div>`)}
+      `}
+    </div>
+  </div>`;
+}
+
+function Doctors({ doctors, reloadShared }){
+  const [name,setName]=useState("");
+  const [email,setEmail]=useState("");
+  const [specialty,setSpecialty]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState(null);
+  const [justCreated,setJustCreated]=useState(null); // { name, api_token } — shown once
+  const [copied,setCopied]=useState(false);
+
+  const create=async(e)=>{
+    e.preventDefault();
+    if(!name.trim()) return;
+    setBusy(true); setErr(null);
+    try{
+      const d = await api("/doctors",{method:"POST",body:JSON.stringify({name:name.trim(),email:email.trim()||undefined,specialty:specialty.trim()||undefined})});
+      setJustCreated(d); setName(""); setEmail(""); setSpecialty("");
+      await reloadShared();
+    }catch(ex){ setErr(ex.message); } finally{ setBusy(false); }
+  };
+
+  const portalLink = justCreated ? location.origin+"/panel/doctor.html?token="+encodeURIComponent(justCreated.api_token) : "";
+  const copyLink = async ()=>{
+    try{ await navigator.clipboard.writeText(portalLink); setCopied(true); setTimeout(()=>setCopied(false),1600); }catch{}
+  };
+  const edit=async(d)=>{
+    const name=window.prompt(T("admin.name"), d.name); if(name===null||!name.trim()) return;
+    const spec=window.prompt(T("doctors.specialty"), d.specialty||""); if(spec===null) return;
+    setBusy(true);
+    try{
+      await api("/doctors/"+d.id,{method:"PATCH",body:JSON.stringify({name:name.trim(),specialty:spec.trim()})});
+      await reloadShared(); showToast(T("admin.saved"));
+    }catch(ex){ showToast(ex.message,"error"); } finally{ setBusy(false); }
+  };
+  const remove=async(d)=>{
+    if(!window.confirm(T("admin.confirmDeleteDoctor").replace("{name}", d.name))) return;
+    setBusy(true);
+    try{ await api("/doctors/"+d.id,{method:"DELETE"}); await reloadShared(); showToast(T("admin.deleted")); }
+    catch(ex){ showToast(ex.message,"error"); } finally{ setBusy(false); }
+  };
+  const regenerate=async(d)=>{
+    if(!window.confirm(T("partners.confirmRegenerate"))) return;
+    setBusy(true); setErr(null);
+    try{
+      const r = await api("/doctors/"+d.id+"/regenerate",{method:"POST"});
+      setJustCreated(r); await reloadShared();
+    }catch(ex){ showToast(ex.message,"error"); } finally{ setBusy(false); }
+  };
+
+  return html`<div>
+    <h1>${T("nav.doctors")}</h1>
+    <div class="sub">${T("doctors.sub")}</div>
+
+    ${justCreated? html`
+      <div class="glass" style=${{padding:"16px 18px",marginBottom:"18px",borderLeft:"3px solid var(--brass)"}}>
+        <div style=${{fontWeight:700,marginBottom:8}}>${T("doctors.tokenCreated")}</div>
+        <div class="note-input" style=${{fontFamily:"var(--mono)",fontSize:"12px",padding:"8px 10px",wordBreak:"break-all"}}>${justCreated.api_token}</div>
+        <div style=${{marginTop:10,fontSize:"12px",color:"var(--ink-2)"}}>${T("doctors.portalLink")}</div>
+        <div style=${{display:"flex",gap:8,marginTop:4}}>
+          <div class="note-input" style=${{flex:1,fontFamily:"var(--mono)",fontSize:"11.5px",padding:"8px 10px",wordBreak:"break-all"}}>${portalLink}</div>
+          <button class="btn" style=${{flex:"none"}} onClick=${copyLink}>${copied?T("partners.copied"):T("partners.copy")}</button>
+        </div>
+      </div>`:null}
+
+    <div class="glass" style="padding:18px;max-width:520px;margin-bottom:20px">
+      <form onSubmit=${create}>
+        <label class="fl" for="doctor-name">${T("doctors.name")}</label>
+        <input id="doctor-name" value=${name} onInput=${e=>setName(e.target.value)} style="width:100%;margin-bottom:10px" required/>
+        <label class="fl" for="doctor-email">${T("doctors.email")}</label>
+        <input id="doctor-email" type="email" value=${email} onInput=${e=>setEmail(e.target.value)} style="width:100%;margin-bottom:10px"/>
+        <label class="fl" for="doctor-specialty">${T("doctors.specialty")}</label>
+        <input id="doctor-specialty" value=${specialty} onInput=${e=>setSpecialty(e.target.value)} style="width:100%;margin-bottom:12px"/>
+        <button class="btn primary" type="submit" disabled=${busy||!name.trim()}>${busy?T("btn.saving"):T("doctors.create")}</button>
+        ${err? html`<div class="err" style="margin-top:10px">${err}</div>`:null}
+      </form>
+    </div>
+
+    <div class="glass" style="padding:4px 0">
+      ${(doctors||[]).length===0 ? html`<div class="empty">${T("doctors.empty")}</div>` : html`
+        <div class="rowgrid rowhead" style="display:grid;grid-template-columns:1fr 1fr .8fr .45fr 1.5fr;gap:8px;padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+          <span>${T("tbl.doctor")}</span><span>${T("tbl.email")}</span><span>${T("tbl.specialty")}</span><span>${T("tbl.active")}</span><span></span>
+        </div>
+        ${(doctors||[]).map((d,i)=> html`<div key=${i} class="rowgrid" style="display:grid;grid-template-columns:1fr 1fr .8fr .45fr 1.5fr;gap:8px;padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+          <span style="font-weight:700">${d.name}</span>
+          <span style="color:var(--ink-2);font-size:12.5px">${d.email||"—"}</span>
+          <span style="color:var(--ink-2);font-size:12.5px">${d.specialty||"—"}</span>
+          <span>${d.active? "✓" : "—"}</span>
+          <span class="rowactions" style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap">
+            <button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${busy} onClick=${()=>edit(d)}>${T("btn.edit")}</button>
+            <button class="btn" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${busy} onClick=${()=>regenerate(d)}>${T("partners.regenerate")}</button>
+            <button class="btn warn" style=${{fontSize:"11px",padding:"4px 8px"}} disabled=${busy} onClick=${()=>remove(d)}>${T("btn.delete")}</button>
+          </span>
+        </div>`)}
+      `}
+    </div>
+  </div>`;
+}
+
+// Languages the clinic serves, as the ISO codes assignCoordinatorByLanguage
+// matches on — a fixed checkbox set rather than free text, so a coordinator
+// can't be saved with a language the matcher will never look up.
+const STAFF_LANGS=["tr","en","ar","de","ru","fr","it"];
+const DEVICE_TYPES=["operating_room","device","chair"];
+
+// Shared by the three management panels below: a row's active switch. Kept in
+// one place because the "deactivate, then be able to bring it back" behaviour
+// is what makes these rosters safe to edit during a live demo.
+function ActiveToggle({ row, busy, onToggle }){
+  return html`<button class="btn ${row.active?"":"primary"}"
+    style=${{fontSize:"11px",padding:"4px 10px",justifySelf:"end"}}
+    disabled=${busy} onClick=${()=>onToggle(row)}>
+    ${row.active? T("admin.deactivate") : T("admin.activate")}
+  </button>`;
+}
+
+function ConsultantAdmin({ branches, onChanged }){
+  const [roster,setRoster]=useState(null);
+  const [name,setName]=useState("");
+  const [langs,setLangs]=useState(["en"]);
+  const [branchId,setBranchId]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState(null);
+  const [editing,setEditing]=useState(null); // { id, name, languages, branch_id }
+
+  const load=useCallback(()=>{ api("/consultants/all").then(setRoster).catch(x=>setErr(x.message)); },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  const toggleLang=(l)=> setLangs(ls=> ls.includes(l)? ls.filter(x=>x!==l) : [...ls,l]);
+  const toggleEditLang=(l)=> setEditing(e=>({...e, languages: e.languages.includes(l)? e.languages.filter(x=>x!==l) : [...e.languages,l]}));
+
+  const create=async(e)=>{
+    e.preventDefault(); if(!name.trim()||!langs.length) return;
+    setBusy(true); setErr(null);
+    try{
+      await api("/consultants",{method:"POST",body:JSON.stringify({name:name.trim(),languages:langs,branchId:branchId||undefined})});
+      setName(""); setLangs(["en"]); setBranchId("");
+      load(); onChanged?.(); showToast(T("admin.consultantAdded"));
+    }catch(x){ setErr(x.message); } finally{ setBusy(false); }
+  };
+  const saveEdit=async()=>{
+    if(!editing.name.trim()||!editing.languages.length) return;
+    setBusy(true);
+    try{
+      await api("/consultants/"+editing.id,{method:"PATCH",body:JSON.stringify({
+        name:editing.name.trim(), languages:editing.languages, branchId:editing.branch_id||null })});
+      setEditing(null); load(); onChanged?.(); showToast(T("admin.saved"));
+    }catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+  const toggle=async(c)=>{
+    setBusy(true);
+    try{ await api("/consultants/"+c.id,{method:"PATCH",body:JSON.stringify({active:!c.active})}); load(); onChanged?.(); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+  const remove=async(c)=>{
+    if(!window.confirm(T("admin.confirmDeleteConsultant").replace("{name}", c.name))) return;
+    setBusy(true);
+    try{
+      const r=await api("/consultants/"+c.id,{method:"DELETE"});
+      load(); onChanged?.();
+      showToast(r.leads_unassigned? T("admin.deletedUnassigned").replace("{n}", r.leads_unassigned) : T("admin.deleted"));
+    }catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+
+  const grid="display:grid;grid-template-columns:1.2fr 1fr .9fr 1.5fr;gap:8px";
+  return html`<div style="margin-top:26px">
+    <div class="section-title">${T("admin.consultantRoster")}</div>
+    <div class="glass" style="padding:18px;max-width:560px;margin-bottom:16px">
+      <form onSubmit=${create}>
+        <label class="fl" for="cons-name">${T("admin.name")}</label>
+        <input id="cons-name" value=${name} onInput=${e=>setName(e.target.value)} style="width:100%;margin-bottom:12px" required/>
+        <label class="fl">${T("admin.languages")}</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+          ${STAFF_LANGS.map(l=> html`<button key=${l} type="button" class="chip ${langs.includes(l)?"on":""}"
+            aria-pressed=${langs.includes(l)} onClick=${()=>toggleLang(l)}>${l.toUpperCase()}</button>`)}
+        </div>
+        <label class="fl" for="cons-branch">${T("admin.branch")}</label>
+        <select id="cons-branch" value=${branchId} onChange=${e=>setBranchId(e.target.value)} style="width:100%;margin-bottom:14px">
+          <option value="">${T("admin.noBranch")}</option>
+          ${(branches||[]).map(b=> html`<option key=${b.id} value=${b.id}>${b.name}</option>`)}
+        </select>
+        <button class="btn primary" type="submit" disabled=${busy||!name.trim()||!langs.length}>
+          ${busy?T("btn.saving"):T("admin.addConsultant")}
+        </button>
+        ${err? html`<div class="err" style="margin-top:10px">${err}</div>`:null}
+      </form>
+    </div>
+    <div class="glass" style="padding:4px 0">
+      ${!roster? html`<div class="empty">${T("load.generic")}</div>`
+        : roster.length===0? html`<div class="empty">${T("admin.noConsultants")}</div>`
+        : html`<div class="rowgrid rowhead" style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+            <span>${T("tbl.coordinator")}</span><span>${T("tbl.languages")}</span><span>${T("admin.branch")}</span><span></span>
+          </div>
+          ${roster.map(c=> editing && editing.id===c.id
+            ? html`<div key=${c.id} style="padding:14px 18px;border-bottom:1px solid var(--rule);background:var(--accent-wash)">
+                <label class="fl" for=${"edit-name-"+c.id}>${T("admin.name")}</label>
+                <input id=${"edit-name-"+c.id} value=${editing.name} onInput=${e=>setEditing({...editing,name:e.target.value})} style="width:100%;max-width:320px;margin-bottom:10px"/>
+                <label class="fl">${T("admin.languages")}</label>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+                  ${STAFF_LANGS.map(l=> html`<button key=${l} type="button" class="chip ${editing.languages.includes(l)?"on":""}"
+                    aria-pressed=${editing.languages.includes(l)} onClick=${()=>toggleEditLang(l)}>${l.toUpperCase()}</button>`)}
+                </div>
+                <label class="fl" for=${"edit-branch-"+c.id}>${T("admin.branch")}</label>
+                <select id=${"edit-branch-"+c.id} value=${editing.branch_id||""} onChange=${e=>setEditing({...editing,branch_id:e.target.value})} style="width:100%;max-width:320px;margin-bottom:12px">
+                  <option value="">${T("admin.noBranch")}</option>
+                  ${(branches||[]).map(b=> html`<option key=${b.id} value=${b.id}>${b.name}</option>`)}
+                </select>
+                <div style="display:flex;gap:6px">
+                  <button class="btn primary" disabled=${busy||!editing.name.trim()||!editing.languages.length} onClick=${saveEdit}>${T("btn.save")}</button>
+                  <button class="btn" disabled=${busy} onClick=${()=>setEditing(null)}>${T("btn.cancel")}</button>
+                </div>
+              </div>`
+            : html`<div key=${c.id} class="rowgrid" style="${grid};padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+                <span style="font-weight:700">${c.name}${c.active?null:html` <span class="badge">${T("admin.inactive")}</span>`}</span>
+                <span style="color:var(--ink-2);font-size:12px">${(c.languages||[]).map(x=>x.toUpperCase()).join(', ')}</span>
+                <span style="color:var(--ink-2);font-size:12.5px">${(branches||[]).find(b=>b.id===c.branch_id)?.name || T("admin.noBranch")}</span>
+                <span class="rowactions" style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap">
+                  <button class="btn" style=${{fontSize:"11px",padding:"4px 9px"}} disabled=${busy}
+                    onClick=${()=>setEditing({id:c.id,name:c.name,languages:[...(c.languages||[])],branch_id:c.branch_id||""})}>${T("btn.edit")}</button>
+                  <${ActiveToggle} row=${c} busy=${busy} onToggle=${toggle}/>
+                  <button class="btn warn" style=${{fontSize:"11px",padding:"4px 9px"}} disabled=${busy} onClick=${()=>remove(c)}>${T("btn.delete")}</button>
+                </span>
+              </div>`)}`}
+    </div>
+  </div>`;
+}
+
+function Consultants({ data, branches, reloadShared }){
   if(!data) return html`<div class="empty">${T("load.generic")}</div>`;
   const grid="display:grid;grid-template-columns:1.4fr 1fr repeat(5,.7fr);gap:8px";
   return html`<div>
     <h1>${T("nav.consultants")}</h1>
     <div class="sub">${T("consultants.sub")}</div>
     <div class="glass" style="padding:4px 0">
-      <div style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+      <div class="rowgrid rowhead" style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
         <span>${T("tbl.coordinator")}</span><span>${T("tbl.languages")}</span><span>${T("tbl.assigned")}</span><span>${T("tbl.hot")}</span><span>${T("tbl.handed")}</span><span>${T("tbl.booked")}</span><span>${T("tbl.conversion")}</span>
       </div>
-      ${(data.coordinators||[]).map((c,i)=> html`<div key=${i} style="${grid};padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+      ${(data.coordinators||[]).map((c,i)=> html`<div key=${i} class="rowgrid" style="${grid};padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
         <span style="font-weight:700">${c.name}</span>
         <span style="color:var(--ink-2);font-size:12px">${(c.languages||[]).join(', ')}</span>
         <span>${c.assigned}</span>
@@ -1547,6 +2428,7 @@ function Consultants({ data }){
         <span style="font-weight:600">${c.conversion==null?"–":c.conversion+"%"}</span>
       </div>`)}
     </div>
+    <${ConsultantAdmin} branches=${branches} onChanged=${reloadShared}/>
   </div>`;
 }
 
@@ -1558,11 +2440,11 @@ function Matching({ data }){
     <h1>${T("matching.title")}</h1>
     <div class="sub">${T("matching.sub")}</div>
     ${(data.unmatched_languages||[]).length
-      ? html`<div class="err" style="margin-bottom:16px">${T("matching.noCoverage")} ${(data.unmatched_languages||[]).map(flag).join(' ')} ${(data.unmatched_languages||[]).join(', ')} ${T("matching.bridging")}</div>`
+      ? html`<div class="err" style="margin-bottom:16px">${T("matching.noCoverage")} ${(data.unmatched_languages||[]).map(flag).join(', ')} ${T("matching.bridging")}</div>`
       : html`<div class="est" style="margin-bottom:16px">${T("matching.allCovered")}</div>`}
     <div class="glass" style="padding:16px 18px">
       <div class="section-title" style="margin-top:0">${T("matching.coverage")}</div>
-      ${Object.entries(langMap).map(([l,names],i)=> html`<div key=${i} class="pf-row"><span>${flag(l)} ${l.toUpperCase()}</span><span style="color:var(--ink-2);font-size:12.5px">${names.join(', ')}</span></div>`)}
+      ${Object.entries(langMap).map(([l,names],i)=> html`<div key=${i} class="pf-row"><span>${flag(l)}</span><span style="color:var(--ink-2);font-size:12.5px">${names.join(', ')}</span></div>`)}
     </div>
   </div>`;
 }
@@ -1586,7 +2468,7 @@ function PostOp(){
     <div class="sub">${T("postop.sub")}</div>
     ${d.length===0? emptyBox(T("postop.empty"))
       : d.map((p,i)=> html`<div class="glass" key=${i} style="padding:14px 18px;margin-bottom:12px">
-        <div style="font-weight:700;margin-bottom:8px">${p.name||p.phone}</div>
+        <div style="font-weight:700;margin-bottom:8px">${leadIdentity(p)} ${channelBadge(p.source)}</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
           ${(p.tasks||[]).map((t,j)=> html`<span key=${j} class="badge ${t.status==='sent'?'human':''}" style="font-size:11.5px">${POSTOP_LABELS[t.kind]?T(POSTOP_LABELS[t.kind]):t.kind} · ${t.status==='sent'?T("postop.sentMark"):new Date(t.due_at).toLocaleDateString()}</span>`)}
         </div>
@@ -1631,10 +2513,201 @@ function Devices(){
     <div class="section-title">${T("devices.waitingList")}</div>
     ${(d.waiting||[]).length===0? emptyBox(T("devices.noOneWaiting"))
       : (d.waiting||[]).map((w,i)=> html`<div class="glass action-card" key=${i}>
-        <div class="action-left"><div class="action-name">${w.name||w.phone} ${w.score!=null?html`<span class="badge hot">${w.score}</span>`:null}</div>
+        <div class="action-left"><div class="action-name">${leadIdentity(w)} ${channelBadge(w.source)} ${w.score!=null?html`<span class="badge hot">${w.score}</span>`:null}</div>
           <div class="action-reason">${w.treatment_interest||'—'}</div></div>
         <button class="btn primary" disabled=${busy} onClick=${()=>book(w.id)}>${T("btn.bookNextSlot")}</button>
       </div>`)}
+    <${AppointmentsAdmin} onChanged=${reload}/>
+    <${DeviceAdmin} onChanged=${reload}/>
+  </div>`;
+}
+
+function AppointmentsAdmin({ onChanged }){
+  const [rows,setRows]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState(null);
+  const load=useCallback(()=>{ api("/appointments").then(setRows).catch(x=>setErr(x.message)); },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  const cancel=async(a)=>{
+    if(!window.confirm(T("appt.confirmCancel").replace("{name}", a.lead_name||T("appt.noPatient")))) return;
+    setBusy(true);
+    try{ await api("/appointments/"+a.id+"/cancel",{method:"POST"}); load(); onChanged?.(); showToast(T("appt.cancelled")); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+  const remove=async(a)=>{
+    if(!window.confirm(T("appt.confirmDelete"))) return;
+    setBusy(true);
+    try{ await api("/appointments/"+a.id,{method:"DELETE"}); load(); onChanged?.(); showToast(T("admin.deleted")); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+
+  const grid="display:grid;grid-template-columns:1.1fr 1.1fr 1fr .6fr 1.3fr;gap:8px";
+  return html`<div style="margin-top:26px">
+    <div class="section-title">${T("appt.title")}</div>
+    ${err? html`<div class="err" style="margin-bottom:10px">${err}</div>`:null}
+    <div class="glass" style="padding:4px 0">
+      ${!rows? html`<div class="empty">${T("load.generic")}</div>`
+        : rows.length===0? html`<div class="empty">${T("appt.empty")}</div>`
+        : html`<div class="rowgrid rowhead" style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+            <span>${T("appt.when")}</span><span>${T("appt.patient")}</span><span>${T("appt.room")}</span><span>${T("appt.status")}</span><span></span>
+          </div>
+          ${rows.map(a=> html`<div key=${a.id} class="rowgrid" style="${grid};padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+            <span style="font-weight:600">${fmtTime(a.starts_at)}</span>
+            <span>${a.lead_name || html`<span style="color:var(--ink-3)">${T("appt.noPatient")}</span>`}</span>
+            <span style="color:var(--ink-2);font-size:12.5px">${a.device_name}</span>
+            <span><span class="badge ${a.status==='cancelled'?'':'human'}">${T("appt.status."+a.status)||a.status}</span></span>
+            <span class="rowactions" style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap">
+              ${a.status!=='cancelled'? html`<button class="btn" style=${{fontSize:"11px",padding:"4px 9px"}} disabled=${busy} onClick=${()=>cancel(a)}>${T("appt.cancel")}</button>`:null}
+              <button class="btn warn" style=${{fontSize:"11px",padding:"4px 9px"}} disabled=${busy} onClick=${()=>remove(a)}>${T("btn.delete")}</button>
+            </span>
+          </div>`)}`}
+    </div>
+  </div>`;
+}
+
+function DeviceAdmin({ onChanged }){
+  const [roster,setRoster]=useState(null);
+  const [name,setName]=useState("");
+  const [type,setType]=useState("device");
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState(null);
+
+  const load=useCallback(()=>{ api("/devices/all").then(setRoster).catch(x=>setErr(x.message)); },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  const create=async(e)=>{
+    e.preventDefault(); if(!name.trim()) return;
+    setBusy(true); setErr(null);
+    try{
+      await api("/devices",{method:"POST",body:JSON.stringify({name:name.trim(),type})});
+      setName(""); setType("device"); load(); onChanged?.(); showToast(T("admin.deviceAdded"));
+    }catch(x){ setErr(x.message); } finally{ setBusy(false); }
+  };
+  const toggle=async(d)=>{
+    setBusy(true);
+    try{ await api("/devices/"+d.id,{method:"PATCH",body:JSON.stringify({active:!d.active})}); load(); onChanged?.(); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+  const remove=async(d)=>{
+    if(!window.confirm(T("admin.confirmDeleteDevice").replace("{name}", d.name))) return;
+    setBusy(true);
+    try{ await api("/devices/"+d.id,{method:"DELETE"}); load(); onChanged?.(); showToast(T("admin.deleted")); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+  const rename=async(d)=>{
+    const v=window.prompt(T("admin.name"), d.name); if(v===null) return;
+    if(!v.trim()) return;
+    setBusy(true);
+    try{ await api("/devices/"+d.id,{method:"PATCH",body:JSON.stringify({name:v.trim()})}); load(); onChanged?.(); showToast(T("admin.saved")); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+
+  const grid="display:grid;grid-template-columns:1.3fr .9fr 1.6fr;gap:8px";
+  return html`<div style="margin-top:26px">
+    <div class="section-title">${T("admin.deviceRoster")}</div>
+    <div class="glass" style="padding:18px;max-width:520px;margin-bottom:16px">
+      <form onSubmit=${create}>
+        <label class="fl" for="dev-name">${T("admin.name")}</label>
+        <input id="dev-name" value=${name} onInput=${e=>setName(e.target.value)} style="width:100%;margin-bottom:12px" required/>
+        <label class="fl" for="dev-type">${T("admin.type")}</label>
+        <select id="dev-type" value=${type} onChange=${e=>setType(e.target.value)} style="width:100%;margin-bottom:14px">
+          ${DEVICE_TYPES.map(t=> html`<option key=${t} value=${t}>${T("dev.type."+t)}</option>`)}
+        </select>
+        <button class="btn primary" type="submit" disabled=${busy||!name.trim()}>${busy?T("btn.saving"):T("admin.addDevice")}</button>
+        ${err? html`<div class="err" style="margin-top:10px">${err}</div>`:null}
+      </form>
+    </div>
+    <div class="glass" style="padding:4px 0">
+      ${!roster? html`<div class="empty">${T("load.generic")}</div>`
+        : roster.length===0? html`<div class="empty">${T("admin.noDevices")}</div>`
+        : html`<div class="rowgrid rowhead" style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+            <span>${T("admin.name")}</span><span>${T("admin.type")}</span><span></span>
+          </div>
+          ${roster.map(d=> html`<div key=${d.id} class="rowgrid" style="${grid};padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+            <span style="font-weight:700">${d.name}${d.active?null:html` <span class="badge">${T("admin.inactive")}</span>`}</span>
+            <span style="color:var(--ink-2);font-size:12.5px">${T("dev.type."+(d.type||"device"))}</span>
+            <span class="rowactions" style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap">
+              <button class="btn" style=${{fontSize:"11px",padding:"4px 9px"}} disabled=${busy} onClick=${()=>rename(d)}>${T("btn.edit")}</button>
+              <${ActiveToggle} row=${d} busy=${busy} onToggle=${toggle}/>
+              <button class="btn warn" style=${{fontSize:"11px",padding:"4px 9px"}} disabled=${busy} onClick=${()=>remove(d)}>${T("btn.delete")}</button>
+            </span>
+          </div>`)}`}
+    </div>
+  </div>`;
+}
+
+function Branches({ reloadShared }){
+  const [roster,setRoster]=useState(null);
+  const [name,setName]=useState("");
+  const [code,setCode]=useState("");
+  const [city,setCity]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState(null);
+
+  const load=useCallback(()=>{ api("/branches/all").then(setRoster).catch(x=>setErr(x.message)); },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  const create=async(e)=>{
+    e.preventDefault(); if(!name.trim()) return;
+    setBusy(true); setErr(null);
+    try{
+      await api("/branches",{method:"POST",body:JSON.stringify({name:name.trim(),code:code.trim()||undefined,city:city.trim()||undefined})});
+      setName(""); setCode(""); setCity("");
+      load(); reloadShared?.(); showToast(T("admin.branchAdded"));
+    }catch(x){ setErr(x.message); } finally{ setBusy(false); }
+  };
+  const toggle=async(b)=>{
+    setBusy(true);
+    try{ await api("/branches/"+b.id,{method:"PATCH",body:JSON.stringify({active:!b.active})}); load(); reloadShared?.(); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+  const remove=async(b)=>{
+    if(!window.confirm(T("admin.confirmDeleteBranch").replace("{name}", b.name))) return;
+    setBusy(true);
+    try{ await api("/branches/"+b.id,{method:"DELETE"}); load(); reloadShared?.(); showToast(T("admin.deleted")); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+  const rename=async(b)=>{
+    const v=window.prompt(T("admin.name"), b.name); if(v===null||!v.trim()) return;
+    setBusy(true);
+    try{ await api("/branches/"+b.id,{method:"PATCH",body:JSON.stringify({name:v.trim()})}); load(); reloadShared?.(); showToast(T("admin.saved")); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+
+  const grid="display:grid;grid-template-columns:1.2fr .5fr .8fr 1.7fr;gap:8px";
+  return html`<div>
+    <h1>${T("nav.branches")}</h1>
+    <div class="sub">${T("branches.sub")}</div>
+    <div class="glass" style="padding:18px;max-width:520px;margin-bottom:20px">
+      <form onSubmit=${create}>
+        <label class="fl" for="br-name">${T("admin.name")}</label>
+        <input id="br-name" value=${name} onInput=${e=>setName(e.target.value)} style="width:100%;margin-bottom:10px" required/>
+        <label class="fl" for="br-code">${T("admin.code")}</label>
+        <input id="br-code" value=${code} onInput=${e=>setCode(e.target.value)} style="width:100%;margin-bottom:10px"/>
+        <label class="fl" for="br-city">${T("admin.city")}</label>
+        <input id="br-city" value=${city} onInput=${e=>setCity(e.target.value)} style="width:100%;margin-bottom:14px"/>
+        <button class="btn primary" type="submit" disabled=${busy||!name.trim()}>${busy?T("btn.saving"):T("admin.addBranch")}</button>
+        ${err? html`<div class="err" style="margin-top:10px">${err}</div>`:null}
+      </form>
+    </div>
+    <div class="glass" style="padding:4px 0">
+      ${!roster? html`<div class="empty">${T("load.generic")}</div>`
+        : roster.length===0? html`<div class="empty">${T("admin.noBranches")}</div>`
+        : html`<div class="rowgrid rowhead" style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+            <span>${T("admin.name")}</span><span>${T("admin.code")}</span><span>${T("admin.city")}</span><span></span>
+          </div>
+          ${roster.map(b=> html`<div key=${b.id} class="rowgrid" style="${grid};padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+            <span style="font-weight:700">${b.name}${b.is_default? html` <span class="badge">${T("admin.default")}</span>`:null}${b.active?null:html` <span class="badge">${T("admin.inactive")}</span>`}</span>
+            <span style="color:var(--ink-2);font-size:12.5px">${b.code||"—"}</span>
+            <span style="color:var(--ink-2);font-size:12.5px">${b.city||"—"}</span>
+            <span class="rowactions" style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap">
+              <button class="btn" style=${{fontSize:"11px",padding:"4px 9px"}} disabled=${busy} onClick=${()=>rename(b)}>${T("btn.edit")}</button>
+              ${b.is_default? null : html`<${ActiveToggle} row=${b} busy=${busy} onToggle=${toggle}/>`}
+              ${b.is_default? null : html`<button class="btn warn" style=${{fontSize:"11px",padding:"4px 9px"}} disabled=${busy} onClick=${()=>remove(b)}>${T("btn.delete")}</button>`}
+            </span>
+          </div>`)}`}
+    </div>
   </div>`;
 }
 
@@ -1643,45 +2716,136 @@ const STAGES={
   hotel_status:["pending","checked_in","checked_out"],
   appointment_status:["pending","scheduled","done"],
 };
+// Keyed by l.lead_id in the parent's .map() below, not array index — this
+// list re-sorts (ORDER BY updated_at DESC server-side) every time ANY card's
+// field is edited, so an index key would let React hand this component's
+// pickupAt/pickupLoc/nextAt/nextNote local state (seeded once, only in the
+// useState initializer below) to a DIFFERENT patient after a re-sort moved
+// someone else into this component's old slot — a coordinator could then
+// save one patient's stale draft pickup time/location onto another
+// patient's record without any visual sign anything was wrong.
+function LogisticsCard({ l, reload }){
+  const [pickupAt,setPickupAt] = useState(l.pickup_at? l.pickup_at.slice(0,16) : "");
+  const [pickupLoc,setPickupLoc] = useState(l.pickup_location||"");
+  const [nextAt,setNextAt] = useState(l.next_appointment_at? l.next_appointment_at.slice(0,16) : "");
+  const [nextNote,setNextNote] = useState(l.next_appointment_note||"");
+  const [busy,setBusy] = useState(false);
+  const [copied,setCopied] = useState(false);
+
+  const upd=async(field,value)=>{ try{ await api("/logistics/"+l.lead_id,{method:"PUT",body:JSON.stringify({[field]:value})}); showToast(T("toast.logisticsUpdated")); reload(); }catch(x){ showToast(x.message,"error");} };
+
+  const saveItinerary = async ()=>{
+    setBusy(true);
+    try{
+      await api("/logistics/"+l.lead_id,{method:"PUT",body:JSON.stringify({
+        pickup_at: pickupAt? new Date(pickupAt).toISOString() : null,
+        pickup_location: pickupLoc || null,
+        next_appointment_at: nextAt? new Date(nextAt).toISOString() : null,
+        next_appointment_note: nextNote || null,
+      })});
+      showToast(T("toast.logisticsUpdated")); await reload();
+    }catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+
+  const trackLink = l.view_token ? location.origin+"/panel/itinerary.html?token="+l.view_token : "";
+  const copyLink = async ()=>{ try{ await navigator.clipboard.writeText(trackLink); setCopied(true); setTimeout(()=>setCopied(false),1600); }catch{} };
+  const sendLink = async ()=>{
+    setBusy(true);
+    try{ await api("/logistics/"+l.lead_id+"/send",{method:"POST",body:JSON.stringify({language:l.language||"en"})}); showToast(T("logistics.sent")); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+
+  return html`<div class="glass" style="padding:14px 18px;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+      <span style="font-weight:700">${leadIdentity(l)} ${channelBadge(l.source)}</span>
+      <span style="color:var(--ink-2);font-size:12.5px">${l.country||''} ${l.flight_no?('· '+l.flight_no):''}</span></div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      ${["transfer_status","hotel_status","appointment_status"].map((f,j)=> html`<div key=${j}>
+        <div class="fl" style="margin-bottom:4px">${f.replace('_status','').replace('_',' ')}</div>
+        <select aria-label=${f.replace('_status','').replace('_',' ')} value=${l[f]} onChange=${(ev)=>upd(f,ev.target.value)}>
+          ${STAGES[f].map(s=> html`<option key=${s} value=${s}>${s}</option>`)}
+        </select></div>`)}
+    </div>
+    <div class="section-title" style=${{fontSize:"11.5px",marginTop:"4px",marginBottom:"8px"}}>${T("logistics.itinerary")}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <div style="flex:1;min-width:180px">
+        <div class="fl" style="margin-bottom:4px">${T("logistics.pickupAt")}</div>
+        <input aria-label=${T("logistics.pickupAt")} type="datetime-local" value=${pickupAt} onInput=${(e)=>setPickupAt(e.target.value)} style="width:100%;font-size:12.5px"/>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <div class="fl" style="margin-bottom:4px">${T("logistics.pickupLoc")}</div>
+        <input value=${pickupLoc} onInput=${(e)=>setPickupLoc(e.target.value)} placeholder=${T("logistics.pickupLocPh")} style="width:100%;font-size:12.5px"/>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <div style="flex:1;min-width:180px">
+        <div class="fl" style="margin-bottom:4px">${T("logistics.nextAt")}</div>
+        <input aria-label=${T("logistics.nextAt")} type="datetime-local" value=${nextAt} onInput=${(e)=>setNextAt(e.target.value)} style="width:100%;font-size:12.5px"/>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <div class="fl" style="margin-bottom:4px">${T("logistics.nextNote")}</div>
+        <input value=${nextNote} onInput=${(e)=>setNextNote(e.target.value)} placeholder=${T("logistics.nextNotePh")} style="width:100%;font-size:12.5px"/>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" style=${{fontSize:"12px"}} disabled=${busy} onClick=${saveItinerary}>${T("logistics.save")}</button>
+      <button class="btn" style=${{fontSize:"12px"}} onClick=${copyLink}>${copied?T("partners.copied"):T("logistics.copyLink")}</button>
+      <button class="btn primary" style=${{fontSize:"12px"}} disabled=${busy} onClick=${sendLink}>${T("logistics.sendLink")}</button>
+    </div>
+  </div>`;
+}
+
 function Logistics(){
   const [d,e,reload]=useFetch("/logistics");
   if(e) return html`<div class="err">${e}</div>`;
   if(!d) return emptyBox(T("load.generic"));
-  const upd=async(leadId,field,value)=>{ try{ await api("/logistics/"+leadId,{method:"PUT",body:JSON.stringify({[field]:value})}); showToast(T("toast.logisticsUpdated")); reload(); }catch(x){ showToast(x.message,"error");} };
   return html`<div>
     <h1>${T("nav.logistics")}</h1>
     <div class="sub">${T("logistics.sub")}</div>
     ${d.length===0? emptyBox(T("logistics.empty"))
-      : d.map((l,i)=> html`<div class="glass" key=${i} style="padding:14px 18px;margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:10px">
-          <span style="font-weight:700">${l.name||l.phone}</span>
-          <span style="color:var(--ink-2);font-size:12.5px">${l.country||''} ${l.flight_no?('· '+l.flight_no):''}</span></div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap">
-          ${["transfer_status","hotel_status","appointment_status"].map((f,j)=> html`<div key=${j}>
-            <div class="fl" style="margin-bottom:4px">${f.replace('_status','').replace('_',' ')}</div>
-            <select value=${l[f]} onChange=${(ev)=>upd(l.lead_id,f,ev.target.value)}>
-              ${STAGES[f].map(s=> html`<option key=${s} value=${s}>${s}</option>`)}
-            </select></div>`)}
-        </div>
-      </div>`)}
+      : d.map((l)=> html`<${LogisticsCard} key=${l.lead_id} l=${l} reload=${reload} />`)}
   </div>`;
 }
 
 const AUTOMATIONS=[
   ["auto.1a","auto.1b"],["auto.2a","auto.2b"],["auto.3a","auto.3b"],["auto.4a","auto.4b"],
-  ["auto.5a","auto.5b"],["auto.6a","auto.6b"],["auto.7a","auto.7b"],
+  ["auto.5a","auto.5b"],["auto.6a","auto.6b"],["auto.7a","auto.7b"],["auto.8a","auto.8b"],["auto.9a","auto.9b"],
 ];
 function Workflow(){
+  // Each row's status comes from the server's real feature flags, not from the
+  // fact that the code exists — see services/automationStatus.js for why.
+  const [status,e]=useFetch("/automations");
+  const byKey={}; (status||[]).forEach(r=>{ byKey[r.key]=r; });
+  const liveCount=(status||[]).filter(r=>r.live).length;
+
   return html`<div>
     <h1>${T("workflow.title")}</h1>
     <div class="sub">${T("workflow.sub")}</div>
-    ${AUTOMATIONS.map(([t,a],i)=> html`<div class="glass" key=${i} style="padding:13px 18px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <span class="badge" style="background:var(--accent-wash);border-color:var(--accent-line);color:var(--accent)">${T("workflow.when")}</span>
-      <span style="flex:1;min-width:180px;font-size:13.5px">${T(t)}</span>
-      <span style="color:var(--ink-2)">→</span>
-      <span class="badge human">${T("workflow.then")}</span>
-      <span style="flex:1;min-width:180px;font-size:13.5px">${T(a)}</span>
-    </div>`)}
+    ${e? html`<div class="err" style="margin-bottom:14px">${e}</div>`:null}
+    ${status? html`<div class="est" style="margin-bottom:16px">
+      ${T("workflow.liveCount").replace("{n}", liveCount).replace("{total}", status.length)}
+    </div>`:null}
+    ${AUTOMATIONS.map(([t,a],i)=>{
+      const st=byKey["auto."+(i+1)];
+      const badge = !st ? null
+        : st.live && !st.needsCheck ? html`<span class="badge human">${T("workflow.live")}</span>`
+        : st.live && st.needsCheck ? html`<span class="badge awaiting">${T("workflow.needsCheck")}</span>`
+        : html`<span class="badge">${T("workflow.blocked")}</span>`;
+      return html`<div class="glass" key=${i} style="padding:13px 18px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span class="badge" style="background:var(--accent-wash);border-color:var(--accent-line);color:var(--accent)">${T("workflow.when")}</span>
+          <span style="flex:1;min-width:180px;font-size:13.5px">${T(t)}</span>
+          <span style="color:var(--ink-2)">→</span>
+          <span class="badge human">${T("workflow.then")}</span>
+          <span style="flex:1;min-width:180px;font-size:13.5px">${T(a)}</span>
+          ${badge}
+        </div>
+        ${st && !st.live? html`<div style="margin-top:8px;font-size:12px;color:var(--ink-2)">
+          ${T("workflow.needs")} <b>${st.blockedBy}</b></div>`:null}
+        ${st && st.live && st.needsCheck? html`<div style="margin-top:8px;font-size:12px;color:var(--ink-2)">
+          ${T("workflow.templateNote")}</div>`:null}
+      </div>`;
+    })}
   </div>`;
 }
 
@@ -1700,14 +2864,17 @@ const NAV_META={
   postop:{label:"nav.postop",icon:"firstaid"},
   reviews:{label:"nav.reviews",icon:"star"},
   workflow:{label:"nav.workflow",icon:"workflow"},
+  partners:{label:"nav.partners",icon:"handshake"},
+  doctors:{label:"nav.doctors",icon:"stethoscope"},
+  branches:{label:"nav.branches",icon:"grid"},
 };
 const NAV_GROUPS=[
   ["group.overview",["command","inbox"]],
-  ["group.growth",["analytics","campaigns","widget","studio"]],
-  ["group.team",["consultants","matching"]],
+  ["group.growth",["analytics","campaigns","widget","studio","partners"]],
+  ["group.team",["consultants","matching","doctors","branches"]],
   ["group.operations",["devices","logistics","postop","reviews","workflow"]],
 ];
-const ENABLED = new Set(["command","inbox","analytics","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow"]);
+const ENABLED = new Set(["command","inbox","analytics","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
 
 const ICONS={
   grid:'<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
@@ -1726,6 +2893,10 @@ const ICONS={
   firstaid:'<rect x="3" y="6" width="18" height="14" rx="2"/><path d="M8 6V4h8v2M12 10v6M9 13h6"/>',
   pulse:'<path d="M3 12h4l2 6 4-13 2 7h6"/>',
   alert:'<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17.5v.01"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M5 5l1.5 1.5M17.5 17.5L19 19M3 12h2M19 12h2M5 19l1.5-1.5M17.5 6.5L19 5"/>',
+  moon:'<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/>',
+  handshake:'<path d="M3 11l4-4 4 3.5-2 2"/><path d="M21 11l-4-4-6 5.5a1.4 1.4 0 0 0 2 2L15 12l2 2a1.4 1.4 0 0 0 2-2"/><path d="M7 10.5L3 14v3h3"/><path d="M17 7l4 3.5V14l-3 3"/>',
+  stethoscope:'<path d="M5 3v6a4 4 0 0 0 8 0V3"/><path d="M9 13v3a5 5 0 0 0 10 0v-2"/><circle cx="19" cy="11" r="2"/>',
 };
 function Icon({name}){
   return html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML=${{__html:ICONS[name]||""}} />`;
@@ -1739,6 +2910,10 @@ function App(){
   const [loadingMore, setLoadingMore] = useState(false);
   const convLimitRef = useRef(50);
   const [branches, setBranches] = useState([]);
+  const [partners, setPartners] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [roi, setRoi] = useState(null);
+  const [profitability, setProfitability] = useState(null);
   const [branchId, setBranchId] = useState(()=> store("mv-branch", "all"));
   const [handovers, setHandovers] = useState([]);
   const [analytics, setAnalytics] = useState(null);
@@ -1756,7 +2931,7 @@ function App(){
       const limit = Math.max(50, convLimitRef.current);
       const qs = branchId && branchId!=="all" ? "?branch_id="+encodeURIComponent(branchId) : "";
       const convQs = "?limit="+limit+"&offset=0"+(branchId && branchId!=="all" ? "&branch_id="+encodeURIComponent(branchId) : "");
-      const [s,c,h,a,co,pd,rk,br] = await Promise.all([
+      const [s,c,h,a,co,pd,rk,br,pt,ro,dc,pf] = await Promise.all([
         api("/stats"+qs),
         api("/conversations"+convQs),
         api("/handovers"+qs),
@@ -1765,13 +2940,17 @@ function App(){
         api("/payments/pending"+qs),
         api("/risk"+qs),
         api("/branches"),
+        api("/partners"),
+        api("/roi"+qs),
+        api("/doctors"),
+        api("/profitability"+qs),
       ]);
       setStats(s);
       setConversations(c.items||[]);
       setConvTotal(c.total||0);
       convLimitRef.current = Math.max(50, (c.items||[]).length);
       setHandovers(h); setAnalytics(a); setConsultants(co); setPendingDeposits(pd); setRisks(rk);
-      setBranches(br||[]); setFatal(null);
+      setBranches(br||[]); setPartners(pt||[]); setRoi(ro); setDoctors(dc||[]); setProfitability(pf); setFatal(null);
     }catch(e){ setFatal(e.message); }
   }, [branchId]);
 
@@ -1811,8 +2990,9 @@ function App(){
         <div class="logo">Medi<b>Voyage</b> OS</div>
       </div>
       <div class="live"><span class="dot"></span> ${T("shell.aiLive")}</div>
-      <div style="flex:1"></div>
+      <div class="topbar-spacer"></div>
       <select aria-label=${T("branch.label")} value=${branchId} onChange=${(e)=>changeBranch(e.target.value)}
+        class="topbar-branch"
         style=${{marginRight:"8px",maxWidth:"180px",fontSize:"12.5px"}}>
         <option value="all">${T("branch.all")}</option>
         ${branches.map((b)=> html`<option key=${b.id} value=${b.id}>${b.name}</option>`)}
@@ -1822,7 +3002,7 @@ function App(){
         <button class="segbtn ${LANG==="en"?"on":""}" aria-pressed=${LANG==="en"} onClick=${()=>setLang("en")}>EN</button>
       </div>
       <button class="btn iconbtn" title=${T("shell.themeToggle")} aria-label=${T("shell.themeToggle")}
-        onClick=${()=>setTheme(THEME==="dark"?"light":"dark")}>${THEME==="dark"?"☀️":"🌙"}</button>
+        onClick=${()=>setTheme(THEME==="dark"?"light":"dark")}><${Icon} name=${THEME==="dark"?"sun":"moon"}/></button>
       ${TOKEN? html`<button class="btn" onClick=${signOut}>${T("shell.signOut")}</button>`:null}
       <button class="btn" onClick=${reloadShared}>${T("btn.refresh")}</button>
     </div>
@@ -1842,18 +3022,21 @@ function App(){
         ${fatal? html`<div class="err">${T("shell.backendDown")}: ${fatal}. ${T("shell.backendHint")}</div>`:null}
         <div class="view" key=${tab}>
         <${ErrorBoundary} key=${"eb-"+tab}>
-        ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} onOpenLead=${openLead} />`
-          : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} convTotal=${convTotal} onLoadMore=${loadMoreConversations} loadingMore=${loadingMore} branches=${branches} />`
-          : tab==="analytics" ? html`<${Analytics} analytics=${analytics} />`
+        ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} roi=${roi} onOpenLead=${openLead} />`
+          : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} convTotal=${convTotal} onLoadMore=${loadMoreConversations} loadingMore=${loadingMore} branches=${branches} partners=${partners} doctors=${doctors} />`
+          : tab==="analytics" ? html`<${Analytics} analytics=${analytics} profitability=${profitability} />`
           : tab==="campaigns" ? html`<${Campaigns} templates=${templates} reloadShared=${reloadShared} />`
           : tab==="studio" ? html`<${PromptStudio} />`
-          : tab==="consultants" ? html`<${Consultants} data=${consultants} />`
+          : tab==="consultants" ? html`<${Consultants} data=${consultants} branches=${branches} reloadShared=${reloadShared} />`
           : tab==="matching" ? html`<${Matching} data=${consultants} />`
           : tab==="devices" ? html`<${Devices} />`
           : tab==="logistics" ? html`<${Logistics} />`
           : tab==="postop" ? html`<${PostOp} />`
           : tab==="reviews" ? html`<${Reviews} />`
           : tab==="workflow" ? html`<${Workflow} />`
+          : tab==="partners" ? html`<${Partners} partners=${partners} reloadShared=${reloadShared} />`
+          : tab==="doctors" ? html`<${Doctors} doctors=${doctors} reloadShared=${reloadShared} />`
+          : tab==="branches" ? html`<${Branches} reloadShared=${reloadShared} />`
           : null}
         <//>
         </div>
@@ -1913,14 +3096,19 @@ function Gate(){
     finally{ setBusy(false); }
   };
 
-  return html`<div style=${{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--ground)",padding:"24px"}}>
-    <form onSubmit=${submit} class="glass" style=${{width:"100%",maxWidth:"340px",padding:"28px"}}>
-      <div class="logo" style=${{marginBottom:"6px"}}>Medi<b>Voyage</b> OS</div>
-      <div class="sub" style=${{margin:"0 0 18px"}}>${T("gate.sub")}</div>
-      <label class="fl">${T("gate.label")}</label>
-      <input type="password" autofocus value=${val} onInput=${(e)=>setVal(e.target.value)} style=${{width:"100%"}}/>
-      ${err? html`<div class="err" style=${{marginTop:"12px"}}>${err}</div>`:null}
-      <button class="btn primary" type="submit" style=${{width:"100%",marginTop:"14px"}} disabled=${busy||!val.trim()}>${busy?T("gate.checking"):T("gate.enter")}</button>
+  return html`<div class="gate-screen">
+    <form onSubmit=${submit} class="gate-card">
+      <div class="gate-mark"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 5 4-10 2 5h4"/></svg></div>
+      <div class="gate-word">Medi<i>Voyage</i></div>
+      <div class="gate-kicker">Clinical Command Center</div>
+      <div class="gate-rule"></div>
+      <div class="gate-field">
+        <label>${T("gate.label")}</label>
+        <input type="password" autofocus value=${val} onInput=${(e)=>setVal(e.target.value)} placeholder="••••••••••••"/>
+      </div>
+      ${err? html`<div class="gate-err">${err}</div>`:null}
+      <button class="gate-btn" type="submit" disabled=${busy||!val.trim()}>${busy?T("gate.checking"):T("gate.enter")}</button>
+      <div class="gate-foot">${T("gate.sub")}</div>
     </form>
   </div>`;
 }

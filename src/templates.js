@@ -9,7 +9,14 @@ export const TEMPLATES = {
     language: 'en',
     label: 'Re-engagement (past patients)',
     params: ['name'],
-    preview: 'Hi {{1}} 👋 It has been a while since we spoke! We now have new seasonal packages. Would you like an updated quote?',
+    preview: 'Hi {{1}}, it has been a while since we spoke! We now have new seasonal packages. Would you like an updated quote?',
+  },
+  hot_lead_followup: {
+    name: 'hot_lead_followup',
+    language: 'en',
+    label: 'Hot-lead follow-up (gone silent)',
+    params: ['name'],
+    preview: 'Hi {{1}}, just checking in — your consultation details are still on file. Any questions before we go ahead? Happy to help whenever you are ready.',
   },
   appointment_reminder: {
     name: 'appointment_reminder',
@@ -23,7 +30,7 @@ export const TEMPLATES = {
     language: 'en',
     label: 'Review request (post-op)',
     params: ['name'],
-    preview: 'Hi {{1}}, we hope you are recovering well! Would you mind leaving us a quick review? It really helps. 🙏',
+    preview: 'Hi {{1}}, we hope you are recovering well! Would you mind leaving us a quick review? It really helps.',
   },
   seasonal_offer: {
     name: 'seasonal_offer',

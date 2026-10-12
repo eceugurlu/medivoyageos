@@ -1,0 +1,22 @@
+# When this file exists Vercel uses it INSTEAD of .gitignore, so everything
+# .gitignore was keeping out of the upload has to be repeated here — secrets
+# first. Runtime config comes from the Vercel dashboard's environment
+# variables, so a local .env never needs to be in the bundle at all.
+.env
+.env.*
+!.env.example
+.vercel
+node_modules/
+*.log
+
+# Editor/OS artifacts must never ship — public/** is served statically at
+# /panel, so anything stray that lands in there becomes a public URL.
+.DS_Store
+**/.DS_Store
+*.code-workspace
+
+# Local-only tooling and history; none of it is needed at runtime.
+.agents/
+.claude/
+db/migrations/
+scripts/

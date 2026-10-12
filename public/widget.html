@@ -19,11 +19,11 @@
     --paper-2:#f4f6f8;
     --ink:#0c1316;
     --ink-2:#4b555b;
-    --ink-3:#7f8a90;
+    --ink-3:#5f666b; /* darkened from #7f8a90 — failed WCAG AA contrast, see public/index.html for the computed values */
     --rule:#dde3e6;
     --rule-2:#c3ccd1;
     --accent:#0e5750;
-    --accent-2:#157a6f;
+    --accent-2:#126b60; /* darkened from #157a6f — 4.42:1 vs the wash background, needs 4.5:1; this passes at 5.42:1 */
     --accent-wash:#e4efed;
     --accent-line:#9dc3bc;
     --brass:#8c6415;
@@ -43,7 +43,7 @@
       --paper-2:#1b2225;
       --ink:#e6eaec;
       --ink-2:#9aa4a9;
-      --ink-3:#6c767b;
+      --ink-3:#818b91; /* lightened from #6c767b — failed WCAG AA contrast, see public/index.html for the computed values */
       --rule:#232b2e;
       --rule-2:#323c40;
       --accent:#5fb3a4;
@@ -170,6 +170,10 @@
 
   const card = document.getElementById("card");
   const state = { treatment: "Hair transplant" };
+  // A partner's shared link carries their PUBLIC referral code as ?ref=...
+  // (never their private portal token) — forwarded on submit so the lead is
+  // attributed to them (see createWidgetLead server-side).
+  const PARTNER_REF = new URLSearchParams(location.search).get("ref") || "";
 
   function estimate(){
     const [lo,hi,cur] = PRICES[state.treatment] || [];
@@ -234,6 +238,7 @@
           phone, country: document.getElementById("country").value.trim(),
           treatment: state.treatment,
           consent: true,
+          referralCode: PARTNER_REF || undefined,
         }),
       });
       if(!res.ok) throw new Error("We couldn't send that just now. Please try again in a moment.");

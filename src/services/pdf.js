@@ -39,26 +39,45 @@ function findChromePath() {
   );
 }
 
+// On Vercel there is no system Chrome to point CHROME_PATH at, so we pull in
+// @sparticuz/chromium — a Chromium build packaged to fit inside a serverless
+// function — instead. Dynamic import so local/non-Vercel deploys never pay
+// for loading it.
+async function launchServerlessBrowser() {
+  const { default: chromium } = await import('@sparticuz/chromium');
+  return puppeteer.launch({
+    executablePath: await chromium.executablePath(),
+    headless: true,
+    args: chromium.args,
+  });
+}
+
 async function getBrowser() {
   if (cachedBrowser && cachedBrowser.connected) return cachedBrowser;
-  cachedBrowser = await puppeteer.launch({
-    executablePath: findChromePath(),
-    headless: true,
-    args: ['--no-sandbox', '--disable-gpu'],
-  });
+  cachedBrowser = process.env.VERCEL
+    ? await launchServerlessBrowser()
+    : await puppeteer.launch({
+        executablePath: findChromePath(),
+        headless: true,
+        args: ['--no-sandbox', '--disable-gpu'],
+      });
   return cachedBrowser;
 }
 
 // Labels used inside the PDF itself, in every language the clinic serves.
 // Falls back to English for anything not listed.
 const RTL_LANGS = new Set(['ar', 'fa', 'he', 'ur']);
+// contactUs is deliberately channel-neutral — a quote can now be delivered
+// over WhatsApp, Instagram, or Messenger (see api.js's /quotes/:id/send),
+// and hardcoding "reply on WhatsApp" would send the wrong instruction to a
+// patient who messaged in from a different platform.
 const LABELS = {
-  en: { quote: 'Treatment Quote', item: 'Item', qty: 'Qty', unitPrice: 'Unit price', total: 'Total', validUntil: 'Valid until', preparedFor: 'Prepared for', contactUs: 'Questions? Just reply on WhatsApp.' },
-  tr: { quote: 'Tedavi Teklifi', item: 'Kalem', qty: 'Adet', unitPrice: 'Birim fiyat', total: 'Toplam', validUntil: 'Geçerlilik tarihi', preparedFor: 'Hazırlanan hasta', contactUs: 'Sorularınız için WhatsApp\'tan yazmanız yeterli.' },
-  de: { quote: 'Behandlungsangebot', item: 'Position', qty: 'Menge', unitPrice: 'Einzelpreis', total: 'Gesamt', validUntil: 'Gültig bis', preparedFor: 'Erstellt für', contactUs: 'Fragen? Schreiben Sie uns einfach auf WhatsApp.' },
-  ar: { quote: 'عرض سعر العلاج', item: 'البند', qty: 'الكمية', unitPrice: 'سعر الوحدة', total: 'الإجمالي', validUntil: 'صالح حتى', preparedFor: 'أُعِدّ من أجل', contactUs: 'لديك أسئلة؟ راسلنا على واتساب.' },
-  ru: { quote: 'Смета лечения', item: 'Позиция', qty: 'Кол-во', unitPrice: 'Цена за ед.', total: 'Итого', validUntil: 'Действительно до', preparedFor: 'Подготовлено для', contactUs: 'Есть вопросы? Напишите нам в WhatsApp.' },
-  fr: { quote: 'Devis de traitement', item: 'Article', qty: 'Qté', unitPrice: 'Prix unitaire', total: 'Total', validUntil: 'Valable jusqu\'au', preparedFor: 'Préparé pour', contactUs: 'Des questions ? Écrivez-nous sur WhatsApp.' },
+  en: { quote: 'Treatment Quote', item: 'Item', qty: 'Qty', unitPrice: 'Unit price', total: 'Total', validUntil: 'Valid until', preparedFor: 'Prepared for', contactUs: 'Questions? Just reply to this conversation.' },
+  tr: { quote: 'Tedavi Teklifi', item: 'Kalem', qty: 'Adet', unitPrice: 'Birim fiyat', total: 'Toplam', validUntil: 'Geçerlilik tarihi', preparedFor: 'Hazırlanan hasta', contactUs: 'Sorularınız için bu sohbetten yazmanız yeterli.' },
+  de: { quote: 'Behandlungsangebot', item: 'Position', qty: 'Menge', unitPrice: 'Einzelpreis', total: 'Gesamt', validUntil: 'Gültig bis', preparedFor: 'Erstellt für', contactUs: 'Fragen? Antworten Sie einfach in diesem Chat.' },
+  ar: { quote: 'عرض سعر العلاج', item: 'البند', qty: 'الكمية', unitPrice: 'سعر الوحدة', total: 'الإجمالي', validUntil: 'صالح حتى', preparedFor: 'أُعِدّ من أجل', contactUs: 'لديك أسئلة؟ فقط أجب في هذه المحادثة.' },
+  ru: { quote: 'Смета лечения', item: 'Позиция', qty: 'Кол-во', unitPrice: 'Цена за ед.', total: 'Итого', validUntil: 'Действительно до', preparedFor: 'Подготовлено для', contactUs: 'Есть вопросы? Просто ответьте в этом чате.' },
+  fr: { quote: 'Devis de traitement', item: 'Article', qty: 'Qté', unitPrice: 'Prix unitaire', total: 'Total', validUntil: 'Valable jusqu\'au', preparedFor: 'Préparé pour', contactUs: 'Des questions ? Répondez simplement dans cette conversation.' },
 };
 function labelsFor(lang) { return LABELS[lang] || LABELS.en; }
 
@@ -69,6 +88,14 @@ function escapeHtml(str) {
 function fmtMoney(amount, currency) {
   try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(amount); }
   catch { return `${currency} ${Number(amount).toFixed(2)}`; }
+}
+
+// Same fallback chain as the panel's leadIdentity() (public/index.html) —
+// an Instagram/Messenger lead has neither a name yet nor a phone, so
+// `lead.name || lead.phone` alone renders a blank "Prepared for:" line.
+const CHANNEL_LABEL = { whatsapp: 'WhatsApp', widget: 'Web', instagram: 'Instagram', messenger: 'Messenger' };
+function leadIdentity(lead) {
+  return lead.name || lead.phone || (lead.external_id ? `${CHANNEL_LABEL[lead.source] || 'Chat'} patient` : 'Patient');
 }
 
 function buildHtml({ clinic, lead, quote }) {
@@ -120,7 +147,7 @@ function buildHtml({ clinic, lead, quote }) {
     <div class="brand-city">${escapeHtml(clinic.city || '')}</div>
   </div>
   <h1>${L.quote}</h1>
-  <div class="meta">${L.preparedFor}: <b>${escapeHtml(lead.name || lead.phone)}</b></div>
+  <div class="meta">${L.preparedFor}: <b>${escapeHtml(leadIdentity(lead))}</b></div>
   <table>
     <thead><tr>
       <th>${L.item}</th><th class="num">${L.qty}</th><th class="num">${L.unitPrice}</th><th class="num">${L.total}</th>

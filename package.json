@@ -5,6 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "node --watch src/server.js",
+    "check:ai": "node scripts/ai-quality-check.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -13,6 +14,8 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
+    "@sparticuz/chromium": "^153.0.0",
+    "@vercel/functions": "^3.9.7",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "pg": "^8.23.0",

@@ -7,6 +7,13 @@ export const zohoEnabled = Boolean(
   config.zoho.clientId && config.zoho.clientSecret && config.zoho.refreshToken,
 );
 
+// Same reasoning as whatsapp.js's HTTP_TIMEOUT_MS (shared 30s Vercel function
+// budget for every route) — a hung Zoho call needs to throw on its own
+// rather than rely on the platform's blunt kill. Zoho sync already runs
+// best-effort/non-fatal (see webhook.js), so this just makes "it failed"
+// arrive promptly instead of stalling the invocation.
+const HTTP_TIMEOUT_MS = 15_000;
+
 // ── OAuth token manager ────────────────────────────────────────────────────
 // Zoho access tokens expire in ~1 hour. We cache one in memory and refresh it
 // with the long-lived refresh_token when it's missing or about to expire.
@@ -26,6 +33,7 @@ async function getAccessToken() {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
+    signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.access_token) {
@@ -43,6 +51,7 @@ async function authedFetch(url, options = {}) {
   const withAuth = (t) => ({
     ...options,
     headers: { ...(options.headers || {}), Authorization: `Zoho-oauthtoken ${t}` },
+    signal: options.signal || AbortSignal.timeout(HTTP_TIMEOUT_MS),
   });
   let res = await fetch(url, withAuth(token));
   if (res.status === 401) {
@@ -68,11 +77,26 @@ const STAGE_MAP = {
 };
 
 function splitName(name) {
-  // Zoho requires Last_Name. Fall back to a placeholder when we don't know it yet.
-  if (!name) return { first: null, last: 'WhatsApp Lead' };
+  // Zoho requires Last_Name. Fall back to a placeholder when we don't know it
+  // yet (the AI usually fills this in from a later message) — channel-neutral,
+  // since this lead may have come from WhatsApp, Instagram, or Messenger.
+  if (!name) return { first: null, last: 'New Lead' };
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return { first: null, last: parts[0] };
   return { first: parts[0], last: parts.slice(1).join(' ') };
+}
+
+// Zoho's Upsert API dedupes on Phone, which must be a non-null, unique value.
+// WhatsApp/widget leads have a real phone; Instagram/Messenger leads don't
+// (see migration 020_multichannel.sql — leads.phone is nullable there). A
+// null Phone on the upsert call would either be rejected or, worse, silently
+// match/merge into some OTHER lead that also has a blank Phone in Zoho — so
+// social leads get a synthetic-but-stable, human-readable surrogate instead,
+// keeping the same single upsert-by-Phone path safe for every channel.
+function leadIdentifier(lead) {
+  if (lead.phone) return lead.phone;
+  if (lead.external_id) return `${lead.source || 'social'}:${lead.external_id}`;
+  return null;
 }
 
 // Rich data (language, treatment, budget, score, latest exchange) goes into the
@@ -97,9 +121,11 @@ function buildDescription(lead, extra) {
 
 function toZohoRecord(lead, extra, { withStatus = true } = {}) {
   const { first, last } = splitName(lead.name);
+  const identifier = leadIdentifier(lead);
+  if (!identifier) throw new Error(`lead ${lead.id} has neither phone nor external_id — refusing to upsert with a blank dedupe key`);
   const rec = {
     Last_Name: last,
-    Phone: lead.phone,
+    Phone: identifier,
     Description: buildDescription(lead, extra),
   };
   if (first) rec.First_Name = first;
@@ -162,6 +188,6 @@ export async function syncLeadToCrm(lead, extra = {}) {
 
   const id = row?.details?.id || null;
   const action = row?.action || 'upserted';
-  console.log(`[zoho] lead ${action} → id ${id} (${lead.phone})`);
+  console.log(`[zoho] lead ${action} → id ${id} (${leadIdentifier(lead)})`);
   return id;
 }

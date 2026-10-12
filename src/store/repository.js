@@ -1,5 +1,7 @@
+import crypto from 'node:crypto';
 import { pool } from '../db/pool.js';
 import { getProfile } from '../services/profile.js'; // draftQuoteFromLead() için — bkz. devresel import notu
+import { toEur, isRatesLive } from '../services/fx.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -16,7 +18,7 @@ export async function getDefaultClinicId() {
 
 // Optional şube scope. NULL = tüm şubeler (mevcut global davranış — kırılmaz).
 // UUID-looking strings only; anything else is treated as "all".
-export function normalizeBranchId(value) {
+export function normalizeUuid(value) {
   if (value == null || value === '' || value === 'all') return null;
   const s = String(value);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)) {
@@ -25,32 +27,61 @@ export function normalizeBranchId(value) {
   return s;
 }
 
+// Named alias kept because every branch-filtered query reads better with it,
+// and because "all" collapsing to null is branch-filter semantics specifically.
+export const normalizeBranchId = normalizeUuid;
+
+// Shared by createPayment() and createCost() below — a Stripe/İyzico
+// checkout session is created straight from a payment's currency (see
+// stripe.js/iyzico.js), and a cost's currency feeds getProfitability()'s
+// EUR conversion (fx.js), so an unrecognized code in either place would
+// become a real, wrongly-priced charge or a silently-wrong report rather
+// than a caught input error.
+const KNOWN_CURRENCIES = new Set(['TRY', 'EUR', 'USD', 'GBP']);
+
 /**
- * Resolve the lead + conversation for an inbound WhatsApp message and return
- * the prior message history for AI context. Also performs idempotency dedup:
- * if this exact Meta message id was already stored, returns { duplicate: true }
- * so the caller can skip re-processing (Meta retries webhooks).
+ * Resolve the lead + conversation for an inbound message, atomically claim
+ * idempotency for it, and return the prior message history for AI context.
+ *
+ * The idempotency claim IS the inbound message insert itself — a plain
+ * SELECT-then-decide check used to sit here instead, with the real atomic
+ * INSERT only happening later in saveExchange, AFTER the AI call and the
+ * outbound send. That gap was exploitable in practice (not just in theory):
+ * Meta explicitly documents at-least-once webhook delivery, so a retried
+ * delivery landing on a SECOND, concurrent Vercel invocation could pass the
+ * SELECT check before the first invocation's INSERT had committed — each
+ * invocation would then run its own AI call and send its own reply, so the
+ * patient could receive the same reply twice and the clinic pays for two AI
+ * calls for one message. Claiming first, via Postgres's own unique index on
+ * whatsapp_message_id, means only one caller can ever get a row back,
+ * regardless of how many arrive concurrently.
+ *
+ * Two identity paths, mirroring how each platform identifies a sender:
+ * WhatsApp/widget leads are keyed by (clinic, phone); Instagram/Messenger
+ * never expose a phone number, so those are keyed by (clinic, source,
+ * external_id) instead — see migration 020. Pass exactly one of phone/externalId.
  */
-export async function loadContext(phone, { name, wamid }) {
+export async function loadContext({ phone, externalId, source, name, wamid, userText, image }) {
   const clinicId = await getDefaultClinicId();
 
-  if (wamid) {
-    const dup = await pool.query(
-      'SELECT 1 FROM messages WHERE whatsapp_message_id = $1 LIMIT 1',
-      [wamid],
-    );
-    if (dup.rowCount > 0) return { duplicate: true, history: [], ctx: {} };
-  }
-
-  // Upsert lead by (clinic, phone). Don't overwrite an existing name with null.
-  const leadRes = await pool.query(
-    `INSERT INTO leads (clinic_id, phone, name)
-       VALUES ($1, $2, $3)
-     ON CONFLICT (clinic_id, phone)
-       DO UPDATE SET name = COALESCE(leads.name, EXCLUDED.name), updated_at = now()
-     RETURNING id`,
-    [clinicId, phone, name || null],
-  );
+  // Don't overwrite an existing name with null in either path.
+  const leadRes = externalId
+    ? await pool.query(
+        `INSERT INTO leads (clinic_id, external_id, source, name)
+           VALUES ($1, $2, $3, $4)
+         ON CONFLICT (clinic_id, source, external_id) WHERE external_id IS NOT NULL
+           DO UPDATE SET name = COALESCE(leads.name, EXCLUDED.name), updated_at = now()
+         RETURNING id`,
+        [clinicId, externalId, source, name || null],
+      )
+    : await pool.query(
+        `INSERT INTO leads (clinic_id, phone, name)
+           VALUES ($1, $2, $3)
+         ON CONFLICT (clinic_id, phone)
+           DO UPDATE SET name = COALESCE(leads.name, EXCLUDED.name), updated_at = now()
+         RETURNING id`,
+        [clinicId, phone, name || null],
+      );
   const leadId = leadRes.rows[0].id;
 
   // One open conversation per lead.
@@ -64,14 +95,40 @@ export async function loadContext(phone, { name, wamid }) {
   const conversationId = convRes.rows[0].id;
   const conversationStatus = convRes.rows[0].status;
 
-  // Recent history for the model (chronological). Cap to keep prompts bounded.
+  // Recent history for the model (chronological, PRIOR turns only). Fetched
+  // BEFORE the claim below inserts THIS turn's inbound message, so it's
+  // never double-counted here and again by concierge.js's generateReply(),
+  // which appends the current turn itself on top of this history.
+  //
+  // The window must be the NEWEST 40, so it's ordered DESC here and flipped
+  // back to chronological below. A plain `ORDER BY created_at ASC LIMIT 40`
+  // takes the OLDEST 40 instead, which looks identical until a conversation
+  // passes 40 messages (~20 exchanges — very reachable in a real intake) and
+  // then silently freezes the model's view at the start of the conversation:
+  // it stops seeing anything the patient has said since, re-asks details they
+  // already gave, and contradicts its own recent answers.
   const histRes = await pool.query(
-    `SELECT role, content FROM messages
-       WHERE conversation_id = $1
-       ORDER BY created_at ASC
-       LIMIT 40`,
+    `SELECT role, content FROM (
+       SELECT role, content, created_at FROM messages
+         WHERE conversation_id = $1
+         ORDER BY created_at DESC
+         LIMIT 40
+     ) recent ORDER BY created_at ASC`,
     [conversationId],
   );
+
+  // The atomic claim. When wamid is null the partial unique index
+  // (`WHERE whatsapp_message_id IS NOT NULL`) never matches, so this is just
+  // a normal insert in that case — never treated as a duplicate.
+  const ins = await pool.query(
+    `INSERT INTO messages (conversation_id, role, content, whatsapp_message_id, media_data, media_mime_type)
+       VALUES ($1, 'user', $2, $3, $4, $5)
+     ON CONFLICT (whatsapp_message_id) WHERE whatsapp_message_id IS NOT NULL
+     DO NOTHING
+     RETURNING id`,
+    [conversationId, userText, wamid || null, image?.buffer || null, image?.mimeType || null],
+  );
+  if (ins.rowCount === 0) return { duplicate: true, history: [], ctx: {} };
 
   return {
     duplicate: false,
@@ -81,30 +138,23 @@ export async function loadContext(phone, { name, wamid }) {
 }
 
 /**
- * Persist one full exchange (patient message + assistant reply), update the
- * lead from the AI's structured insight, and flag handover when needed.
- * All in one transaction so a lead is never left half-updated.
+ * Persist the assistant's reply and update the lead from the AI's
+ * structured insight, flagging handover when needed. All in one transaction
+ * so a lead is never left half-updated. The inbound patient message is
+ * NOT inserted here — loadContext() already claimed and inserted it,
+ * atomically, before the AI call this reply came from (see its docstring).
  */
-export async function saveExchange(phone, { userText, inboundWamid, reply, meta, ctx }) {
+export async function saveExchange(phone, { reply, meta, ctx }) {
   const { leadId, conversationId } = ctx;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Inbound message — carries the Meta id for idempotency. If a retry already
-    // inserted it, DO NOTHING keeps this safe.
+    // Assistant reply. is_ai=true marks it as AI-authored (vs. a human agent's
+    // reply via recordAgentMessage) — see the ROI Widget's getRoiStats().
     await client.query(
-      `INSERT INTO messages (conversation_id, role, content, whatsapp_message_id)
-         VALUES ($1, 'user', $2, $3)
-       ON CONFLICT (whatsapp_message_id) WHERE whatsapp_message_id IS NOT NULL
-       DO NOTHING`,
-      [conversationId, userText, inboundWamid || null],
-    );
-
-    // Assistant reply.
-    await client.query(
-      `INSERT INTO messages (conversation_id, role, content)
-         VALUES ($1, 'assistant', $2)`,
+      `INSERT INTO messages (conversation_id, role, content, is_ai)
+         VALUES ($1, 'assistant', $2, true)`,
       [conversationId, reply],
     );
 
@@ -170,7 +220,7 @@ export async function saveExchange(phone, { userText, inboundWamid, reply, meta,
 export async function getLead(leadId) {
   const { rows } = await pool.query(
     `SELECT id, clinic_id, phone, name, country, language, treatment_interest,
-            budget_hint, readiness, score, status, crm_lead_id
+            budget_hint, readiness, score, status, crm_lead_id, source, external_id
        FROM leads WHERE id = $1`,
     [leadId],
   );
@@ -198,31 +248,25 @@ export async function setCrmLeadId(leadId, crmId) {
 
 // ── Panel queries ───────────────────────────────────────────────────────────
 
-// Save only the inbound patient message (used when a human agent has taken over
-// the conversation, so the AI does not auto-reply).
-export async function saveInboundMessage(ctx, { userText, wamid }) {
-  await pool.query(
-    `INSERT INTO messages (conversation_id, role, content, whatsapp_message_id)
-       VALUES ($1, 'user', $2, $3)
-     ON CONFLICT (whatsapp_message_id) WHERE whatsapp_message_id IS NOT NULL
-     DO NOTHING`,
-    [ctx.conversationId, userText, wamid || null],
-  );
-}
-
 // Command Center KPIs (real numbers from the DB; a couple of demo constants
 // come from the frontend, clearly labelled there).
 // Both the Command Center's occupancy KPI and the Smart Device Booking view
 // derive utilisation from this one assumption, so the two screens can't drift.
 export const SLOTS_PER_DAY = 6;
 
+// Same clinic-timezone bucketing as getAnalytics()'s trend chart, and the
+// same reason: "today" compared via now()::date/created_at::date alone uses
+// the DB session's default timezone (UTC on managed Postgres), not
+// Europe/Istanbul — a lead created just after midnight Istanbul time is
+// still the previous UTC day, so it would silently miss today's count (and,
+// via device_occupancy below, misjudge which appointments are "today" too).
 export async function getStats({ branchId = null } = {}) {
   const bid = normalizeBranchId(branchId);
   const q = await pool.query(
     `
     SELECT
       (SELECT count(*) FROM leads l WHERE ($1::uuid IS NULL OR l.branch_id = $1)) AS total_leads,
-      (SELECT count(*) FROM leads l WHERE l.created_at::date = now()::date
+      (SELECT count(*) FROM leads l WHERE (l.created_at AT TIME ZONE $2)::date = (now() AT TIME ZONE $2)::date
          AND ($1::uuid IS NULL OR l.branch_id = $1))                              AS today_leads,
       (SELECT count(*) FROM leads l WHERE l.status = 'hot'
          AND ($1::uuid IS NULL OR l.branch_id = $1))                              AS hot_leads,
@@ -240,13 +284,13 @@ export async function getStats({ branchId = null } = {}) {
         WHERE ($1::uuid IS NULL OR l.branch_id = $1))                             AS total_conversations,
       -- Device occupancy is clinic-wide (devices have no branch_id yet).
       (SELECT COALESCE(round(avg(u.util)), 0) FROM (
-         SELECT (count(a.id) FILTER (WHERE a.starts_at::date = now()::date AND a.status = 'booked')::numeric
+         SELECT (count(a.id) FILTER (WHERE (a.starts_at AT TIME ZONE $2)::date = (now() AT TIME ZONE $2)::date AND a.status = 'booked')::numeric
                  / ${SLOTS_PER_DAY}) * 100 AS util
          FROM devices d LEFT JOIN appointments a ON a.device_id = d.id
          WHERE d.active GROUP BY d.id
        ) u)                                                                    AS device_occupancy
   `,
-    [bid],
+    [bid, BUSINESS_HOURS.timezone],
   );
   const row = q.rows[0];
   const convs = Number(row.total_conversations);
@@ -268,7 +312,7 @@ export async function listConversations({ limit = 50, offset = 0, branchId = nul
     SELECT
       l.id                AS lead_id,
       l.phone, l.name, l.country, l.language, l.score, l.status AS lead_status,
-      l.branch_id,
+      l.branch_id, l.source, l.external_id,
       c.status            AS conv_status,
       c.handover_reason, c.urgent,
       lm.content          AS last_message,
@@ -308,6 +352,7 @@ export async function getHandoverQueue({ branchId = null } = {}) {
   const q = await pool.query(
     `
     SELECT l.id AS lead_id, l.phone, l.name, l.country, l.language, l.score, l.medical_note,
+           l.source, l.external_id,
            c.handover_reason, c.urgent, c.updated_at
     FROM conversations c
     JOIN leads l ON l.id = c.lead_id
@@ -321,10 +366,71 @@ export async function getHandoverQueue({ branchId = null } = {}) {
 }
 
 // Full thread for one lead.
+/**
+ * Delete a lead and everything hanging off them: conversation, messages (and
+ * the photos stored inline on those messages), quotes, payments, notes,
+ * logistics, post-op tasks — all by ON DELETE CASCADE — plus appointments,
+ * which are only SET NULL and so have to go explicitly or they linger as
+ * bookings belonging to nobody, still occupying a room in the utilization
+ * figures.
+ *
+ * This is genuinely destructive and has no undo, which is exactly why the
+ * route in front of it requires the caller to echo the lead's own id back.
+ * It exists because a demo run, a wrong number, or a patient exercising their
+ * right to erasure all leave rows that otherwise nothing in the product can
+ * remove.
+ */
+/**
+ * Correct a patient's own details. The AI fills these in from what the patient
+ * writes, so a misheard name, a wrong country or a treatment guessed from an
+ * ambiguous first message all end up on the record with no way to fix them —
+ * and they are exactly the fields that then appear on the quote PDF and the
+ * itinerary the patient receives.
+ */
+export async function updateLead(leadId, { name, country, language, treatmentInterest, budgetHint, status }) {
+  const fields=[]; const vals=[leadId];
+  if (name !== undefined) fields.push(`name = $${vals.push(name?.trim().slice(0,120) || null)}`);
+  if (country !== undefined) fields.push(`country = $${vals.push(country?.trim().slice(0,80) || null)}`);
+  if (language !== undefined) fields.push(`language = $${vals.push(language?.trim().slice(0,40) || null)}`);
+  if (treatmentInterest !== undefined) fields.push(`treatment_interest = $${vals.push(treatmentInterest?.trim().slice(0,120) || null)}`);
+  if (budgetHint !== undefined) fields.push(`budget_hint = $${vals.push(budgetHint?.trim().slice(0,80) || null)}`);
+  if (status !== undefined) {
+    const allowed = ['new','hot','handed_over','booked','lost'];
+    if (!allowed.includes(status)) throw new Error('invalid status');
+    fields.push(`status = $${vals.push(status)}`);
+  }
+  if (!fields.length) throw new Error('nothing to update');
+  fields.push('updated_at = now()');
+  const q = await pool.query(
+    `UPDATE leads SET ${fields.join(', ')} WHERE id = $1
+     RETURNING id, name, phone, country, language, treatment_interest, budget_hint, status`, vals);
+  if (!q.rows[0]) throw new Error('lead not found');
+  return q.rows[0];
+}
+
+export async function deleteLead(leadId) {
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    const lead = await c.query('SELECT name, phone FROM leads WHERE id = $1', [leadId]);
+    if (!lead.rows[0]) throw new Error('lead not found');
+    const appts = await c.query('DELETE FROM appointments WHERE lead_id = $1', [leadId]);
+    await c.query('DELETE FROM leads WHERE id = $1', [leadId]);
+    await c.query('COMMIT');
+    return { name: lead.rows[0].name, phone: lead.rows[0].phone, appointments_removed: appts.rowCount };
+  } catch (err) {
+    await c.query('ROLLBACK');
+    throw err;
+  } finally {
+    c.release();
+  }
+}
+
 export async function getConversationDetail(leadId) {
   const leadQ = await pool.query(
     `SELECT id, phone, name, country, language, treatment_interest, budget_hint,
-            readiness, score, status, crm_lead_id, medical_note, branch_id
+            readiness, score, status, crm_lead_id, medical_note, branch_id, partner_id,
+            doctor_id, doctor_review_status, doctor_note, doctor_reviewed_at, source, external_id
        FROM leads WHERE id = $1`,
     [leadId],
   );
@@ -340,18 +446,33 @@ export async function getConversationDetail(leadId) {
   let messages = [];
   if (conversation) {
     const msgQ = await pool.query(
-      `SELECT role, content, created_at FROM messages
-         WHERE conversation_id = $1 ORDER BY created_at ASC`,
+      `SELECT id, role, content, created_at, (media_mime_type IS NOT NULL) AS has_media
+         FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC`,
       [conversation.id],
     );
     messages = msgQ.rows;
   }
   // Internal coordinator notes travel with the detail so the profile panel
-  // needs one request, not two.
-  const notes = await listLeadNotes(leadId);
-  const payments = await listPaymentsForLead(leadId);
-  const quotes = await listQuotesForLead(leadId);
-  return { lead, conversation, messages, notes, payments, quotes };
+  // needs one request, not two. Independent of each other and of `lead` —
+  // parallelized rather than four sequential round-trips.
+  const [notes, payments, quotes, costs] = await Promise.all([
+    listLeadNotes(leadId),
+    listPaymentsForLead(leadId),
+    listQuotesForLead(leadId),
+    listCostsForLead(leadId),
+  ]);
+  return { lead, conversation, messages, notes, payments, quotes, costs };
+}
+
+// Fetches the photo bytes for one inbound message, for the panel's own
+// authenticated viewer — not the patient-facing side (there is none; the
+// photo came FROM the patient).
+export async function getMessageMedia(messageId) {
+  const q = await pool.query(
+    `SELECT media_data, media_mime_type FROM messages WHERE id = $1 AND media_data IS NOT NULL`,
+    [messageId],
+  );
+  return q.rows[0] || null;
 }
 
 // ── Internal notes ──────────────────────────────────────────────────────────
@@ -378,6 +499,12 @@ export async function addLeadNote(leadId, body, author) {
   return q.rows[0];
 }
 
+export async function deleteLeadNote(noteId) {
+  const q = await pool.query('DELETE FROM lead_notes WHERE id = $1 RETURNING id', [noteId]);
+  if (!q.rows[0]) throw new Error('note not found');
+  return q.rows[0];
+}
+
 // ── Payments ─────────────────────────────────────────────────────────────
 // The one thing every other "real" number in this app depends on. Revenue,
 // ROAS and commission are honest only once they are a sum over rows here,
@@ -385,7 +512,7 @@ export async function addLeadNote(leadId, body, author) {
 export async function listPaymentsForLead(leadId) {
   const q = await pool.query(
     `SELECT id, amount, currency, type, status, to_char(due_date, 'YYYY-MM-DD') AS due_date, paid_at,
-            reminder_sent_at, note, created_at, updated_at
+            reminder_sent_at, note, created_at, updated_at, provider, checkout_url, link_sent_at
        FROM payments WHERE lead_id = $1 ORDER BY created_at DESC`,
     [leadId],
   );
@@ -394,16 +521,73 @@ export async function listPaymentsForLead(leadId) {
 
 export async function createPayment(leadId, { amount, currency, type, dueDate, note }) {
   const clinicId = await getDefaultClinicId();
-  const amt = Number(amount);
+  // Rounded to the cent before it ever reaches Stripe/İyzico: none of
+  // KNOWN_CURRENCIES are zero-decimal, and Stripe's amount×100 conversion
+  // (stripe.js) can land exactly on a float .5 boundary for an unrounded
+  // 3+-decimal amount (e.g. 1.005 × 100 → 100.4999... → rounds down to a
+  // 1-cent undercharge) — rounding the source amount itself removes the
+  // input class that triggers it, for both gateways at once.
+  const amt = Math.round(Number(amount) * 100) / 100;
   if (!Number.isFinite(amt) || amt <= 0) throw new Error('amount must be a positive number');
+  const cur = (currency || 'EUR').toUpperCase().slice(0, 3);
+  if (!KNOWN_CURRENCIES.has(cur)) throw new Error(`unsupported currency — use one of ${[...KNOWN_CURRENCIES].join(', ')}`);
   const q = await pool.query(
     `INSERT INTO payments (clinic_id, lead_id, amount, currency, type, due_date, note)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id, amount, currency, type, status, to_char(due_date, 'YYYY-MM-DD') AS due_date, paid_at,
-               reminder_sent_at, note, created_at, updated_at`,
-    [clinicId, leadId, amt, (currency || 'EUR').toUpperCase().slice(0, 3), type || 'deposit', dueDate || null, note || null],
+               reminder_sent_at, note, created_at, updated_at, provider, checkout_url, link_sent_at`,
+    [clinicId, leadId, amt, cur, type || 'deposit', dueDate || null, note || null],
   );
   return q.rows[0];
+}
+
+export async function getPaymentById(paymentId) {
+  const q = await pool.query(
+    `SELECT id, lead_id, amount, currency, type, status, to_char(due_date, 'YYYY-MM-DD') AS due_date, paid_at,
+            reminder_sent_at, note, created_at, updated_at, provider, checkout_url, link_sent_at
+       FROM payments WHERE id = $1`,
+    [paymentId],
+  );
+  return q.rows[0] || null;
+}
+
+// Persists the Stripe/İyzico checkout session against the payment row that
+// was just created for it — see POST /conversations/:leadId/payments/link,
+// which always makes a fresh payment row first, so this always writes onto a
+// brand-new row rather than an existing pending one. (Double-submission from
+// the panel's "create link" button is guarded client-side by disabling the
+// button while the request is in flight, not by any dedup here.)
+export async function setPaymentCheckout(paymentId, { provider, checkoutUrl, providerSessionId }) {
+  const q = await pool.query(
+    `UPDATE payments SET provider = $2, checkout_url = $3, provider_session_id = $4, updated_at = now()
+       WHERE id = $1
+     RETURNING id, lead_id, amount, currency, type, status, provider, checkout_url, provider_session_id`,
+    [paymentId, provider, checkoutUrl, providerSessionId],
+  );
+  if (!q.rows[0]) throw new Error('payment not found');
+  return q.rows[0];
+}
+
+export async function markPaymentLinkSent(paymentId) {
+  await pool.query(`UPDATE payments SET link_sent_at = now(), updated_at = now() WHERE id = $1`, [paymentId]);
+}
+
+// The ONLY place a payment is ever marked 'paid' by anything other than a
+// coordinator's manual click — driven exclusively by a signature-verified
+// Stripe webhook event (see routes/stripeWebhook.js), never by the patient
+// simply loading the success_url page. Idempotent: `status <> 'paid'` means
+// a retried webhook delivery for the same session is a safe no-op, and
+// returns null rather than throwing so the caller can tell "already handled"
+// apart from "really failed".
+export async function markPaymentPaidByWebhook(paymentId, providerSessionId) {
+  const q = await pool.query(
+    `UPDATE payments SET status = 'paid', paid_at = now(),
+            provider_session_id = COALESCE(provider_session_id, $2), updated_at = now()
+       WHERE id = $1 AND status <> 'paid'
+     RETURNING id, lead_id, amount, currency, type`,
+    [paymentId, providerSessionId],
+  );
+  return q.rows[0] || null;
 }
 
 // Single endpoint for every state change (paid / refunded / reminder) so the
@@ -428,7 +612,7 @@ export async function updatePayment(paymentId, { status, reminder }) {
   const q = await pool.query(
     `UPDATE payments SET ${sets.join(', ')} WHERE id = $1
      RETURNING id, lead_id, amount, currency, type, status, to_char(due_date, 'YYYY-MM-DD') AS due_date, paid_at,
-               reminder_sent_at, note, created_at, updated_at`,
+               reminder_sent_at, note, created_at, updated_at, provider, checkout_url, link_sent_at`,
     vals,
   );
   if (!q.rows[0]) throw new Error('payment not found');
@@ -437,18 +621,24 @@ export async function updatePayment(paymentId, { status, reminder }) {
 
 // Cross-lead view for the Inbox's "Awaiting deposit" filter and any future
 // dunning list — every lead with at least one payment still pending.
+// Grouped by (lead_id, currency), not just lead_id: a lead can have pending
+// payments in more than one currency (e.g. a EUR deposit and a later TRY
+// balance), and summing those into one number under a single, arbitrarily
+// picked currency label (the old `min(p.currency)`) would show an amount
+// that doesn't correspond to any real payment. One row per currency a lead
+// actually has pending keeps every number and its label truthful.
 export async function listPendingDeposits({ branchId = null } = {}) {
   const bid = normalizeBranchId(branchId);
   const q = await pool.query(
     `
-    SELECT p.lead_id, count(*)::int AS pending_count,
-           sum(p.amount) AS pending_amount, min(p.currency) AS currency,
+    SELECT p.lead_id, p.currency, count(*)::int AS pending_count,
+           sum(p.amount) AS pending_amount,
            to_char(min(p.due_date), 'YYYY-MM-DD') AS earliest_due, max(p.reminder_sent_at) AS last_reminder
       FROM payments p
       JOIN leads l ON l.id = p.lead_id
      WHERE p.status = 'pending'
        AND ($1::uuid IS NULL OR l.branch_id = $1)
-     GROUP BY p.lead_id
+     GROUP BY p.lead_id, p.currency
   `,
     [bid],
   );
@@ -457,22 +647,206 @@ export async function listPendingDeposits({ branchId = null } = {}) {
 
 // The real revenue figure: money actually marked paid. Booked-but-unpaid
 // leads contribute nothing here — as they shouldn't.
+// Payments can be in any of KNOWN_CURRENCIES (İyzico/TRY and Stripe/EUR-USD-GBP
+// are both live by design, so a mix is the expected steady state, not an edge
+// case) — a plain SQL sum() would add a TRY amount and a EUR amount as if
+// they were the same unit. Same toEur()-per-row discipline as
+// getProfitability(), which is the one place in this file that already got
+// this right; collected/pending here are both true EUR-equivalent totals.
 export async function getPaymentTotals({ branchId = null } = {}) {
   const bid = normalizeBranchId(branchId);
   const q = await pool.query(
     `
-    SELECT
-      COALESCE(sum(p.amount) FILTER (WHERE p.status = 'paid'), 0)    AS collected,
-      COALESCE(sum(p.amount) FILTER (WHERE p.status = 'pending'), 0) AS pending,
-      count(*) FILTER (WHERE p.status = 'pending')                   AS pending_count
+    SELECT p.amount, p.currency, p.status
     FROM payments p
     JOIN leads l ON l.id = p.lead_id
-    WHERE ($1::uuid IS NULL OR l.branch_id = $1)
+    WHERE p.status IN ('paid', 'pending')
+      AND ($1::uuid IS NULL OR l.branch_id = $1)
   `,
     [bid],
   );
+  let collected = 0;
+  let pending = 0;
+  let pendingCount = 0;
+  for (const r of q.rows) {
+    const eur = await toEur(Number(r.amount), r.currency);
+    if (r.status === 'paid') collected += eur;
+    else {
+      pending += eur;
+      pendingCount += 1;
+    }
+  }
+  return {
+    collected: Math.round(collected * 100) / 100,
+    pending: Math.round(pending * 100) / 100,
+    pending_count: pendingCount,
+  };
+}
+
+// ── Multi-currency costs & net profitability ────────────────────────────
+// Patient payments (`payments`) are money IN; these are money OUT — what the
+// clinic itself pays the hospital, a driver, a hotel per case, often in a
+// different currency than the patient paid in. See services/fx.js for how
+// the two sides get normalized to EUR to become comparable.
+export async function listCostsForLead(leadId) {
+  const q = await pool.query(
+    `SELECT id, category, amount, currency, note, created_at
+       FROM operation_costs WHERE lead_id = $1 ORDER BY created_at DESC`,
+    [leadId],
+  );
+  return q.rows;
+}
+
+export async function createCost(leadId, { category, amount, currency, note }) {
+  if (!['hospital', 'driver', 'hotel', 'other'].includes(category)) throw new Error('invalid category');
+  const amt = Math.round(Number(amount) * 100) / 100;
+  if (!Number.isFinite(amt) || amt <= 0) throw new Error('amount must be a positive number');
+  const cur = (currency || 'TRY').toUpperCase().slice(0, 3);
+  if (!KNOWN_CURRENCIES.has(cur)) throw new Error(`unsupported currency — use one of ${[...KNOWN_CURRENCIES].join(', ')}`);
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `INSERT INTO operation_costs (clinic_id, lead_id, category, amount, currency, note)
+       VALUES ($1,$2,$3,$4,$5,$6)
+     RETURNING id, category, amount, currency, note, created_at`,
+    [clinicId, leadId, category, amt, cur, note || null],
+  );
+  return q.rows[0];
+}
+
+export async function deletePayment(paymentId) {
+  // A paid payment is money actually collected — it drives revenue, partner
+  // commission and the profitability view, so removing it would quietly
+  // rewrite those figures. Correcting one is what the 'refunded' status is
+  // for; only a row that never got paid can be deleted outright.
+  const cur = await pool.query('SELECT status FROM payments WHERE id = $1', [paymentId]);
+  if (!cur.rows[0]) throw new Error('payment not found');
+  if (cur.rows[0].status === 'paid') throw new Error('a paid payment cannot be deleted — mark it refunded instead');
+  const q = await pool.query('DELETE FROM payments WHERE id = $1 RETURNING id', [paymentId]);
+  return q.rows[0];
+}
+
+export async function deleteCost(costId) {
+  const q = await pool.query(`DELETE FROM operation_costs WHERE id = $1 RETURNING id`, [costId]);
+  if (!q.rows[0]) throw new Error('cost not found');
+  return q.rows[0];
+}
+
+// Net profitability: revenue actually COLLECTED (same "paid, not booked"
+// discipline as getPaymentTotals) minus costs actually logged, both converted
+// to EUR — so a TRY hospital invoice and a GBP deposit can be compared honestly.
+export async function getProfitability({ branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  const paymentsQ = await pool.query(
+    `SELECT p.amount, p.currency FROM payments p JOIN leads l ON l.id = p.lead_id
+      WHERE p.status = 'paid' AND ($1::uuid IS NULL OR l.branch_id = $1)`,
+    [bid],
+  );
+  const costsQ = await pool.query(
+    `SELECT c.amount, c.currency FROM operation_costs c JOIN leads l ON l.id = c.lead_id
+      WHERE ($1::uuid IS NULL OR l.branch_id = $1)`,
+    [bid],
+  );
+  let revenueEur = 0;
+  for (const r of paymentsQ.rows) revenueEur += await toEur(Number(r.amount), r.currency);
+  let costsEur = 0;
+  for (const r of costsQ.rows) costsEur += await toEur(Number(r.amount), r.currency);
+  return {
+    revenue_eur: Math.round(revenueEur * 100) / 100,
+    costs_eur: Math.round(costsEur * 100) / 100,
+    net_margin_eur: Math.round((revenueEur - costsEur) * 100) / 100,
+    margin_pct: revenueEur > 0 ? Math.round(((revenueEur - costsEur) / revenueEur) * 1000) / 10 : null,
+    // False means the ECB API was unreachable and this used the hardcoded
+    // fallback rates (see fx.js) — the panel shows a warning when this is false
+    // rather than silently presenting a stale conversion as "current rate".
+    rates_live: isRatesLive(),
+  };
+}
+
+// ── Hot-lead follow-up (silence watch) ──────────────────────────────────
+// A lead the AI scored 'hot' who then goes quiet is the easiest revenue left
+// on the table — they were close, then nothing. Finds anyone gone silent 48h+
+// who hasn't already been pinged for THIS silence (hot_followup_sent_at older
+// than their last message, or never set) — same crossing-based dedup as the
+// no-show risk watch, so a non-reply doesn't get re-messaged every day.
+const HOT_FOLLOWUP_SILENCE_HOURS = 48;
+export async function getSilentHotLeads() {
+  // WhatsApp template sends only — a lead with no phone (Instagram/Messenger)
+  // can't receive one, so it's excluded rather than left to fail send-side.
+  const q = await pool.query(
+    `
+    SELECT l.id AS lead_id, l.name, l.phone, l.language
+      FROM leads l
+      JOIN conversations c ON c.lead_id = l.id
+      JOIN messages m ON m.conversation_id = c.id
+     WHERE l.status = 'hot' AND l.phone IS NOT NULL
+     GROUP BY l.id
+    HAVING max(m.created_at) < now() - interval '${HOT_FOLLOWUP_SILENCE_HOURS} hours'
+       AND (l.hot_followup_sent_at IS NULL OR l.hot_followup_sent_at < max(m.created_at))
+  `,
+  );
+  return q.rows;
+}
+
+// Atomic claim, not a plain mark: only succeeds if nobody else has claimed
+// this lead's *current* silence episode in the last 24h. Called BEFORE the
+// WhatsApp send (not after, like the original version) so two overlapping
+// scheduler runs — a slow tick plus the next one, or a local setInterval
+// racing a Vercel Cron invocation — can't both win the same lead and send
+// the template twice. Returns false when someone else already claimed it.
+export async function markHotFollowupSent(leadId) {
+  const q = await pool.query(
+    `UPDATE leads SET hot_followup_sent_at = now()
+      WHERE id = $1 AND (hot_followup_sent_at IS NULL OR hot_followup_sent_at < now() - interval '24 hours')
+    RETURNING id`,
+    [leadId],
+  );
+  return Boolean(q.rows[0]);
+}
+
+// ── ROI Widget ───────────────────────────────────────────────────────────
+// What to tell a prospect once the 15-day PoC ends: how much staff time the
+// AI actually absorbed, how much of that happened when no human was on
+// shift, and how much of the collected revenue passed through an AI-handled
+// conversation at some point. MINUTES_PER_REPLY is a stated, round estimate
+// (reading + translating + pricing lookup + typing one WhatsApp reply by
+// hand) — shown as an assumption in the UI, not presented as measured fact.
+const MINUTES_PER_AI_REPLY = 4;
+const BUSINESS_HOURS = { startHour: 9, endHour: 19, timezone: 'Europe/Istanbul' }; // matches clinic-profile.js's stated hours
+
+export async function getRoiStats({ branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  // Independent of each other — parallelized rather than sequential.
+  const [q, totals] = await Promise.all([
+    pool.query(
+      `
+    SELECT
+      count(*) FILTER (WHERE m.is_ai) AS ai_replies,
+      count(*) FILTER (
+        WHERE m.is_ai
+          AND extract(hour FROM m.created_at AT TIME ZONE $2) NOT BETWEEN $3 AND $4 - 1
+      ) AS ai_replies_after_hours,
+      count(DISTINCT l.id) FILTER (WHERE m.is_ai) AS leads_ai_touched
+    FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    JOIN leads l ON l.id = c.lead_id
+    WHERE ($1::uuid IS NULL OR l.branch_id = $1)
+  `,
+      [bid, BUSINESS_HOURS.timezone, BUSINESS_HOURS.startHour, BUSINESS_HOURS.endHour],
+    ),
+    getPaymentTotals({ branchId }),
+  ]);
   const r = q.rows[0];
-  return { collected: Number(r.collected), pending: Number(r.pending), pending_count: Number(r.pending_count) };
+  const aiReplies = Number(r.ai_replies);
+
+  return {
+    ai_replies: aiReplies,
+    ai_replies_after_hours: Number(r.ai_replies_after_hours),
+    leads_ai_touched: Number(r.leads_ai_touched),
+    minutes_saved: aiReplies * MINUTES_PER_AI_REPLY,
+    minutes_per_reply_assumption: MINUTES_PER_AI_REPLY,
+    revenue_collected: totals.collected,
+    business_hours: `${BUSINESS_HOURS.startHour}:00–${BUSINESS_HOURS.endHour}:00`,
+  };
 }
 
 // ── Quotes (Treatment Plan Builder) ─────────────────────────────────────────
@@ -581,6 +955,17 @@ export async function updateQuote(quoteId, { items, currency, language, validUnt
                view_token, created_at, sent_at, viewed_at, accepted_at`,
     vals,
   );
+  return q.rows[0];
+}
+
+export async function deleteQuote(quoteId) {
+  // Only a draft can be removed. Once a quote has been sent the patient is
+  // holding a link to it, and once accepted it is the record of what they
+  // agreed to — deleting either would rewrite history the clinic may need.
+  const cur = await pool.query('SELECT status FROM quotes WHERE id = $1', [quoteId]);
+  if (!cur.rows[0]) throw new Error('quote not found');
+  if (cur.rows[0].status !== 'draft') throw new Error('only a draft quote can be deleted');
+  const q = await pool.query('DELETE FROM quotes WHERE id = $1 RETURNING id', [quoteId]);
   return q.rows[0];
 }
 
@@ -740,7 +1125,7 @@ export async function getNoShowRisks({ branchId = null } = {}) {
   const bid = normalizeBranchId(branchId);
   const q = await pool.query(
     `
-    SELECT l.id, l.name, l.phone, l.language, l.country, l.status, l.risk_notified_at,
+    SELECT l.id, l.name, l.phone, l.language, l.country, l.status, l.risk_notified_at, l.source, l.external_id,
       (SELECT max(m.created_at) FROM messages m
          JOIN conversations c ON c.id = m.conversation_id
         WHERE c.lead_id = l.id)                                        AS last_message_at,
@@ -778,6 +1163,8 @@ export async function getNoShowRisks({ branchId = null } = {}) {
         language: row.language,
         country: row.country,
         risk_notified_at: row.risk_notified_at,
+        source: row.source,
+        external_id: row.external_id,
         ...risk,
       };
     })
@@ -785,9 +1172,16 @@ export async function getNoShowRisks({ branchId = null } = {}) {
     .sort((a, b) => b.score - a.score);
 }
 
-// The scheduler notifies once per threshold crossing, not once per scan.
+// Atomic claim, called BEFORE notifying (not after): WHERE risk_notified_at
+// IS NULL means only one overlapping scheduler run can ever win a given
+// lead's crossing. Returns false when another run already claimed it, so
+// the team doesn't get paged twice for the same crossing.
 export async function markRiskNotified(leadId) {
-  await pool.query('UPDATE leads SET risk_notified_at = now() WHERE id = $1', [leadId]);
+  const q = await pool.query(
+    'UPDATE leads SET risk_notified_at = now() WHERE id = $1 AND risk_notified_at IS NULL RETURNING id',
+    [leadId],
+  );
+  return Boolean(q.rows[0]);
 }
 export async function clearRiskNotified(leadId) {
   await pool.query(
@@ -812,16 +1206,21 @@ export async function recordAgentMessage(leadId, content) {
   const conv = convQ.rows[0];
   if (!conv) return null;
   await pool.query(
-    `INSERT INTO messages (conversation_id, role, content) VALUES ($1, 'assistant', $2)`,
+    `INSERT INTO messages (conversation_id, role, content, is_ai) VALUES ($1, 'assistant', $2, false)`,
     [conv.id, content],
   );
   return conv.id;
 }
 
-// Look up a lead's phone (the panel sends replies by lead id).
-export async function getLeadPhone(leadId) {
-  const q = await pool.query(`SELECT phone FROM leads WHERE id = $1`, [leadId]);
-  return q.rows[0]?.phone || null;
+// Everything services/channelSend.js's sendToLead() needs to pick the right
+// channel and language for a panel-triggered send (currently: payment links),
+// plus country for the payment providers' required buyer/billing fields.
+export async function getLeadChannel(leadId) {
+  const q = await pool.query(
+    `SELECT phone, external_id, source, language, name, country FROM leads WHERE id = $1`,
+    [leadId],
+  );
+  return q.rows[0] || null;
 }
 
 // ── Lead Collection Widget ──────────────────────────────────────────────────
@@ -829,19 +1228,32 @@ export async function getLeadPhone(leadId) {
 // patient's inquiry as the first message. Feeds the same pipeline as WhatsApp.
 export async function createWidgetLead(d) {
   const clinicId = await getDefaultClinicId();
+  // Referral attribution: widget.html forwards a ?ref=<partner's PUBLIC
+  // referral_code> from the link a partner shares, if present — but ONLY for
+  // a genuinely new lead (the INSERT branch below). Deliberately absent from
+  // the ON CONFLICT branch: without that, an existing lead with real prior
+  // history (their own organic WhatsApp thread, quotes, payments) could be
+  // retroactively credited to a partner by anyone submitting that same phone
+  // number through a ?ref= link later — turning the partner's commission
+  // math into something they never actually earned.
+  let partnerId = null;
+  if (d.referralCode) {
+    const partner = await getPartnerByReferralCode(d.referralCode);
+    if (partner) partnerId = partner.id;
+  }
   const leadRes = await pool.query(
-    `INSERT INTO leads (clinic_id, phone, name, country, language, treatment_interest, budget_hint, source, status, consent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'widget','new',$8)
+    `INSERT INTO leads (clinic_id, phone, name, country, language, treatment_interest, budget_hint, source, status, consent, partner_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'widget','new',$8,$9)
      ON CONFLICT (clinic_id, phone) DO UPDATE SET
        name = COALESCE(leads.name, EXCLUDED.name),
        treatment_interest = COALESCE(EXCLUDED.treatment_interest, leads.treatment_interest),
        budget_hint = COALESCE(EXCLUDED.budget_hint, leads.budget_hint),
        country = COALESCE(EXCLUDED.country, leads.country),
        consent = leads.consent OR EXCLUDED.consent,
-       source = 'widget', updated_at = now()
+       updated_at = now()
      RETURNING id`,
     [clinicId, d.phone, d.name || null, d.country || null, d.language || null,
-     d.treatment || null, d.budget || null, d.consent === true],
+     d.treatment || null, d.budget || null, d.consent === true, partnerId],
   );
   const leadId = leadRes.rows[0].id;
   const convRes = await pool.query(
@@ -864,15 +1276,28 @@ export async function createWidgetLead(d) {
 // ── Analytics (CAC / ROAS / funnel / trend) ─────────────────────────────────
 export async function getAnalytics({ branchId = null } = {}) {
   const bid = normalizeBranchId(branchId);
+  // Bucketed in the CLINIC's timezone (same BUSINESS_HOURS.timezone used by
+  // getRoiStats below), not the DB session's default (UTC on managed
+  // Postgres) — a lead created at, say, 01:00 Istanbul time is 22:00 UTC the
+  // PREVIOUS day, so a plain now()::date/created_at::date comparison would
+  // silently misfile it under yesterday's bar on this chart. `day` comes
+  // back as a plain YYYY-MM-DD string (to_char), not a date/timestamp — the
+  // frontend must NOT run it through `new Date(...)`, which would reinterpret
+  // it in the BROWSER's own local zone and could shift the displayed day
+  // number by one again, undoing the fix on the way back out.
   const trend = await pool.query(
     `
-    SELECT d::date AS day, count(l.id) AS count
-    FROM generate_series(now()::date - interval '13 days', now()::date, interval '1 day') d
-    LEFT JOIN leads l ON l.created_at::date = d::date
+    SELECT to_char(d, 'YYYY-MM-DD') AS day, count(l.id) AS count
+    FROM generate_series(
+      (now() AT TIME ZONE $2)::date - interval '13 days',
+      (now() AT TIME ZONE $2)::date,
+      interval '1 day'
+    ) d
+    LEFT JOIN leads l ON (l.created_at AT TIME ZONE $2)::date = d::date
       AND ($1::uuid IS NULL OR l.branch_id = $1)
     GROUP BY d ORDER BY d
   `,
-    [bid],
+    [bid, BUSINESS_HOURS.timezone],
   );
   const funnel = await pool.query(
     `
@@ -924,12 +1349,7 @@ export async function getAnalytics({ branchId = null } = {}) {
   const byBranch = await pool.query(`
     SELECT b.id AS branch_id, b.name, b.code, b.is_default,
       count(l.id)::int AS leads,
-      count(l.id) FILTER (WHERE l.status = 'booked')::int AS booked,
-      COALESCE((
-        SELECT sum(p.amount) FROM payments p
-          JOIN leads lp ON lp.id = p.lead_id
-         WHERE p.status = 'paid' AND lp.branch_id = b.id
-      ), 0) AS revenue
+      count(l.id) FILTER (WHERE l.status = 'booked')::int AS booked
     FROM branches b
     LEFT JOIN leads l ON l.branch_id = b.id
     WHERE b.active
@@ -938,14 +1358,26 @@ export async function getAnalytics({ branchId = null } = {}) {
   `);
   const unassigned = await pool.query(`
     SELECT count(*)::int AS leads,
-           count(*) FILTER (WHERE status = 'booked')::int AS booked,
-           COALESCE((
-             SELECT sum(p.amount) FROM payments p
-               JOIN leads lp ON lp.id = p.lead_id
-              WHERE p.status = 'paid' AND lp.branch_id IS NULL
-           ), 0) AS revenue
+           count(*) FILTER (WHERE status = 'booked')::int AS booked
     FROM leads WHERE branch_id IS NULL
   `);
+  // Revenue per branch, EUR-converted per row before summing — a plain SQL
+  // sum() here would add TRY/EUR/USD/GBP payments together as one number
+  // (see getPaymentTotals() above for the same fix and why it matters).
+  // Not scoped by $1 (branchId) on purpose, same as byBranch/unassigned:
+  // this breakdown always shows every branch regardless of the selected filter.
+  const paidByBranch = await pool.query(`
+    SELECT p.amount, p.currency, lp.branch_id
+      FROM payments p JOIN leads lp ON lp.id = p.lead_id
+     WHERE p.status = 'paid'
+  `);
+  const revenueByBranch = new Map();
+  for (const r of paidByBranch.rows) {
+    const eur = await toEur(Number(r.amount), r.currency);
+    const key = r.branch_id || 'unassigned';
+    revenueByBranch.set(key, (revenueByBranch.get(key) || 0) + eur);
+  }
+  const branchRevenue = (key) => Math.round((revenueByBranch.get(key) || 0) * 100) / 100;
 
   const totalLeads = Number(funnel.rows[0].leads);
   const totalSpend = Number(spend.rows[0].total_spend);
@@ -964,7 +1396,7 @@ export async function getAnalytics({ branchId = null } = {}) {
     is_default: r.is_default,
     leads: Number(r.leads),
     booked: Number(r.booked),
-    revenue: Number(r.revenue),
+    revenue: branchRevenue(r.branch_id),
   }));
   const u = unassigned.rows[0];
   if (Number(u.leads) > 0) {
@@ -976,7 +1408,7 @@ export async function getAnalytics({ branchId = null } = {}) {
       unassigned: true,
       leads: Number(u.leads),
       booked: Number(u.booked),
-      revenue: Number(u.revenue),
+      revenue: branchRevenue('unassigned'),
     });
   }
 
@@ -1001,15 +1433,19 @@ export async function getAnalytics({ branchId = null } = {}) {
 }
 
 // ── Broadcast segments ──────────────────────────────────────────────────────
+// Feeds /campaigns/broadcast, which sends a WhatsApp template — a channel
+// concept Instagram/Messenger don't have an equivalent of — so leads with no
+// phone (see migration 020_multichannel.sql) are excluded here rather than
+// left to fail one-by-one inside the broadcast loop's per-recipient try/catch.
 export async function getLeadsBySegment(segment) {
-  const where = {
+  const statusFilter = {
     all: '',
-    past: `WHERE status IN ('handed_over','booked')`,
-    hot: `WHERE status = 'hot'`,
-    new: `WHERE status = 'new'`,
+    past: `status IN ('handed_over','booked') AND`,
+    hot: `status = 'hot' AND`,
+    new: `status = 'new' AND`,
   }[segment] ?? '';
   const q = await pool.query(
-    `SELECT id, phone, name, language FROM leads ${where} ORDER BY created_at DESC`,
+    `SELECT id, phone, name, language FROM leads WHERE ${statusFilter} phone IS NOT NULL ORDER BY created_at DESC`,
   );
   return q.rows;
 }
@@ -1030,6 +1466,96 @@ export async function seedCampaignsIfEmpty() {
 }
 
 // ── Coordinators / language matching (Modül 4+5) ────────────────────────────
+// ── Coordinator (consultant) management ─────────────────────────────────────
+// Until now coordinators only ever existed as seed rows, which meant a clinic
+// could see the Language Matching feature but never staff it with its own
+// people. These are the create/update paths behind that tab.
+
+// Stored as a Postgres TEXT[] of ISO codes, because assignCoordinatorByLanguage
+// matches against the AI's detected_language, which is an ISO code too.
+function sanitizeLanguages(input) {
+  const list = Array.isArray(input) ? input : String(input || '').split(',');
+  const seen = new Set();
+  for (const raw of list) {
+    const code = String(raw || '').trim().toLowerCase();
+    if (/^[a-z]{2}$/.test(code)) seen.add(code);
+  }
+  return [...seen].slice(0, 8);
+}
+
+export async function listAllCoordinators() {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `SELECT id, name, languages, active, branch_id, created_at
+       FROM coordinators WHERE clinic_id = $1 ORDER BY active DESC, name`,
+    [clinicId],
+  );
+  return q.rows;
+}
+
+export async function createCoordinator({ name, languages, branchId }) {
+  if (!name || !name.trim()) throw new Error('coordinator name is required');
+  const langs = sanitizeLanguages(languages);
+  if (!langs.length) throw new Error('at least one language is required');
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `INSERT INTO coordinators (clinic_id, name, languages, branch_id)
+       VALUES ($1,$2,$3,$4)
+     RETURNING id, name, languages, active, branch_id, created_at`,
+    [clinicId, name.trim().slice(0, 120), langs, normalizeBranchId(branchId)],
+  );
+  return q.rows[0];
+}
+
+export async function updateCoordinator(id, { name, languages, branchId, active }) {
+  const fields = [];
+  const vals = [id];
+  if (name !== undefined) {
+    if (!name || !name.trim()) throw new Error('coordinator name is required');
+    fields.push(`name = $${vals.push(name.trim().slice(0, 120))}`);
+  }
+  if (languages !== undefined) {
+    const langs = sanitizeLanguages(languages);
+    if (!langs.length) throw new Error('at least one language is required');
+    fields.push(`languages = $${vals.push(langs)}`);
+  }
+  // branchId is deliberately settable to null ("no branch"), so it keys off
+  // the property being present rather than being truthy.
+  if (branchId !== undefined) fields.push(`branch_id = $${vals.push(normalizeBranchId(branchId))}`);
+  if (active !== undefined) fields.push(`active = $${vals.push(Boolean(active))}`);
+  if (!fields.length) throw new Error('nothing to update');
+
+  const q = await pool.query(
+    `UPDATE coordinators SET ${fields.join(', ')} WHERE id = $1
+     RETURNING id, name, languages, active, branch_id, created_at`,
+    vals,
+  );
+  if (!q.rows[0]) throw new Error('coordinator not found');
+  return q.rows[0];
+}
+
+export async function deleteCoordinator(id) {
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    // leads.coordinator_id carries no foreign key (see schema), so nothing at
+    // the database level would stop a deleted coordinator's id from staying on
+    // their leads as a dangling reference — those leads would then show an
+    // assignee who no longer exists and quietly drop out of the matching
+    // view's coverage. Clear the assignment first, in the same transaction.
+    const freed = await c.query('UPDATE leads SET coordinator_id = NULL WHERE coordinator_id = $1', [id]);
+    const del = await c.query('DELETE FROM coordinators WHERE id = $1 RETURNING name', [id]);
+    if (!del.rows[0]) throw new Error('coordinator not found');
+    await c.query('COMMIT');
+    return { name: del.rows[0].name, leads_unassigned: freed.rowCount };
+  } catch (err) {
+    await c.query('ROLLBACK');
+    throw err;
+  } finally {
+    c.release();
+  }
+}
+
 export async function seedCoordinatorsIfEmpty() {
   const c = await pool.query('SELECT count(*)::int AS n FROM coordinators');
   if (c.rows[0].n > 0) return false;
@@ -1058,6 +1584,77 @@ export async function listBranches() {
     [clinicId],
   );
   return q.rows;
+}
+
+// ── Branch management ───────────────────────────────────────────────────────
+// listBranches() above powers the branch filter and so returns active rows
+// only; management needs to see a deactivated branch too, otherwise switching
+// one off would make it unreachable to switch back on.
+export async function listAllBranches() {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `SELECT id, name, code, city, is_default, active
+       FROM branches WHERE clinic_id = $1
+       ORDER BY is_default DESC, active DESC, name`,
+    [clinicId],
+  );
+  return q.rows;
+}
+
+export async function createBranch({ name, code, city }) {
+  if (!name || !name.trim()) throw new Error('branch name is required');
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `INSERT INTO branches (clinic_id, name, code, city) VALUES ($1,$2,$3,$4)
+     RETURNING id, name, code, city, is_default, active`,
+    [clinicId, name.trim().slice(0, 120), code?.trim().slice(0, 30) || null, city?.trim().slice(0, 80) || null],
+  );
+  return q.rows[0];
+}
+
+export async function updateBranch(id, { name, code, city, active }) {
+  const fields = [];
+  const vals = [id];
+  if (name !== undefined) {
+    if (!name || !name.trim()) throw new Error('branch name is required');
+    fields.push(`name = $${vals.push(name.trim().slice(0, 120))}`);
+  }
+  if (code !== undefined) fields.push(`code = $${vals.push(code?.trim().slice(0, 30) || null)}`);
+  if (city !== undefined) fields.push(`city = $${vals.push(city?.trim().slice(0, 80) || null)}`);
+  if (active !== undefined) {
+    // The default branch is what unassigned leads and the "all branches" view
+    // fall back to, so switching it off would leave that fallback pointing at
+    // a branch the clinic can no longer see or pick.
+    if (!active) {
+      const d = await pool.query('SELECT is_default FROM branches WHERE id = $1', [id]);
+      if (!d.rows[0]) throw new Error('branch not found');
+      if (d.rows[0].is_default) throw new Error('the default branch cannot be deactivated');
+    }
+    fields.push(`active = $${vals.push(Boolean(active))}`);
+  }
+  if (!fields.length) throw new Error('nothing to update');
+
+  const q = await pool.query(
+    `UPDATE branches SET ${fields.join(', ')} WHERE id = $1
+     RETURNING id, name, code, city, is_default, active`,
+    vals,
+  );
+  if (!q.rows[0]) throw new Error('branch not found');
+  return q.rows[0];
+}
+
+export async function deleteBranch(id) {
+  const d = await pool.query('SELECT is_default FROM branches WHERE id = $1', [id]);
+  if (!d.rows[0]) throw new Error('branch not found');
+  // Same reasoning as refusing to deactivate it (see updateBranch): the default
+  // branch is the fallback every unassigned lead and the "all branches" view
+  // resolve to, so removing it would leave that fallback pointing at nothing.
+  if (d.rows[0].is_default) throw new Error('the default branch cannot be deleted');
+  // leads.branch_id and coordinators.branch_id are both ON DELETE SET NULL, so
+  // staff and patients survive the branch closing — they simply become
+  // unassigned rather than disappearing with it.
+  const q = await pool.query('DELETE FROM branches WHERE id = $1 RETURNING name', [id]);
+  return q.rows[0];
 }
 
 export async function seedBranchesIfEmpty() {
@@ -1120,6 +1717,363 @@ export async function setLeadBranch(leadId, branchId) {
     [leadId, bid],
   );
   if (!q.rows[0]) throw new Error('lead not found');
+  return q.rows[0];
+}
+
+// ── Partners (referral agents — Partner Portalı) ────────────────────────────
+function isUuid(value) {
+  return typeof value === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+export async function listPartners() {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `SELECT id, name, email, commission_rate, active, created_at
+       FROM partners WHERE clinic_id = $1 ORDER BY created_at DESC`,
+    [clinicId],
+  );
+  return q.rows;
+}
+
+// The token is only ever returned here, at creation — same "shown once"
+// discipline as any other API key. The panel must display and let the
+// coordinator copy it immediately; it isn't retrievable afterwards.
+// api_token (private, logs into the dashboard) and referral_code (public,
+// safe to publish — only attributes a lead, see migration 022) are two
+// different values on purpose: reusing one secret for both a login
+// credential and a "share this everywhere" link is how that credential
+// leaks.
+export async function createPartner({ name, email, commissionRate }) {
+  if (!name || !name.trim()) throw new Error('partner name is required');
+  const clinicId = await getDefaultClinicId();
+  const rate = commissionRate == null || commissionRate === '' ? 10 : Number(commissionRate);
+  if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw new Error('commissionRate must be between 0 and 100');
+  const token = crypto.randomBytes(24).toString('hex');
+  const referralCode = crypto.randomBytes(8).toString('hex');
+  const q = await pool.query(
+    `INSERT INTO partners (clinic_id, name, email, api_token, referral_code, commission_rate)
+       VALUES ($1,$2,$3,$4,$5,$6)
+     RETURNING id, name, email, api_token, referral_code, commission_rate, active, created_at`,
+    [clinicId, name.trim(), email || null, token, referralCode, rate],
+  );
+  return q.rows[0];
+}
+
+// Issues a fresh token and invalidates the old one in the same statement —
+// the only recovery path when a partner loses theirs, since (like any API
+// key) it's shown once at creation and never stored anywhere retrievable.
+export async function updatePartner(partnerId, { name, email, commissionRate, active }) {
+  const fields=[]; const vals=[partnerId];
+  if (name !== undefined) {
+    if (!name || !name.trim()) throw new Error('partner name is required');
+    fields.push(`name = $${vals.push(name.trim().slice(0,120))}`);
+  }
+  if (email !== undefined) fields.push(`email = $${vals.push(email?.trim().slice(0,160) || null)}`);
+  if (commissionRate !== undefined) {
+    const rate = Number(commissionRate);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw new Error('commission rate must be between 0 and 100');
+    fields.push(`commission_rate = $${vals.push(rate)}`);
+  }
+  if (active !== undefined) fields.push(`active = $${vals.push(Boolean(active))}`);
+  if (!fields.length) throw new Error('nothing to update');
+  const q = await pool.query(
+    `UPDATE partners SET ${fields.join(', ')} WHERE id = $1
+     RETURNING id, name, email, commission_rate, active, created_at`, vals);
+  if (!q.rows[0]) throw new Error('partner not found');
+  return q.rows[0];
+}
+
+export async function deletePartner(partnerId) {
+  // leads.partner_id is ON DELETE SET NULL, so the partner's referred patients
+  // stay — they just stop being attributed, which also means their commission
+  // stops accruing. Deliberately not blocked on having referrals: a partner
+  // relationship that ends is a normal thing, and keeping the patients is the
+  // point. Commission already paid is a matter of the clinic's own records.
+  const q = await pool.query('DELETE FROM partners WHERE id = $1 RETURNING name', [partnerId]);
+  if (!q.rows[0]) throw new Error('partner not found');
+  return q.rows[0];
+}
+
+export async function regeneratePartnerToken(partnerId) {
+  const token = crypto.randomBytes(24).toString('hex');
+  const q = await pool.query(
+    `UPDATE partners SET api_token = $2 WHERE id = $1 RETURNING id, name, api_token`,
+    [partnerId, token],
+  );
+  if (!q.rows[0]) throw new Error('partner not found');
+  return q.rows[0];
+}
+
+// Partner Portal auth lookup — deliberately not PANEL_API_TOKEN-gated (see
+// src/routes/partner.js): each partner signs in with their own long random
+// token instead of the clinic staff's shared panel token.
+export async function getPartnerByToken(token) {
+  if (!token) return null;
+  const q = await pool.query(
+    `SELECT id, name, commission_rate FROM partners WHERE api_token = $1 AND active`,
+    [token],
+  );
+  return q.rows[0] || null;
+}
+
+// Widget lead attribution (?ref=<referral_code> — see createWidgetLead)
+// deliberately does NOT use getPartnerByToken: the widget link is meant to
+// be published everywhere, so it must never carry the same value that logs
+// into the partner's private dashboard.
+export async function getPartnerByReferralCode(code) {
+  if (!code) return null;
+  const q = await pool.query(
+    `SELECT id, name, commission_rate FROM partners WHERE referral_code = $1 AND active`,
+    [code],
+  );
+  return q.rows[0] || null;
+}
+
+export async function setLeadPartner(leadId, partnerId) {
+  const pid = partnerId == null || partnerId === '' || partnerId === 'none' ? null : partnerId;
+  if (pid && !isUuid(pid)) throw new Error('invalid partner_id');
+  if (pid) {
+    const exists = await pool.query('SELECT id FROM partners WHERE id = $1 AND active', [pid]);
+    if (!exists.rows[0]) throw new Error('partner not found');
+  }
+  const q = await pool.query(
+    `UPDATE leads SET partner_id = $2, updated_at = now() WHERE id = $1 RETURNING id, partner_id`,
+    [leadId, pid],
+  );
+  if (!q.rows[0]) throw new Error('lead not found');
+  return q.rows[0];
+}
+
+// What a partner sees in their own portal: every lead they referred, and what
+// those leads have actually paid. Commission is earned on COLLECTED money
+// only (payments.status = 'paid') — the same discipline getPaymentTotals()
+// uses for clinic-side revenue, so a booked-but-unpaid lead earns nothing yet.
+export async function getPartnerDashboard(partnerId) {
+  const partnerQ = await pool.query(
+    `SELECT id, name, commission_rate, referral_code FROM partners WHERE id = $1`,
+    [partnerId],
+  );
+  if (!partnerQ.rows[0]) throw new Error('partner not found');
+  const rate = Number(partnerQ.rows[0].commission_rate);
+
+  const leadsQ = await pool.query(
+    `SELECT l.id, l.name, l.country, l.treatment_interest, l.status, l.created_at
+       FROM leads l WHERE l.partner_id = $1 ORDER BY l.created_at DESC`,
+    [partnerId],
+  );
+  // Commission is money the clinic actually owes this partner — computed on
+  // a plain sum(amount) across payments, it would silently add a TRY payment
+  // and a EUR payment as if they were the same currency and pay the partner
+  // several times their real EUR-equivalent commission the moment a referred
+  // patient pays in a different currency than another (the normal case here,
+  // since İyzico/TRY and Stripe/EUR-USD-GBP are both live by design). Each
+  // payment is EUR-converted individually before it contributes to anything.
+  const paymentsQ = await pool.query(
+    `SELECT p.lead_id, p.amount, p.currency
+       FROM payments p JOIN leads l ON l.id = p.lead_id
+      WHERE l.partner_id = $1 AND p.status = 'paid'`,
+    [partnerId],
+  );
+  const paidByLead = new Map();
+  for (const r of paymentsQ.rows) {
+    const eur = await toEur(Number(r.amount), r.currency);
+    paidByLead.set(r.lead_id, (paidByLead.get(r.lead_id) || 0) + eur);
+  }
+
+  let totalPaid = 0;
+  // Summed from the same per-lead figures the dashboard lists, rather than
+  // recomputed from the grand total: rounding each line to cents and rounding
+  // the total separately disagree by a few cents on realistic inputs, and this
+  // is the number a partner reconciles their invoice against — line items that
+  // don't add up to the stated total read as an error in the clinic's favour.
+  let totalCommission = 0;
+  const leads = leadsQ.rows.map((r) => {
+    const paid = Math.round((paidByLead.get(r.id) || 0) * 100) / 100;
+    const commission = Math.round(paid * rate) / 100;
+    totalPaid += paid;
+    totalCommission += commission;
+    return { ...r, paid, commission };
+  });
+
+  return {
+    partner: {
+      id: partnerQ.rows[0].id,
+      name: partnerQ.rows[0].name,
+      commission_rate: rate,
+      referral_code: partnerQ.rows[0].referral_code,
+    },
+    leads,
+    total_paid: Math.round(totalPaid * 100) / 100,
+    earned_commission: Math.round(totalCommission * 100) / 100,
+  };
+}
+
+// ── Doctors (Doctor Portal — suitability review) ────────────────────────────
+export async function listDoctors() {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `SELECT id, name, email, specialty, active, created_at
+       FROM doctors WHERE clinic_id = $1 ORDER BY created_at DESC`,
+    [clinicId],
+  );
+  return q.rows;
+}
+
+// Token shown once, same "copy it now" discipline as createPartner().
+export async function createDoctor({ name, email, specialty }) {
+  if (!name || !name.trim()) throw new Error('doctor name is required');
+  const clinicId = await getDefaultClinicId();
+  const token = crypto.randomBytes(24).toString('hex');
+  const q = await pool.query(
+    `INSERT INTO doctors (clinic_id, name, email, specialty, api_token)
+       VALUES ($1,$2,$3,$4,$5)
+     RETURNING id, name, email, specialty, api_token, active, created_at`,
+    [clinicId, name.trim(), email || null, specialty || null, token],
+  );
+  return q.rows[0];
+}
+
+// Same recovery path as regeneratePartnerToken — the only way back when a
+// doctor loses their token.
+export async function updateDoctor(doctorId, { name, email, specialty, active }) {
+  const fields=[]; const vals=[doctorId];
+  if (name !== undefined) {
+    if (!name || !name.trim()) throw new Error('doctor name is required');
+    fields.push(`name = $${vals.push(name.trim().slice(0,120))}`);
+  }
+  if (email !== undefined) fields.push(`email = $${vals.push(email?.trim().slice(0,160) || null)}`);
+  if (specialty !== undefined) fields.push(`specialty = $${vals.push(specialty?.trim().slice(0,120) || null)}`);
+  if (active !== undefined) fields.push(`active = $${vals.push(Boolean(active))}`);
+  if (!fields.length) throw new Error('nothing to update');
+  const q = await pool.query(
+    `UPDATE doctors SET ${fields.join(', ')} WHERE id = $1
+     RETURNING id, name, email, specialty, active, created_at`, vals);
+  if (!q.rows[0]) throw new Error('doctor not found');
+  return q.rows[0];
+}
+
+export async function deleteDoctor(doctorId) {
+  // leads.doctor_id is ON DELETE SET NULL — a departing doctor's reviews stay
+  // on the patient record (doctor_review_status / the note they wrote), the
+  // patients simply become unassigned and can be handed to someone else.
+  const q = await pool.query('DELETE FROM doctors WHERE id = $1 RETURNING name', [doctorId]);
+  if (!q.rows[0]) throw new Error('doctor not found');
+  return q.rows[0];
+}
+
+export async function regenerateDoctorToken(doctorId) {
+  const token = crypto.randomBytes(24).toString('hex');
+  const q = await pool.query(
+    `UPDATE doctors SET api_token = $2 WHERE id = $1 RETURNING id, name, api_token`,
+    [doctorId, token],
+  );
+  if (!q.rows[0]) throw new Error('doctor not found');
+  return q.rows[0];
+}
+
+// Doctor Portal auth lookup — like getPartnerByToken, not PANEL_API_TOKEN-gated.
+export async function getDoctorByToken(token) {
+  if (!token) return null;
+  const q = await pool.query(`SELECT id, name FROM doctors WHERE api_token = $1 AND active`, [token]);
+  return q.rows[0] || null;
+}
+
+export async function setLeadDoctor(leadId, doctorId) {
+  const did = doctorId == null || doctorId === '' || doctorId === 'none' ? null : doctorId;
+  if (did && !isUuid(did)) throw new Error('invalid doctor_id');
+  if (did) {
+    const exists = await pool.query('SELECT id FROM doctors WHERE id = $1 AND active', [did]);
+    if (!exists.rows[0]) throw new Error('doctor not found');
+  }
+  // Assigning a doctor starts their review at 'pending'. Only reset when the
+  // doctor is actually CHANGING to someone new (leads.doctor_id, read here as
+  // the pre-update value, differs from the new $2) — a redundant re-set to
+  // the same doctor must not wipe out a review already in progress. But a
+  // genuine reassignment to a different doctor must: otherwise the new
+  // doctor's portal shows the PREVIOUS doctor's approval/note as if they'd
+  // already reviewed a case they've never seen.
+  const q = await pool.query(
+    `UPDATE leads
+        SET doctor_id = $2,
+            doctor_review_status = CASE
+              WHEN $2::uuid IS NULL THEN doctor_review_status
+              WHEN leads.doctor_id IS DISTINCT FROM $2 THEN 'pending'
+              ELSE doctor_review_status
+            END,
+            doctor_note = CASE
+              WHEN $2::uuid IS NOT NULL AND leads.doctor_id IS DISTINCT FROM $2 THEN NULL
+              ELSE doctor_note
+            END,
+            doctor_reviewed_at = CASE
+              WHEN $2::uuid IS NOT NULL AND leads.doctor_id IS DISTINCT FROM $2 THEN NULL
+              ELSE doctor_reviewed_at
+            END,
+            updated_at = now()
+      WHERE id = $1 RETURNING id, doctor_id`,
+    [leadId, did],
+  );
+  if (!q.rows[0]) throw new Error('lead not found');
+  return q.rows[0];
+}
+
+// What a doctor sees in their portal's list: everyone currently assigned to them.
+export async function getDoctorLeads(doctorId) {
+  const q = await pool.query(
+    `SELECT id, name, country, treatment_interest, budget_hint,
+            doctor_review_status, doctor_note, doctor_reviewed_at, created_at
+       FROM leads WHERE doctor_id = $1 ORDER BY created_at DESC`,
+    [doctorId],
+  );
+  return q.rows;
+}
+
+// One patient's detail for the doctor — the WHERE doctor_id = $2 is the
+// access check: a doctor can only ever open a lead assigned to them.
+export async function getDoctorLeadDetail(doctorId, leadId) {
+  const leadQ = await pool.query(
+    `SELECT id, name, country, language, treatment_interest, budget_hint,
+            doctor_review_status, doctor_note, doctor_reviewed_at
+       FROM leads WHERE id = $1 AND doctor_id = $2`,
+    [leadId, doctorId],
+  );
+  if (!leadQ.rows[0]) return null;
+  const convQ = await pool.query('SELECT id FROM conversations WHERE lead_id = $1', [leadId]);
+  let messages = [];
+  if (convQ.rows[0]) {
+    const msgQ = await pool.query(
+      `SELECT id, role, content, created_at, (media_mime_type IS NOT NULL) AS has_media
+         FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC`,
+      [convQ.rows[0].id],
+    );
+    messages = msgQ.rows;
+  }
+  return { lead: leadQ.rows[0], messages };
+}
+
+// Doctor-scoped photo fetch — the join back to doctor_id is what stops one
+// doctor from pulling another doctor's patient's photo by guessing a message id.
+export async function getDoctorMessageMedia(doctorId, leadId, messageId) {
+  const q = await pool.query(
+    `SELECT m.media_data, m.media_mime_type
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       JOIN leads l ON l.id = c.lead_id
+      WHERE m.id = $1 AND l.id = $2 AND l.doctor_id = $3 AND m.media_data IS NOT NULL`,
+    [messageId, leadId, doctorId],
+  );
+  return q.rows[0] || null;
+}
+
+export async function submitDoctorReview(doctorId, leadId, { status, note }) {
+  if (!['approved', 'needs_info'].includes(status)) throw new Error('invalid status');
+  const q = await pool.query(
+    `UPDATE leads SET doctor_review_status = $3, doctor_note = $4, doctor_reviewed_at = now(), updated_at = now()
+       WHERE id = $1 AND doctor_id = $2
+     RETURNING id, doctor_review_status`,
+    [leadId, doctorId, status, (note || '').trim().slice(0, 2000) || null],
+  );
+  if (!q.rows[0]) throw new Error('lead not found or not assigned to you');
   return q.rows[0];
 }
 
@@ -1222,21 +2176,29 @@ export async function schedulePostOp(leadId) {
 }
 
 export async function getDuePostOpTasks() {
+  // WhatsApp template sends only — a lead with no phone (Instagram/Messenger)
+  // can't receive one, so it's excluded rather than left to fail send-side.
   const q = await pool.query(`
     SELECT t.id, t.kind, t.lead_id, l.phone, l.name, l.language
     FROM post_op_tasks t JOIN leads l ON l.id = t.lead_id
-    WHERE t.status='pending' AND t.due_at <= now()
+    WHERE t.status='pending' AND t.due_at <= now() AND l.phone IS NOT NULL
     ORDER BY t.due_at LIMIT 50
   `);
   return q.rows;
 }
+// Atomic claim: WHERE status='pending' means only one caller can ever win a
+// given row, even if two scheduler runs overlap (a slow tick plus the next
+// one, or local dev racing Vercel Cron against the same database). Returns
+// false when another run already claimed it, so the caller knows to skip
+// the send rather than deliver it a second time.
 export async function markPostOpSent(id) {
-  await pool.query(`UPDATE post_op_tasks SET status='sent' WHERE id=$1`, [id]);
+  const q = await pool.query(`UPDATE post_op_tasks SET status='sent' WHERE id=$1 AND status='pending' RETURNING id`, [id]);
+  return Boolean(q.rows[0]);
 }
 
 export async function getPostOpOverview() {
   const q = await pool.query(`
-    SELECT l.id AS lead_id, l.name, l.phone,
+    SELECT l.id AS lead_id, l.name, l.phone, l.source, l.external_id,
       json_agg(json_build_object('kind',t.kind,'due_at',t.due_at,'status',t.status) ORDER BY t.due_at) AS tasks
     FROM post_op_tasks t JOIN leads l ON l.id = t.lead_id
     GROUP BY l.id ORDER BY max(t.created_at) DESC
@@ -1260,6 +2222,112 @@ export async function getReviewStats() {
 }
 
 // ── Smart Device Booking (Modül 3) ──────────────────────────────────────────
+// ── Device management ───────────────────────────────────────────────────────
+// The booking grid reads from this table, so a clinic that can't add its own
+// rooms and chairs can only ever book the demo ones.
+const DEVICE_TYPES = ['operating_room', 'device', 'chair'];
+
+export async function listAllDevices() {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `SELECT id, name, type, active FROM devices
+      WHERE clinic_id = $1 ORDER BY active DESC, name`,
+    [clinicId],
+  );
+  return q.rows;
+}
+
+export async function createDevice({ name, type }) {
+  if (!name || !name.trim()) throw new Error('device name is required');
+  if (type && !DEVICE_TYPES.includes(type)) throw new Error('invalid device type');
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `INSERT INTO devices (clinic_id, name, type) VALUES ($1,$2,$3)
+     RETURNING id, name, type, active`,
+    [clinicId, name.trim().slice(0, 120), type || 'device'],
+  );
+  return q.rows[0];
+}
+
+export async function updateDevice(id, { name, type, active }) {
+  const fields = [];
+  const vals = [id];
+  if (name !== undefined) {
+    if (!name || !name.trim()) throw new Error('device name is required');
+    fields.push(`name = $${vals.push(name.trim().slice(0, 120))}`);
+  }
+  if (type !== undefined) {
+    if (!DEVICE_TYPES.includes(type)) throw new Error('invalid device type');
+    fields.push(`type = $${vals.push(type)}`);
+  }
+  if (active !== undefined) fields.push(`active = $${vals.push(Boolean(active))}`);
+  if (!fields.length) throw new Error('nothing to update');
+
+  const q = await pool.query(
+    `UPDATE devices SET ${fields.join(', ')} WHERE id = $1 RETURNING id, name, type, active`,
+    vals,
+  );
+  if (!q.rows[0]) throw new Error('device not found');
+  return q.rows[0];
+}
+
+// ── Appointments (Smart Device Booking — the booked slots themselves) ───────
+// Booking existed from the start; seeing and undoing a booking did not, which
+// meant a slot picked by mistake stayed on the grid forever and kept counting
+// against that room's utilization.
+export async function listAppointments({ deviceId = null, includePast = false } = {}) {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `SELECT a.id, a.device_id, d.name AS device_name, a.lead_id, l.name AS lead_name,
+            l.phone AS lead_phone, l.source AS lead_source, a.starts_at, a.ends_at, a.status
+       FROM appointments a
+       JOIN devices d ON d.id = a.device_id
+       LEFT JOIN leads l ON l.id = a.lead_id
+      WHERE a.clinic_id = $1
+        AND ($2::uuid IS NULL OR a.device_id = $2)
+        AND ($3::boolean OR a.starts_at > now() - interval '1 day')
+      ORDER BY a.starts_at`,
+    [clinicId, deviceId, includePast],
+  );
+  return q.rows;
+}
+
+export async function cancelAppointment(id) {
+  // Cancel rather than delete: the slot stops blocking the room, but the fact
+  // that it was booked and dropped stays visible — that is the signal the
+  // no-show model and the utilization history are built on.
+  const q = await pool.query(
+    `UPDATE appointments SET status = 'cancelled' WHERE id = $1 AND status <> 'cancelled'
+     RETURNING id, starts_at, status`,
+    [id],
+  );
+  if (!q.rows[0]) throw new Error('appointment not found or already cancelled');
+  return q.rows[0];
+}
+
+export async function deleteAppointment(id) {
+  const q = await pool.query('DELETE FROM appointments WHERE id = $1 RETURNING id, starts_at', [id]);
+  if (!q.rows[0]) throw new Error('appointment not found');
+  return q.rows[0];
+}
+
+export async function deleteDevice(id) {
+  // appointments.device_id cascades, so deleting a room silently deletes every
+  // booking on it. A past booking is history worth losing when the room is
+  // gone; a FUTURE one is a patient with an appointment nobody will honour, so
+  // that case is refused and the operator is told to move or cancel first.
+  const upcoming = await pool.query(
+    `SELECT count(*)::int AS n FROM appointments WHERE device_id = $1 AND starts_at > now()`,
+    [id],
+  );
+  if (upcoming.rows[0].n > 0) {
+    throw new Error(`this room has ${upcoming.rows[0].n} upcoming appointment(s) — move or cancel them first`);
+  }
+  const q = await pool.query('DELETE FROM devices WHERE id = $1 RETURNING name', [id]);
+  if (!q.rows[0]) throw new Error('device not found');
+  return q.rows[0];
+}
+
 export async function seedDevicesIfEmpty() {
   const c = await pool.query('SELECT count(*)::int AS n FROM devices');
   if (c.rows[0].n > 0) return false;
@@ -1276,13 +2344,18 @@ export async function seedDevicesIfEmpty() {
 }
 
 export async function getDevicesWithUtilization() {
-  const q = await pool.query(`
+  // Same clinic-timezone bucketing as getStats()/getAnalytics() — see their
+  // comments for why a plain now()::date comparison is wrong here too.
+  const q = await pool.query(
+    `
     SELECT d.id, d.name, d.type,
-      count(a.id) FILTER (WHERE a.starts_at::date = now()::date AND a.status='booked') AS today_booked
+      count(a.id) FILTER (WHERE (a.starts_at AT TIME ZONE $1)::date = (now() AT TIME ZONE $1)::date AND a.status='booked') AS today_booked
     FROM devices d
     LEFT JOIN appointments a ON a.device_id = d.id
     WHERE d.active GROUP BY d.id ORDER BY d.name
-  `);
+  `,
+    [BUSINESS_HOURS.timezone],
+  );
   return q.rows.map((r) => ({
     ...r,
     slots: SLOTS_PER_DAY,
@@ -1293,7 +2366,7 @@ export async function getDevicesWithUtilization() {
 // Hot/booked leads that don't yet have an appointment — the waiting list.
 export async function getWaitingList() {
   const q = await pool.query(`
-    SELECT l.id, l.name, l.phone, l.treatment_interest, l.score
+    SELECT l.id, l.name, l.phone, l.treatment_interest, l.score, l.source, l.external_id
     FROM leads l
     WHERE l.status IN ('hot','booked')
       AND NOT EXISTS (SELECT 1 FROM appointments a WHERE a.lead_id = l.id AND a.status='booked')
@@ -1315,29 +2388,75 @@ export async function bookAppointment(deviceId, leadId, startsAt, endsAt) {
 // ── VIP Transfer & Logistics (Modül 6) ──────────────────────────────────────
 export async function getLogistics() {
   const q = await pool.query(`
-    SELECT lo.lead_id, l.name, l.phone, l.country,
-      lo.flight_no, lo.arrival_at, lo.transfer_status, lo.hotel_status, lo.appointment_status
+    SELECT lo.lead_id, l.name, l.phone, l.country, l.language, l.source, l.external_id,
+      lo.flight_no, lo.arrival_at, lo.transfer_status, lo.hotel_status, lo.appointment_status,
+      lo.pickup_at, lo.pickup_location, lo.next_appointment_at, lo.next_appointment_note, lo.view_token
     FROM logistics lo JOIN leads l ON l.id = lo.lead_id
     ORDER BY lo.updated_at DESC
   `);
   return q.rows;
 }
 
+// Matches the panel's own STAGES dropdown (public/index.html LogisticsCard).
+// Enforced here, not just client-side: these three fields render on the
+// patient-facing itinerary page, and itinerary.html falls back to
+// interpolating the raw value un-escaped for anything it doesn't recognize
+// as one of these — an unvalidated value posted straight to this API would
+// otherwise become a stored XSS on that page for whichever patient opens
+// their tracking link next.
+const LOGISTICS_STAGES = {
+  transfer_status: new Set(['pending', 'arranged', 'completed']),
+  hotel_status: new Set(['pending', 'checked_in', 'checked_out']),
+  appointment_status: new Set(['pending', 'scheduled', 'done']),
+};
+function assertValidStage(field, value) {
+  if (value != null && !LOGISTICS_STAGES[field].has(value)) {
+    throw new Error(`invalid ${field} — use one of ${[...LOGISTICS_STAGES[field]].join(', ')}`);
+  }
+}
+
 export async function upsertLogistics(leadId, d) {
+  assertValidStage('transfer_status', d.transfer_status || null);
+  assertValidStage('hotel_status', d.hotel_status || null);
+  assertValidStage('appointment_status', d.appointment_status || null);
   const clinicId = await getDefaultClinicId();
   const q = await pool.query(
-    `INSERT INTO logistics (clinic_id, lead_id, flight_no, arrival_at, transfer_status, hotel_status, appointment_status, updated_at)
-       VALUES ($1,$2,$3,$4,COALESCE($5,'pending'),COALESCE($6,'pending'),COALESCE($7,'pending'), now())
+    `INSERT INTO logistics (
+       clinic_id, lead_id, flight_no, arrival_at, transfer_status, hotel_status, appointment_status,
+       pickup_at, pickup_location, next_appointment_at, next_appointment_note, updated_at
+     )
+       VALUES ($1,$2,$3,$4,COALESCE($5,'pending'),COALESCE($6,'pending'),COALESCE($7,'pending'),$8,$9,$10,$11, now())
      ON CONFLICT (lead_id) DO UPDATE SET
        flight_no = COALESCE(EXCLUDED.flight_no, logistics.flight_no),
        arrival_at = COALESCE(EXCLUDED.arrival_at, logistics.arrival_at),
        transfer_status = COALESCE($5, logistics.transfer_status),
        hotel_status = COALESCE($6, logistics.hotel_status),
        appointment_status = COALESCE($7, logistics.appointment_status),
+       pickup_at = COALESCE($8, logistics.pickup_at),
+       pickup_location = COALESCE($9, logistics.pickup_location),
+       next_appointment_at = COALESCE($10, logistics.next_appointment_at),
+       next_appointment_note = COALESCE($11, logistics.next_appointment_note),
        updated_at = now()
-     RETURNING lead_id`,
+     RETURNING lead_id, view_token`,
     [clinicId, leadId, d.flight_no || null, d.arrival_at || null,
-     d.transfer_status || null, d.hotel_status || null, d.appointment_status || null],
+     d.transfer_status || null, d.hotel_status || null, d.appointment_status || null,
+     d.pickup_at || null, d.pickup_location || null, d.next_appointment_at || null, d.next_appointment_note || null],
   );
   return q.rows[0];
+}
+
+// The patient-facing view — no auth (same "unpredictable token instead of a
+// login" pattern as the quote tracking link), so it only ever returns what a
+// patient should see: their own schedule, not internal fields like status
+// history or which coordinator is assigned.
+export async function getLogisticsByToken(token) {
+  const q = await pool.query(
+    `SELECT lo.transfer_status, lo.hotel_status, lo.appointment_status,
+            lo.pickup_at, lo.pickup_location, lo.next_appointment_at, lo.next_appointment_note,
+            l.name, l.language
+       FROM logistics lo JOIN leads l ON l.id = lo.lead_id
+      WHERE lo.view_token = $1`,
+    [token],
+  );
+  return q.rows[0] || null;
 }

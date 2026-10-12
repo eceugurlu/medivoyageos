@@ -117,6 +117,16 @@ export const config = {
     // Optional: a Slack (or any) incoming webhook URL to ping on new handovers.
     // Leave blank to rely on the panel's Action Center queue instead.
     webhookUrl: process.env.HANDOVER_WEBHOOK_URL || null,
+    // Optional, SEPARATE webhook for engineering/ops alerts (AI outage,
+    // payment-webhook processing failures, uncaught exceptions) — a clinic
+    // coordinator's channel ideally shouldn't fill up with "the AI is down"
+    // noise. Falls back to the SAME webhookUrl above when unset, same
+    // reasoning as the SLA alarm's managerWebhookUrl: the point of this
+    // feature is catching failures nobody would otherwise notice, so a team
+    // that hasn't gotten around to setting up a second webhook still gets
+    // the alert (just mixed into the one channel they do have) rather than
+    // silently getting none at all.
+    systemAlertWebhookUrl: process.env.SYSTEM_ALERT_WEBHOOK_URL || process.env.HANDOVER_WEBHOOK_URL || null,
   },
 
   panel: {

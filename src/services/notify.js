@@ -1,6 +1,12 @@
 import { config } from '../config.js';
 
 export const notifyEnabled = Boolean(config.notify.webhookUrl);
+// A separate, OPTIONAL channel for engineering/ops alerts (AI outage, webhook
+// processing failures, uncaught exceptions) — a clinic coordinator doesn't
+// need "the AI concierge is down" showing up in the same place as "a patient
+// needs you". Falls back to the same webhookUrl when no dedicated one is
+// set, so nothing is silently dropped just because a second webhook wasn't configured.
+export const systemAlertEnabled = Boolean(config.notify.systemAlertWebhookUrl);
 
 // Same reasoning as whatsapp.js's HTTP_TIMEOUT_MS (shared 30s Vercel function
 // budget for every route) — these calls are already non-fatal/best-effort,
@@ -74,6 +80,41 @@ export async function notifyNoShowRisk({ name, phone, score, reasons, daysUntil,
     else console.log(`[notify] no-show risk pinged for ${phone} (${score}/100)`);
   } catch (err) {
     console.error('[notify] risk webhook failed (non-fatal):', err.message);
+  }
+}
+
+const SEVERITY_EMOJI = { critical: '🔥', warning: '⚠️', ok: '✅' };
+
+/**
+ * Engineering/ops alert — AI outage, a webhook that failed to process a real
+ * event, an uncaught exception. See src/services/healthMonitor.js for the
+ * repeating-failure/cooldown logic that calls this for the AI-outage case;
+ * routes/stripeWebhook.js and routes/iyzicoWebhook.js call it directly, once
+ * per failed payment confirmation, with no cooldown — each one is its own
+ * patient's money and deserves its own alert, not to be swallowed by a
+ * cooldown meant for "the same recoverable blip repeating".
+ */
+export async function notifySystemAlert({ severity = 'warning', title, detail, consecutiveFailures }) {
+  if (!systemAlertEnabled) return;
+
+  const text =
+    `${SEVERITY_EMOJI[severity] || '⚠️'} *${title}*\n` +
+    (Number.isFinite(consecutiveFailures) ? `Consecutive failures: ${consecutiveFailures}\n` : '') +
+    (detail ? `Detail: ${detail}` : '');
+
+  try {
+    const res = await fetch(config.notify.systemAlertWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+    });
+    if (!res.ok) console.error(`[notify] system-alert webhook returned ${res.status}`);
+    else console.log(`[notify] system alert pinged: ${title}`);
+  } catch (err) {
+    // Deliberately just logged, never re-thrown — a monitoring ping failing
+    // must never be what takes down the thing it was trying to report on.
+    console.error('[notify] system-alert webhook failed (non-fatal):', err.message);
   }
 }
 

@@ -3,6 +3,7 @@ import { waitUntil } from '@vercel/functions';
 import { config, isProduction } from '../config.js';
 import { verifyStripeSignature } from '../services/stripe.js';
 import { finalizePaidPayment } from '../services/paymentFinalize.js';
+import { notifySystemAlert } from '../services/notify.js';
 
 export const stripeWebhookRouter = Router();
 
@@ -31,7 +32,21 @@ stripeWebhookRouter.post('/', (req, res) => {
     return res.sendStatus(401);
   }
   res.sendStatus(200);
-  waitUntil(handleEvent(req.body).catch((err) => console.error('[stripe-webhook] handler error', err)));
+  waitUntil(
+    handleEvent(req.body).catch((err) => {
+      console.error('[stripe-webhook] handler error', err);
+      // Each failure here is its own patient's payment confirmation that did
+      // NOT get recorded — alerted directly and unconditionally, not via the
+      // threshold/cooldown logic in healthMonitor.js, because a cooldown
+      // would wrongly suppress a second, unrelated failure landing soon
+      // after the first (both still matter independently).
+      notifySystemAlert({
+        severity: 'critical',
+        title: 'Stripe webhook failed to process a payment event',
+        detail: err.message,
+      }).catch(() => {});
+    }),
+  );
 });
 
 async function handleEvent(event) {

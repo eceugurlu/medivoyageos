@@ -10,6 +10,7 @@ import { loadContext, saveExchange, getLead, setCrmLeadId } from '../store/index
 import { assignCoordinatorByLanguage } from '../store/repository.js';
 import { zohoEnabled, syncLeadToCrm } from '../services/zoho.js';
 import { notifyHandover } from '../services/notify.js';
+import { recordFailure, recordSuccess } from '../services/healthMonitor.js';
 
 export const webhookRouter = Router();
 
@@ -286,10 +287,20 @@ async function processConversationTurn({ channel, identity, profileName, userTex
   let meta;
   try {
     ({ reply, meta } = await generateReply({ history, userText, image }));
+    // A single successful call resets the failure streak below — see its
+    // own comment for why this one key is threshold+cooldown based (a
+    // recoverable blip every so often is normal and not worth paging
+    // anyone for) rather than alerted on every single occurrence.
+    recordSuccess('ai-concierge');
   } catch (err) {
     // AI failed — don't leave the patient hanging. Send a holding message and
     // force a human handover so nothing falls through the cracks.
     console.error(`[concierge] AI call failed for ${identity}, using fallback reply:`, err.message);
+    recordFailure('ai-concierge', {
+      threshold: 3, cooldownMs: 15 * 60_000, severity: 'critical',
+      title: 'AI concierge repeatedly failing',
+      detail: err.message,
+    });
     reply = FALLBACK_REPLY;
     meta = {
       detected_language: null,

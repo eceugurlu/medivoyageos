@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { DEFAULT_VOICE_PRICING } from './voice/costs.js';
 
 // We warn (not throw) on missing values so the server can still boot in
 // "dry-run / echo" mode. That lets you test the WhatsApp plumbing before you
@@ -129,11 +130,59 @@ export const config = {
   // POST. Vercel sends this as `Authorization: Bearer $CRON_SECRET` on its
   // own scheduled invocations when the env var is set (see vercel.json).
   cronSecret: process.env.CRON_SECRET || null,
+
+  // Sesli AI Konsiyerj (Voice AI Call Center). An explicit on/off switch, not
+  // just "are the keys set" like most integrations above — the acceptance bar
+  // for this feature is that VOICE_ENABLED=false leaves 100% of existing
+  // behavior untouched even if Twilio/Deepgram/ElevenLabs keys happen to be
+  // present (see voiceEnabled below, and scripts/test-voice-helpers.mjs /
+  // scripts/simulate-call.mjs for how that's verified).
+  voice: {
+    enabled: process.env.VOICE_ENABLED === 'true',
+    twilio: {
+      accountSid: process.env.TWILIO_ACCOUNT_SID || null,
+      authToken: process.env.TWILIO_AUTH_TOKEN || null,
+    },
+    deepgram: {
+      apiKey: process.env.DEEPGRAM_API_KEY || null,
+    },
+    elevenlabs: {
+      apiKey: process.env.ELEVENLABS_API_KEY || null,
+    },
+    // The always-on voice-server.js's public wss:// URL (Fly.io, not
+    // Vercel — see docs/VOICE.md) — only referenced INSIDE the TwiML
+    // /voice/incoming returns, never dialed directly by Twilio's config, so
+    // moving that service later is a one-env-var change.
+    mediaWsUrl: process.env.VOICE_MEDIA_WS_URL || null,
+    maxCallDurationSec: Number(process.env.VOICE_MAX_CALL_DURATION_SEC || 900), // 15 dakika
+    // 0/unset = no cap. Enforced per clinic per calendar month by whatever
+    // reads calls.duration_s — not yet wired to anything in this increment.
+    monthlyMinuteCapPerClinic: Number(process.env.VOICE_MONTHLY_MINUTE_CAP_MIN || 0) || null,
+    // Every rate src/voice/costs.js needs, overridable per unit without a
+    // code change — defaults are DEFAULT_VOICE_PRICING (this app's research
+    // snapshot; see the approved plan), not a guess made twice in two files.
+    pricing: {
+      telephonyPerMinUsd: Number(process.env.VOICE_PRICE_TELEPHONY_PER_MIN || DEFAULT_VOICE_PRICING.telephonyPerMinUsd),
+      sttPerMinUsd: Number(process.env.VOICE_PRICE_STT_PER_MIN || DEFAULT_VOICE_PRICING.sttPerMinUsd),
+      llmInputPerMTokUsd: Number(process.env.VOICE_PRICE_LLM_INPUT_PER_MTOK || DEFAULT_VOICE_PRICING.llmInputPerMTokUsd),
+      llmOutputPerMTokUsd: Number(process.env.VOICE_PRICE_LLM_OUTPUT_PER_MTOK || DEFAULT_VOICE_PRICING.llmOutputPerMTokUsd),
+      llmCachedReadPerMTokUsd: Number(process.env.VOICE_PRICE_LLM_CACHED_READ_PER_MTOK || DEFAULT_VOICE_PRICING.llmCachedReadPerMTokUsd),
+      ttsPerKCharUsd: Number(process.env.VOICE_PRICE_TTS_PER_KCHAR || DEFAULT_VOICE_PRICING.ttsPerKCharUsd),
+    },
+  },
 };
 
 // Feature flags derived from what's configured.
 export const aiEnabled = Boolean(config.anthropic.apiKey);
 export const sendEnabled = Boolean(config.whatsapp.accessToken && config.whatsapp.phoneNumberId);
+// Both the explicit switch AND real Twilio credentials are required — this is
+// the literal mechanism behind "VOICE_ENABLED=false leaves everything else
+// untouched" (nothing in app.js/server.js mounts voice routes/timers unless
+// this is true), and also stops a stray VOICE_ENABLED=true with no Twilio
+// account from doing anything.
+export const voiceEnabled = Boolean(
+  config.voice.enabled && config.voice.twilio.accountSid && config.voice.twilio.authToken,
+);
 
 // A live Stripe key with no webhook secret means routes/stripeWebhook.js
 // accepts an UNSIGNED POST as a genuine "payment received" — i.e. real money

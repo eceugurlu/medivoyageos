@@ -2,10 +2,10 @@ import { app } from './app.js';
 import { config, aiEnabled, sendEnabled } from './config.js';
 import { dbEnabled } from './db/pool.js';
 import { zohoEnabled } from './services/zoho.js';
-import { notifyEnabled } from './services/notify.js';
+import { notifyEnabled, weeklyReportEnabled } from './services/notify.js';
 import { seedCampaignsIfEmpty, seedCoordinatorsIfEmpty, seedDevicesIfEmpty, seedBranchesIfEmpty } from './store/repository.js';
 import { seedProfileIfEmpty } from './services/profile.js';
-import { processPostOp, processNoShowRisk, processHotLeadFollowup } from './services/scheduler.js';
+import { processPostOp, processNoShowRisk, processHotLeadFollowup, processWeeklyReport } from './services/scheduler.js';
 
 // Local-dev entry only. Runs the app as one long-lived process: app.listen()
 // plus the setInterval timers that stand in for Vercel Cron in production
@@ -30,6 +30,7 @@ app.listen(config.port, () => {
   console.log(`    Database        : ${dbEnabled ? 'ON  (Postgres)' : 'OFF → in-memory (resets on restart)'}`);
   console.log(`    CRM (Zoho)      : ${zohoEnabled ? 'ON' : 'OFF (set ZOHO_* to enable)'}`);
   console.log(`    Handover ping   : ${notifyEnabled ? 'ON  (webhook)' : 'OFF → panel queue only'}`);
+  console.log(`    Weekly report   : ${weeklyReportEnabled ? 'ON  (Mondays, webhook)' : 'OFF (set WEEKLY_REPORT_WEBHOOK_URL or HANDOVER_WEBHOOK_URL)'}`);
   console.log(`    Signature check : ${config.whatsapp.appSecret ? 'ON' : 'OFF (set WHATSAPP_APP_SECRET to enable)'}`);
   console.log(`\n    📊  Panel: http://localhost:${config.port}/panel`);
   console.log(`    🧩  Lead widget demo: http://localhost:${config.port}/panel/widget.html\n`);
@@ -62,5 +63,10 @@ app.listen(config.port, () => {
 
     setTimeout(() => processHotLeadFollowup().catch((err) => console.error('[hot-followup] scheduler error:', err.message)), 11000);
     setInterval(() => processHotLeadFollowup().catch((err) => console.error('[hot-followup] scheduler error:', err.message)), 60000);
+
+    // Cheap no-op on every day but Monday (just a date check) — see
+    // scheduler.js::_processWeeklyReport for why this is safe to tick every minute.
+    setTimeout(() => processWeeklyReport().catch((err) => console.error('[weekly-report] scheduler error:', err.message)), 17000);
+    setInterval(() => processWeeklyReport().catch((err) => console.error('[weekly-report] scheduler error:', err.message)), 60000);
   }
 });

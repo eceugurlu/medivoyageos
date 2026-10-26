@@ -1432,6 +1432,121 @@ export async function getAnalytics({ branchId = null } = {}) {
   };
 }
 
+// ── Haftalık Sonuç Raporu ───────────────────────────────────────────────────
+// Atomic claim before computing/sending — same pattern as every scheduler
+// job's markXSent (see scheduler.js) — so two overlapping runs (local
+// setInterval + Vercel Cron, or a slow tick racing the next one) can't send
+// the same week's report twice. Scoped by clinic (there's only one right
+// now), but the column lives on `clinics` so a future multi-clinic
+// deployment doesn't need a schema change here too.
+export async function claimWeeklyReportSlot(weekStart) {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `UPDATE clinics SET last_weekly_report_sent_at = now()
+       WHERE id = $1 AND (last_weekly_report_sent_at IS NULL OR last_weekly_report_sent_at < $2)
+     RETURNING id`,
+    [clinicId, weekStart],
+  );
+  return Boolean(q.rows[0]);
+}
+
+/**
+ * Stats for one Monday-to-Monday week [weekStart, weekEnd). Reuses the exact
+ * EUR-conversion getPaymentTotals() already uses (fx.js's toEur) so the
+ * deposit figure matches what the rest of the panel shows for the same
+ * payments, not a second, slightly different computation of the same number.
+ *
+ * `missed_conversations` is DELIBERATELY a current snapshot (every lead
+ * still waiting for a human, right now), not scoped to the week — scoping
+ * it by `conversations.updated_at` would undercount: that column gets
+ * touched by any new patient message even while still escalated, so a
+ * conversation that's been neglected since the PREVIOUS week would have a
+ * stale updated_at and silently vanish from every later report instead of
+ * keeping nagging about it. A snapshot of "how many are waiting right now"
+ * is the more honest, more actionable number for a weekly owner summary.
+ */
+export async function getWeeklyReportStats({ weekStart, weekEnd, branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+
+  const leadStats = await pool.query(
+    `
+    SELECT
+      count(*) AS new_leads,
+      count(*) FILTER (WHERE status IN ('hot','handed_over','booked')) AS qualified_leads,
+      count(*) FILTER (WHERE status = 'hot') AS hot_leads
+    FROM leads
+    WHERE created_at >= $1 AND created_at < $2
+      AND ($3::uuid IS NULL OR branch_id = $3)
+  `,
+    [weekStart, weekEnd, bid],
+  );
+
+  const appointments = await pool.query(
+    `
+    SELECT count(*) AS booked
+    FROM appointments a JOIN leads l ON l.id = a.lead_id
+    WHERE a.created_at >= $1 AND a.created_at < $2 AND a.status = 'booked'
+      AND ($3::uuid IS NULL OR l.branch_id = $3)
+  `,
+    [weekStart, weekEnd, bid],
+  );
+
+  const payments = await pool.query(
+    `
+    SELECT p.amount, p.currency
+    FROM payments p JOIN leads l ON l.id = p.lead_id
+    WHERE p.status = 'paid' AND p.paid_at >= $1 AND p.paid_at < $2
+      AND ($3::uuid IS NULL OR l.branch_id = $3)
+  `,
+    [weekStart, weekEnd, bid],
+  );
+  let depositsEur = 0;
+  for (const r of payments.rows) depositsEur += await toEur(Number(r.amount), r.currency);
+
+  // Average time from a patient's message to the next reply in the SAME
+  // conversation, for patient messages sent within the week — a window
+  // function (LEAD), not a correlated subquery, so this stays fast as
+  // messages grows.
+  const responseTime = await pool.query(
+    `
+    WITH turns AS (
+      SELECT m.role, m.created_at,
+             LEAD(m.role) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) AS next_role,
+             LEAD(m.created_at) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) AS next_at
+      FROM messages m
+      JOIN conversations c ON c.id = m.conversation_id
+      WHERE ($1::uuid IS NULL OR EXISTS (SELECT 1 FROM leads l WHERE l.id = c.lead_id AND l.branch_id = $1))
+    )
+    SELECT avg(EXTRACT(EPOCH FROM (next_at - created_at))) AS avg_seconds, count(*) AS replied_turns
+    FROM turns
+    WHERE role = 'user' AND next_role = 'assistant'
+      AND created_at >= $2 AND created_at < $3
+  `,
+    [bid, weekStart, weekEnd],
+  );
+
+  const missed = await pool.query(
+    `
+    SELECT count(*) AS missed
+    FROM conversations c JOIN leads l ON l.id = c.lead_id
+    WHERE c.status = 'needs_human' AND ($1::uuid IS NULL OR l.branch_id = $1)
+  `,
+    [bid],
+  );
+
+  return {
+    period: { start: weekStart, end: weekEnd },
+    new_leads: Number(leadStats.rows[0].new_leads),
+    qualified_leads: Number(leadStats.rows[0].qualified_leads),
+    hot_leads: Number(leadStats.rows[0].hot_leads),
+    appointments_booked: Number(appointments.rows[0].booked),
+    deposits_collected_eur: Math.round(depositsEur * 100) / 100,
+    avg_response_seconds: responseTime.rows[0].avg_seconds != null ? Math.round(Number(responseTime.rows[0].avg_seconds)) : null,
+    replied_turns: Number(responseTime.rows[0].replied_turns),
+    missed_conversations_now: Number(missed.rows[0].missed),
+  };
+}
+
 // ── Broadcast segments ──────────────────────────────────────────────────────
 // Feeds /campaigns/broadcast, which sends a WhatsApp template — a channel
 // concept Instagram/Messenger don't have an equivalent of — so leads with no

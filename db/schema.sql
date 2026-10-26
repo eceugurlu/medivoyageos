@@ -288,3 +288,7 @@ ALTER TABLE logistics
   ADD COLUMN IF NOT EXISTS next_appointment_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS next_appointment_note TEXT,
   ADD COLUMN IF NOT EXISTS view_token TEXT UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex');
+
+-- ── Haftalık Sonuç Raporu (see 023_weekly_report.sql) ──────────────────────
+ALTER TABLE clinics
+  ADD COLUMN IF NOT EXISTS last_weekly_report_sent_at TIMESTAMPTZ;

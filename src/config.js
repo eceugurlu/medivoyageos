@@ -117,6 +117,11 @@ export const config = {
     // Optional: a Slack (or any) incoming webhook URL to ping on new handovers.
     // Leave blank to rely on the panel's Action Center queue instead.
     webhookUrl: process.env.HANDOVER_WEBHOOK_URL || null,
+    // Optional, SEPARATE webhook for the automatic Monday business summary
+    // (see services/notify.js::notifyWeeklyReport) — falls back to the same
+    // webhookUrl above when unset, so it's never silently skipped for lack
+    // of a dedicated second webhook.
+    weeklyReportWebhookUrl: process.env.WEEKLY_REPORT_WEBHOOK_URL || process.env.HANDOVER_WEBHOOK_URL || null,
   },
 
   panel: {

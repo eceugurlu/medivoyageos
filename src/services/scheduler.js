@@ -15,10 +15,11 @@
 // template twice. See markPostOpSent/markHotFollowupSent/markRiskNotified in
 // repository.js for the actual atomic UPDATE.
 import { sendTemplate } from './whatsapp.js';
-import { notifyNoShowRisk } from './notify.js';
+import { notifyNoShowRisk, notifyWeeklyReport } from './notify.js';
 import {
   getDuePostOpTasks, markPostOpSent, getNoShowRisks, markRiskNotified, clearRiskNotified,
   getSilentHotLeads, markHotFollowupSent, recordAgentMessage,
+  claimWeeklyReportSlot, getWeeklyReportStats,
 } from '../store/repository.js';
 
 // Guards against the same job overlapping itself specifically (belt-and-
@@ -116,3 +117,73 @@ async function _processHotLeadFollowup() {
   return sent;
 }
 export const processHotLeadFollowup = guarded('hot-followup', _processHotLeadFollowup);
+
+// Haftalık Sonuç Raporu — clinic's own fixed timezone (same one
+// repository.js's BUSINESS_HOURS already uses for every other "clinic-local
+// day" computation, e.g. the analytics trend chart).
+const REPORT_TIMEZONE = 'Europe/Istanbul';
+
+// Standard trick: format `date` as if `timeZone`'s wall-clock fields were
+// UTC fields, then the difference from the real UTC instant IS that zone's
+// current offset. Recomputed from `date` each call rather than hardcoded,
+// so this stays correct even if REPORT_TIMEZONE is ever changed to a
+// DST-observing zone (Turkey itself has had no DST since 2016).
+function getUtcOffsetMs(date, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })
+    .formatToParts(date)
+    .reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+  const asIfUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return asIfUtc - date.getTime();
+}
+
+/**
+ * The current clinic-local week's [weekStart, weekEnd) — Monday 00:00
+ * local through the following Monday 00:00 local, as real UTC instants —
+ * plus whether "now" is clinic-local Monday at all (the only day this job
+ * should ever actually fire).
+ */
+// Exported (not just used internally) so its tricky UTC-offset arithmetic
+// can be verified directly — see scripts/test-weekly-report.mjs — rather
+// than only indirectly through whether the scheduler job fires on the
+// right day, which would be a much slower and less precise way to catch a
+// boundary bug.
+export function getClinicWeekWindow(now = new Date()) {
+  const offsetMs = getUtcOffsetMs(now, REPORT_TIMEZONE);
+  const localNow = new Date(now.getTime() + offsetMs); // UTC getters on this now read as local wall-clock
+  const weekdayIndex = (localNow.getUTCDay() + 6) % 7; // getUTCDay(): Sun=0..Sat=6 → Mon=0..Sun=6
+  const localMidnightTodayAsUtc = Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate());
+  const localMondayAsUtc = localMidnightTodayAsUtc - weekdayIndex * 86_400_000;
+  const weekStart = new Date(localMondayAsUtc - offsetMs); // back to a real UTC instant
+  const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000);
+  return { weekStart, weekEnd, isMonday: weekdayIndex === 0 };
+}
+
+// Fires once, on clinic-local Monday, reporting on the PRIOR week (the 7
+// days that just ended) — claimed atomically via clinics.last_weekly_report_sent_at
+// so an overlapping run (or Monday's tick firing more than once before the
+// claim lands) can't send the same week's report twice.
+async function _processWeeklyReport() {
+  const { weekStart, isMonday } = getClinicWeekWindow();
+  if (!isMonday) return { sent: false, reason: 'not Monday (clinic-local) yet' };
+
+  const claimed = await claimWeeklyReportSlot(weekStart).catch((e) => { console.error('[weekly-report] claim failed:', e.message); return false; });
+  if (!claimed) return { sent: false, reason: 'already sent this week' };
+
+  const priorWeekStart = new Date(weekStart.getTime() - 7 * 86_400_000);
+  const priorWeekEnd = weekStart;
+  try {
+    const stats = await getWeeklyReportStats({ weekStart: priorWeekStart, weekEnd: priorWeekEnd });
+    await notifyWeeklyReport(stats);
+    console.log(`[weekly-report] sent for ${priorWeekStart.toISOString().slice(0, 10)} – ${priorWeekEnd.toISOString().slice(0, 10)}`);
+    return { sent: true, stats };
+  } catch (err) {
+    // Already claimed above — a transient failure here must not retry every
+    // tick for the rest of the day; it'll simply be covered by next Monday's run.
+    console.error('[weekly-report] compute/send failed (already claimed, will not retry today):', err.message);
+    return { sent: false, reason: err.message };
+  }
+}
+export const processWeeklyReport = guarded('weekly-report', _processWeeklyReport);

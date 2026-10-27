@@ -444,7 +444,7 @@
 
   /* ── States ───────────────────────────────────────────────────────────── */
   .empty{
-    display:flex;align-items:center;justify-content:center;height:100%;
+    display:flex;align-items:center;justify-content:center;gap:8px;height:100%;
     color:var(--ink-3);font-size:13px;text-align:center;padding:26px;line-height:1.5;
   }
 
@@ -1992,7 +1992,7 @@ function MiniBarChart({ data }){
 }
 
 function Analytics({ analytics, profitability }){
-  if(!analytics) return html`<div class="empty">${T("load.analytics")}</div>`;
+  if(!analytics) return html`<div class="empty"><${Spinner}/> ${T("load.analytics")}</div>`;
   const f=analytics.funnel||{};
   const stages=[[T("funnel.leads"),f.leads],[T("funnel.qualified"),f.qualified],[T("funnel.handedOver"),f.handed_over],[T("funnel.booked"),f.booked]];
   const maxF=Math.max(1,...stages.map(s=>Number(s[1])));
@@ -2102,7 +2102,7 @@ function PromptStudio(){
   const [err,setErr]=useState(null);
   useEffect(()=>{ api("/settings").then(setP).catch(e=>setErr(e.message)); }, []);
   if(err && !p) return html`<div class="err">${err}</div>`;
-  if(!p) return html`<div class="empty">${T("load.profile")}</div>`;
+  if(!p) return html`<div class="empty"><${Spinner}/> ${T("load.profile")}</div>`;
 
   const set=(k,v)=>setP({...p,[k]:v});
   const setTr=(i,k,v)=>{ const t=[...p.treatments]; t[i]={...t[i],[k]:v}; setP({...p,treatments:t}); };
@@ -2441,7 +2441,7 @@ function ConsultantAdmin({ branches, onChanged }){
       </form>
     </div>
     <div class="glass" style="padding:4px 0">
-      ${!roster? html`<div class="empty">${T("load.generic")}</div>`
+      ${!roster? html`<div class="empty"><${Spinner}/> ${T("load.generic")}</div>`
         : roster.length===0? html`<div class="empty">${T("admin.noConsultants")}</div>`
         : html`<div class="rowgrid rowhead" style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
             <span>${T("tbl.coordinator")}</span><span>${T("tbl.languages")}</span><span>${T("admin.branch")}</span><span></span>
@@ -2481,7 +2481,7 @@ function ConsultantAdmin({ branches, onChanged }){
 }
 
 function Consultants({ data, branches, reloadShared }){
-  if(!data) return html`<div class="empty">${T("load.generic")}</div>`;
+  if(!data) return html`<div class="empty"><${Spinner}/> ${T("load.generic")}</div>`;
   const grid="display:grid;grid-template-columns:1.4fr 1fr repeat(5,.7fr);gap:8px";
   return html`<div>
     <h1>${T("nav.consultants")}</h1>
@@ -2505,7 +2505,7 @@ function Consultants({ data, branches, reloadShared }){
 }
 
 function Matching({ data }){
-  if(!data) return html`<div class="empty">${T("load.generic")}</div>`;
+  if(!data) return html`<div class="empty"><${Spinner}/> ${T("load.generic")}</div>`;
   const langMap={};
   data.coordinators.forEach(c=> c.languages.forEach(l=>{ (langMap[l]=langMap[l]||[]).push(c.name); }));
   return html`<div>
@@ -2529,12 +2529,13 @@ function useFetch(path){
   return [d,e,load];
 }
 const emptyBox=(txt)=> html`<div class="glass" style="padding:24px;text-align:center;color:var(--ink-2);font-size:13.5px">${txt}</div>`;
+const loadingBox=()=> html`<div class="glass" style="padding:24px;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--ink-2);font-size:13.5px"><${Spinner}/> ${T("load.generic")}</div>`;
 const POSTOP_LABELS={thank_you:"postop.thankYou",review_request:"postop.reviewInvite",checkin_7:"postop.checkin7",checkin_30:"postop.checkin30",fit_to_fly:"postop.fitToFly",checkup_1y:"postop.checkup1y"};
 
 function PostOp(){
   const [d,e]=useFetch("/postop");
   if(e) return html`<div class="err">${e}</div>`;
-  if(!d) return emptyBox(T("load.generic"));
+  if(!d) return loadingBox();
   return html`<div>
     <h1>${T("postop.title")}</h1>
     <div class="sub">${T("postop.sub")}</div>
@@ -2551,7 +2552,7 @@ function PostOp(){
 function Reviews(){
   const [d,e]=useFetch("/reviews");
   if(e) return html`<div class="err">${e}</div>`;
-  if(!d) return emptyBox(T("load.generic"));
+  if(!d) return loadingBox();
   return html`<div>
     <h1>${T("nav.reviews")}</h1>
     <div class="sub">${T("reviews.sub")}</div>
@@ -2567,7 +2568,7 @@ function Devices(){
   const [d,e,reload]=useFetch("/devices");
   const [busy,setBusy]=useState(false);
   if(e) return html`<div class="err">${e}</div>`;
-  if(!d) return emptyBox(T("load.generic"));
+  if(!d) return loadingBox();
   const book=async(leadId)=>{
     const dev=[...d.devices].sort((a,b)=>a.utilization-b.utilization)[0]; if(!dev) return;
     setBusy(true);
@@ -2619,7 +2620,7 @@ function AppointmentsAdmin({ onChanged }){
     <div class="section-title">${T("appt.title")}</div>
     ${err? html`<div class="err" style="margin-bottom:10px">${err}</div>`:null}
     <div class="glass" style="padding:4px 0">
-      ${!rows? html`<div class="empty">${T("load.generic")}</div>`
+      ${!rows? html`<div class="empty"><${Spinner}/> ${T("load.generic")}</div>`
         : rows.length===0? html`<div class="empty">${T("appt.empty")}</div>`
         : html`<div class="rowgrid rowhead" style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
             <span>${T("appt.when")}</span><span>${T("appt.patient")}</span><span>${T("appt.room")}</span><span>${T("appt.status")}</span><span></span>
@@ -2691,7 +2692,7 @@ function DeviceAdmin({ onChanged }){
       </form>
     </div>
     <div class="glass" style="padding:4px 0">
-      ${!roster? html`<div class="empty">${T("load.generic")}</div>`
+      ${!roster? html`<div class="empty"><${Spinner}/> ${T("load.generic")}</div>`
         : roster.length===0? html`<div class="empty">${T("admin.noDevices")}</div>`
         : html`<div class="rowgrid rowhead" style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
             <span>${T("admin.name")}</span><span>${T("admin.type")}</span><span></span>
@@ -2764,7 +2765,7 @@ function Branches({ reloadShared }){
       </form>
     </div>
     <div class="glass" style="padding:4px 0">
-      ${!roster? html`<div class="empty">${T("load.generic")}</div>`
+      ${!roster? html`<div class="empty"><${Spinner}/> ${T("load.generic")}</div>`
         : roster.length===0? html`<div class="empty">${T("admin.noBranches")}</div>`
         : html`<div class="rowgrid rowhead" style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
             <span>${T("admin.name")}</span><span>${T("admin.code")}</span><span>${T("admin.city")}</span><span></span>
@@ -2870,7 +2871,7 @@ function LogisticsCard({ l, reload }){
 function Logistics(){
   const [d,e,reload]=useFetch("/logistics");
   if(e) return html`<div class="err">${e}</div>`;
-  if(!d) return emptyBox(T("load.generic"));
+  if(!d) return loadingBox();
   return html`<div>
     <h1>${T("nav.logistics")}</h1>
     <div class="sub">${T("logistics.sub")}</div>

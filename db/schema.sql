@@ -306,3 +306,85 @@ ALTER TABLE messages
   ADD COLUMN IF NOT EXISTS llm_input_tokens       INTEGER,
   ADD COLUMN IF NOT EXISTS llm_output_tokens      INTEGER,
   ADD COLUMN IF NOT EXISTS llm_cached_read_tokens INTEGER;
+
+-- ── Sesli AI Konsiyerj (Voice AI Call Center — bkz. 026_voice_calls.sql) ───
+ALTER TABLE branches
+  ADD COLUMN IF NOT EXISTS twilio_number TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_branches_twilio_number
+  ON branches (twilio_number) WHERE twilio_number IS NOT NULL;
+
+ALTER TABLE coordinators
+  ADD COLUMN IF NOT EXISTS phone TEXT;
+
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS voice_recording_consent BOOLEAN,
+  ADD COLUMN IF NOT EXISTS voice_outbound_consent  BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS calls (
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id              UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  branch_id              UUID REFERENCES branches(id) ON DELETE SET NULL,
+  lead_id                UUID REFERENCES leads(id) ON DELETE SET NULL,
+  provider_call_id       TEXT NOT NULL,
+  direction              TEXT NOT NULL CHECK (direction IN ('inbound','outbound')),
+  status                 TEXT NOT NULL DEFAULT 'in_progress'
+                            CHECK (status IN ('in_progress','completed','failed','no_answer','voicemail','busy')),
+  language               TEXT,
+  started_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ended_at               TIMESTAMPTZ,
+  duration_s             INTEGER,
+  recording_consent      BOOLEAN,
+  recording_url          TEXT,
+  outcome                TEXT,
+  summary                TEXT,
+  score                  INTEGER CHECK (score BETWEEN 0 AND 100),
+  handover_reason        TEXT,
+  urgent                 BOOLEAN NOT NULL DEFAULT false,
+  medical_note           TEXT,
+  force_handover_requested_at TIMESTAMPTZ,
+  telephony_seconds      INTEGER NOT NULL DEFAULT 0,
+  stt_seconds            INTEGER NOT NULL DEFAULT 0,
+  llm_input_tokens       INTEGER NOT NULL DEFAULT 0,
+  llm_output_tokens      INTEGER NOT NULL DEFAULT 0,
+  llm_cached_read_tokens INTEGER NOT NULL DEFAULT 0,
+  tts_characters         INTEGER NOT NULL DEFAULT 0,
+  cost_breakdown         JSONB,
+  total_cost_usd         NUMERIC(10,4),
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_calls_provider_call_id ON calls (provider_call_id);
+CREATE INDEX IF NOT EXISTS idx_calls_lead ON calls (lead_id, started_at DESC) WHERE lead_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_calls_clinic_started ON calls (clinic_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_calls_status_live ON calls (status) WHERE status = 'in_progress';
+
+CREATE TABLE IF NOT EXISTS call_turns (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  call_id         UUID NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
+  role            TEXT NOT NULL CHECK (role IN ('patient','assistant','system')),
+  transcript      TEXT NOT NULL,
+  is_safety_net   BOOLEAN NOT NULL DEFAULT false,
+  turn_started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  latency_ms      INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_call_turns_call ON call_turns (call_id, turn_started_at);
+
+CREATE TABLE IF NOT EXISTS call_jobs (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id       UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  lead_id         UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  branch_id       UUID REFERENCES branches(id) ON DELETE SET NULL,
+  kind            TEXT NOT NULL CHECK (kind IN ('hot_callback','silence_escalation','post_op_checkin','noshow_confirm')),
+  status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending','claimed','calling','done','failed','voicemail','cancelled')),
+  scheduled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  max_attempts    INTEGER NOT NULL DEFAULT 3,
+  last_attempt_at TIMESTAMPTZ,
+  last_outcome    TEXT,
+  call_id         UUID REFERENCES calls(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_call_jobs_due ON call_jobs (scheduled_at) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_call_jobs_lead ON call_jobs (lead_id, created_at DESC);

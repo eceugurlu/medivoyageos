@@ -140,6 +140,79 @@ export async function loadContext({ phone, externalId, source, name, wamid, user
 }
 
 /**
+ * Update a lead from the AI's structured read of a turn (reply text is
+ * handled separately by the caller — this is purely the lead-scoring/
+ * handover side). Shared by saveExchange() (text channel, below — called
+ * inside its own transaction via `client`) and the voice call-finalize path
+ * (src/voice/session.js, called standalone with no transaction) so both
+ * channels update a lead identically and can never drift into two different
+ * ideas of what a given `meta` shape means.
+ */
+export async function applyLeadSignal(leadId, meta, client = pool) {
+  if (!meta) return;
+  const lead = meta.lead || {};
+  const score = Number.isFinite(lead.score) ? lead.score : null;
+  const handover = Boolean(meta.handover?.needed);
+
+  await client.query(
+    `UPDATE leads SET
+       name               = COALESCE(name, $2),
+       country            = COALESCE($3, country),
+       language           = COALESCE($4, language),
+       treatment_interest = COALESCE($5, treatment_interest),
+       budget_hint        = COALESCE($6, budget_hint),
+       readiness          = COALESCE($7, readiness),
+       score              = COALESCE($8, score),
+       medical_note       = COALESCE($10, medical_note),
+       status             = CASE
+                              WHEN leads.status = 'booked' AND NOT $9 THEN 'booked'
+                              WHEN $9              THEN 'handed_over'
+                              WHEN COALESCE($8,0) >= 70 THEN 'hot'
+                              ELSE status
+                            END,
+       updated_at = now()
+     WHERE id = $1`,
+    [
+      leadId,
+      lead.name || null,
+      lead.country || null,
+      meta.detected_language || null,
+      lead.treatment_interest || null,
+      lead.budget_hint || null,
+      lead.readiness || null,
+      score,
+      handover,
+      lead.medical_note || null,
+    ],
+  );
+
+  if (handover) {
+    await markConversationEscalated(leadId, { reason: meta.handover.reason, urgent: meta.handover?.urgent }, client);
+  }
+}
+
+/**
+ * Flip a lead's conversation to `needs_human` — the ONE queue the panel's
+ * Action Center (getHandoverQueue(), below) reads, regardless of which
+ * channel the escalation came from. A voice-only lead (never texted) still
+ * has a conversations row by the time this can fire: resolveLeadForCall()
+ * (see the Voice AI section further down) creates one up front, the same way
+ * loadContext()/createWidgetLead() already do for their own channels — so
+ * this never silently no-ops for a lead that happens to have no `messages`.
+ */
+export async function markConversationEscalated(leadId, { reason, urgent } = {}, client = pool) {
+  const q = await client.query(
+    `UPDATE conversations
+       SET status = 'needs_human', handover_reason = $2, urgent = urgent OR $3,
+           escalated_at = COALESCE(escalated_at, now()), updated_at = now()
+     WHERE lead_id = $1
+     RETURNING id`,
+    [leadId, reason || 'unspecified', Boolean(urgent)],
+  );
+  return Boolean(q.rows[0]);
+}
+
+/**
  * Persist the assistant's reply and update the lead from the AI's
  * structured insight, flagging handover when needed. All in one transaction
  * so a lead is never left half-updated. The inbound patient message is
@@ -165,54 +238,7 @@ export async function saveExchange(phone, { reply, meta, usage, ctx }) {
     );
 
     // Update the lead from the AI's structured read of the conversation.
-    if (meta) {
-      const lead = meta.lead || {};
-      const score = Number.isFinite(lead.score) ? lead.score : null;
-      const handover = Boolean(meta.handover?.needed);
-
-      await client.query(
-        `UPDATE leads SET
-           name               = COALESCE(name, $2),
-           country            = COALESCE($3, country),
-           language           = COALESCE($4, language),
-           treatment_interest = COALESCE($5, treatment_interest),
-           budget_hint        = COALESCE($6, budget_hint),
-           readiness          = COALESCE($7, readiness),
-           score              = COALESCE($8, score),
-           medical_note       = COALESCE($10, medical_note),
-           status             = CASE
-                                  WHEN leads.status = 'booked' AND NOT $9 THEN 'booked'
-                                  WHEN $9              THEN 'handed_over'
-                                  WHEN COALESCE($8,0) >= 70 THEN 'hot'
-                                  ELSE status
-                                END,
-           updated_at = now()
-         WHERE id = $1`,
-        [
-          leadId,
-          lead.name || null,
-          lead.country || null,
-          meta.detected_language || null,
-          lead.treatment_interest || null,
-          lead.budget_hint || null,
-          lead.readiness || null,
-          score,
-          handover,
-          lead.medical_note || null,
-        ],
-      );
-
-      if (handover) {
-        const urgent = Boolean(meta.handover?.urgent);
-        await client.query(
-          `UPDATE conversations
-             SET status = 'needs_human', handover_reason = $2, urgent = urgent OR $3,
-                 escalated_at = COALESCE(escalated_at, now()), updated_at = now()
-           WHERE id = $1`,
-          [conversationId, meta.handover.reason || 'unspecified', urgent],
-        );
-      }
-    }
+    await applyLeadSignal(leadId, meta, client);
 
     await client.query('COMMIT');
   } catch (err) {
@@ -493,9 +519,17 @@ export async function deleteLead(leadId) {
     const lead = await c.query('SELECT name, phone FROM leads WHERE id = $1', [leadId]);
     if (!lead.rows[0]) throw new Error('lead not found');
     const appts = await c.query('DELETE FROM appointments WHERE lead_id = $1', [leadId]);
+    // calls.lead_id is ON DELETE SET NULL, not CASCADE — deliberately, so a
+    // call record can outlive a lead that gets MERGED into another one. But a
+    // genuine erasure request has no "merge" on the other end, so left as-is
+    // it would silently orphan a patient's voice recordings/transcripts
+    // (call_turns.transcript, calls.recording_url) instead of erasing them —
+    // exactly the KVKK/GDPR gap this delete button exists to close. Explicit
+    // delete here closes it; call_turns cascades from calls.
+    const calls = await c.query('DELETE FROM calls WHERE lead_id = $1', [leadId]);
     await c.query('DELETE FROM leads WHERE id = $1', [leadId]);
     await c.query('COMMIT');
-    return { name: lead.rows[0].name, phone: lead.rows[0].phone, appointments_removed: appts.rowCount };
+    return { name: lead.rows[0].name, phone: lead.rows[0].phone, appointments_removed: appts.rowCount, calls_removed: calls.rowCount };
   } catch (err) {
     await c.query('ROLLBACK');
     throw err;
@@ -1729,28 +1763,28 @@ function sanitizeLanguages(input) {
 export async function listAllCoordinators() {
   const clinicId = await getDefaultClinicId();
   const q = await pool.query(
-    `SELECT id, name, languages, active, branch_id, created_at
+    `SELECT id, name, languages, active, branch_id, phone, created_at
        FROM coordinators WHERE clinic_id = $1 ORDER BY active DESC, name`,
     [clinicId],
   );
   return q.rows;
 }
 
-export async function createCoordinator({ name, languages, branchId }) {
+export async function createCoordinator({ name, languages, branchId, phone }) {
   if (!name || !name.trim()) throw new Error('coordinator name is required');
   const langs = sanitizeLanguages(languages);
   if (!langs.length) throw new Error('at least one language is required');
   const clinicId = await getDefaultClinicId();
   const q = await pool.query(
-    `INSERT INTO coordinators (clinic_id, name, languages, branch_id)
-       VALUES ($1,$2,$3,$4)
-     RETURNING id, name, languages, active, branch_id, created_at`,
-    [clinicId, name.trim().slice(0, 120), langs, normalizeBranchId(branchId)],
+    `INSERT INTO coordinators (clinic_id, name, languages, branch_id, phone)
+       VALUES ($1,$2,$3,$4,$5)
+     RETURNING id, name, languages, active, branch_id, phone, created_at`,
+    [clinicId, name.trim().slice(0, 120), langs, normalizeBranchId(branchId), phone?.trim().slice(0, 40) || null],
   );
   return q.rows[0];
 }
 
-export async function updateCoordinator(id, { name, languages, branchId, active }) {
+export async function updateCoordinator(id, { name, languages, branchId, active, phone }) {
   const fields = [];
   const vals = [id];
   if (name !== undefined) {
@@ -1766,11 +1800,14 @@ export async function updateCoordinator(id, { name, languages, branchId, active 
   // the property being present rather than being truthy.
   if (branchId !== undefined) fields.push(`branch_id = $${vals.push(normalizeBranchId(branchId))}`);
   if (active !== undefined) fields.push(`active = $${vals.push(Boolean(active))}`);
+  // Real, callable number for sesli AI's warm-transfer `<Dial>` — settable to
+  // null ("no transfer number yet"), same reasoning as branchId above.
+  if (phone !== undefined) fields.push(`phone = $${vals.push(phone?.trim().slice(0, 40) || null)}`);
   if (!fields.length) throw new Error('nothing to update');
 
   const q = await pool.query(
     `UPDATE coordinators SET ${fields.join(', ')} WHERE id = $1
-     RETURNING id, name, languages, active, branch_id, created_at`,
+     RETURNING id, name, languages, active, branch_id, phone, created_at`,
     vals,
   );
   if (!q.rows[0]) throw new Error('coordinator not found');
@@ -1821,7 +1858,7 @@ export async function seedCoordinatorsIfEmpty() {
 export async function listBranches() {
   const clinicId = await getDefaultClinicId();
   const q = await pool.query(
-    `SELECT id, name, code, city, is_default, active
+    `SELECT id, name, code, city, is_default, active, twilio_number
        FROM branches WHERE clinic_id = $1 AND active
        ORDER BY is_default DESC, name`,
     [clinicId],
@@ -1836,7 +1873,7 @@ export async function listBranches() {
 export async function listAllBranches() {
   const clinicId = await getDefaultClinicId();
   const q = await pool.query(
-    `SELECT id, name, code, city, is_default, active
+    `SELECT id, name, code, city, is_default, active, twilio_number
        FROM branches WHERE clinic_id = $1
        ORDER BY is_default DESC, active DESC, name`,
     [clinicId],
@@ -1844,18 +1881,19 @@ export async function listAllBranches() {
   return q.rows;
 }
 
-export async function createBranch({ name, code, city }) {
+export async function createBranch({ name, code, city, twilioNumber }) {
   if (!name || !name.trim()) throw new Error('branch name is required');
   const clinicId = await getDefaultClinicId();
   const q = await pool.query(
-    `INSERT INTO branches (clinic_id, name, code, city) VALUES ($1,$2,$3,$4)
-     RETURNING id, name, code, city, is_default, active`,
-    [clinicId, name.trim().slice(0, 120), code?.trim().slice(0, 30) || null, city?.trim().slice(0, 80) || null],
+    `INSERT INTO branches (clinic_id, name, code, city, twilio_number) VALUES ($1,$2,$3,$4,$5)
+     RETURNING id, name, code, city, is_default, active, twilio_number`,
+    [clinicId, name.trim().slice(0, 120), code?.trim().slice(0, 30) || null, city?.trim().slice(0, 80) || null,
+     twilioNumber?.trim().slice(0, 20) || null],
   );
   return q.rows[0];
 }
 
-export async function updateBranch(id, { name, code, city, active }) {
+export async function updateBranch(id, { name, code, city, active, twilioNumber }) {
   const fields = [];
   const vals = [id];
   if (name !== undefined) {
@@ -1864,6 +1902,9 @@ export async function updateBranch(id, { name, code, city, active }) {
   }
   if (code !== undefined) fields.push(`code = $${vals.push(code?.trim().slice(0, 30) || null)}`);
   if (city !== undefined) fields.push(`city = $${vals.push(city?.trim().slice(0, 80) || null)}`);
+  // The number a patient dials for sesli AI to route to THIS branch's profile
+  // (bkz. 023_voice_calls.sql's unique partial index) — settable to null.
+  if (twilioNumber !== undefined) fields.push(`twilio_number = $${vals.push(twilioNumber?.trim().slice(0, 20) || null)}`);
   if (active !== undefined) {
     // The default branch is what unassigned leads and the "all branches" view
     // fall back to, so switching it off would leave that fallback pointing at
@@ -1879,7 +1920,7 @@ export async function updateBranch(id, { name, code, city, active }) {
 
   const q = await pool.query(
     `UPDATE branches SET ${fields.join(', ')} WHERE id = $1
-     RETURNING id, name, code, city, is_default, active`,
+     RETURNING id, name, code, city, is_default, active, twilio_number`,
     vals,
   );
   if (!q.rows[0]) throw new Error('branch not found');
@@ -2702,4 +2743,112 @@ export async function getLogisticsByToken(token) {
     [token],
   );
   return q.rows[0] || null;
+}
+
+// ── Sesli AI Konsiyerj (Voice AI Call Center) ──────────────────────────────
+// Mevcut leads/conversations şemasına dokunmadan, aynı eşleme anahtarını
+// (clinic_id, phone) ve aynı "tek conversations satırı" garantisini kullanır
+// — bkz. loadContext()/createWidgetLead() yukarıda, aynı desen.
+
+/**
+ * Bir aramanın lead'ini bul/oluştur VE bu lead için bir conversations
+ * satırının var olduğunu garantile (markConversationEscalated() yukarıda
+ * bir satır bulamazsa sessizce hiçbir şey yapmaz — bu yüzden burada önceden
+ * garanti ediyoruz, tıpkı metin/widget kanallarının zaten yaptığı gibi).
+ * WhatsApp'tan tanınan bir numara aradığında otomatik olarak AYNI lead'e
+ * bağlanır — başka bir birleştirme kodu gerekmez.
+ */
+export async function resolveLeadForCall(phone, branchId = null) {
+  const clinicId = await getDefaultClinicId();
+  const bid = normalizeBranchId(branchId);
+  const leadRes = await pool.query(
+    `INSERT INTO leads (clinic_id, phone, branch_id)
+       VALUES ($1, $2, $3)
+     ON CONFLICT (clinic_id, phone) DO UPDATE SET updated_at = now()
+     RETURNING id`,
+    [clinicId, phone, bid],
+  );
+  const leadId = leadRes.rows[0].id;
+  await pool.query(
+    `INSERT INTO conversations (clinic_id, lead_id, channel)
+       VALUES ($1, $2, 'voice')
+     ON CONFLICT (lead_id) DO UPDATE SET updated_at = now()`,
+    [clinicId, leadId],
+  );
+  return leadId;
+}
+
+/**
+ * Create the `calls` row the instant a call starts. Idempotent on
+ * provider_call_id (Twilio's CallSid) — a redelivered webhook for the same
+ * call returns the SAME id rather than erroring or duplicating, same
+ * fault-tolerance requirement as idx_messages_wamid/idx_payments_provider_session.
+ */
+export async function createCall({ branchId, leadId, providerCallId, direction }) {
+  const clinicId = await getDefaultClinicId();
+  const ins = await pool.query(
+    `INSERT INTO calls (clinic_id, branch_id, lead_id, provider_call_id, direction)
+       VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (provider_call_id) DO NOTHING
+     RETURNING id`,
+    [clinicId, normalizeBranchId(branchId), leadId || null, providerCallId, direction],
+  );
+  if (ins.rows[0]) return ins.rows[0].id;
+  const existing = await pool.query('SELECT id FROM calls WHERE provider_call_id = $1', [providerCallId]);
+  return existing.rows[0]?.id || null;
+}
+
+// Written incrementally, every turn — not just at call-end — so a hard kill
+// mid-call (a voice-server.js redeploy, a crash) loses at most the one
+// in-flight turn, never the transcript-so-far (bkz. approved plan, Deployment).
+export async function appendCallTurn(callId, { role, transcript, isSafetyNet = false, latencyMs = null }) {
+  await pool.query(
+    `INSERT INTO call_turns (call_id, role, transcript, is_safety_net, latency_ms)
+       VALUES ($1,$2,$3,$4,$5)`,
+    [callId, role, transcript, Boolean(isSafetyNet), latencyMs || null],
+  );
+}
+
+/**
+ * Close out a call: final status/outcome/summary, frozen cost breakdown
+ * (computed by src/voice/costs.js at the time the call ended — a later
+ * pricing-config change must never rewrite a past call's historical cost,
+ * which is exactly why the number is stored here rather than recomputed on
+ * read). Lead-scoring/handover update is a SEPARATE call to applyLeadSignal()
+ * (above) — session.js calls both, not bundled into one function, because a
+ * mid-call safety trigger needs applyLeadSignal() alone, before the call
+ * has actually ended.
+ */
+export async function finalizeCall(callId, {
+  status, outcome, summary, language, usage = {}, costBreakdown = null, totalCostUsd = null,
+  recordingConsent = null, recordingUrl = null,
+} = {}) {
+  const q = await pool.query(
+    `UPDATE calls SET
+       status = COALESCE($2, status),
+       ended_at = now(),
+       duration_s = EXTRACT(EPOCH FROM (now() - started_at))::int,
+       outcome = COALESCE($3, outcome),
+       summary = COALESCE($4, summary),
+       language = COALESCE($5, language),
+       telephony_seconds = $6, stt_seconds = $7,
+       llm_input_tokens = $8, llm_output_tokens = $9, llm_cached_read_tokens = $10,
+       tts_characters = $11,
+       cost_breakdown = $12, total_cost_usd = $13,
+       recording_consent = COALESCE($14, recording_consent),
+       recording_url = COALESCE($15, recording_url),
+       updated_at = now()
+     WHERE id = $1
+     RETURNING id, lead_id, clinic_id, status, duration_s, total_cost_usd`,
+    [
+      callId, status || null, outcome || null, summary || null, language || null,
+      Number(usage.telephonySeconds) || 0, Number(usage.sttSeconds) || 0,
+      Number(usage.llmInputTokens) || 0, Number(usage.llmOutputTokens) || 0, Number(usage.llmCachedReadTokens) || 0,
+      Number(usage.ttsCharacters) || 0,
+      costBreakdown ? JSON.stringify(costBreakdown) : null, totalCostUsd,
+      recordingConsent, recordingUrl,
+    ],
+  );
+  if (!q.rows[0]) throw new Error('call not found');
+  return q.rows[0];
 }

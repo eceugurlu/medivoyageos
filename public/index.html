@@ -13,7 +13,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M5 16h5l3 7 5-14 3 7h6' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=Azeret+Mono:wght@400;500&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;0,6..96,600;1,6..96,400&family=Instrument+Sans:ital,wght@0,400;0,500;1,400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=Azeret+Mono:wght@400;500&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;0,6..96,600;1,6..96,400&family=Instrument+Sans:ital,wght@0,400;0,500;1,400&display=swap">
 <title>MediVoyage OS — Command Center</title>
 <style>
   /* ═══════════════════════════════════════════════════════════════════════
@@ -76,7 +76,7 @@
     --chart-a:#0e5750;
     --chart-b:#8c6415;
     --chart-grid:#e6ebee;
-    --display:"Fraunces",Georgia,"Times New Roman",serif;
+    --display:"Lora",Georgia,"Times New Roman",serif; /* was Fraunces — its sharp, high-contrast "wonky" terminals read as severe, not premium; Lora keeps the warmth of a serif without the edge */
     --ui:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
     /* Rounded, not square — sharp corners read as colder/more clinical and
@@ -528,7 +528,7 @@
      Fixed dark treatment regardless of the app's light/dark toggle (like a
      hotel lobby, not a settings page) — Bodoni Moda's extreme thick/thin
      contrast and Instrument Sans read as a private clinical brand, not a
-     generic SaaS login card. Everything else in the panel keeps Fraunces/
+     generic SaaS login card. Everything else in the panel keeps Lora/
      Public Sans; this screen is the one deliberate departure. */
   .gate-screen{
     min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;

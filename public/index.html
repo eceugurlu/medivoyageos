@@ -702,7 +702,17 @@ const I18N = {
     "kpi.aiAutonomy":"AI autonomy","kpi.autonomyFoot":"conversations still handled without a human",
     "kpi.occupancyFoot":"today, averaged across devices",
     "analytics.byChannel":"Ad spend by channel","analytics.cpc":"CPC",
-        "analytics.attributionNote":"CAC and ROAS are totals, not per channel: a lead records how it arrived (WhatsApp, widget), not which campaign paid for it. Per-channel CAC needs a campaign reference on the lead.",
+        "analytics.attributionNote":"Totals only for leads whose originating ad is not yet known. Per-campaign CAC and ROAS are below.",
+        "camp.title":"Which ad actually produced a patient",
+        "camp.sub":"Spend traced through to booked treatments and collected revenue — not clicks.",
+        "camp.campaign":"Campaign","camp.spend":"Spend","camp.leads":"Leads","camp.booked":"Booked",
+        "camp.cac":"Cost / lead","camp.cpb":"Cost / booking","camp.revenue":"Revenue","camp.roas":"ROAS",
+        "camp.none":"No campaigns registered yet. Add one with the ad id from Meta or your utm_campaign value, and every lead that ad produces is traced from click to surgery.",
+        "camp.unmatched":"Ads producing patients that you have not registered yet",
+        "camp.unmatchedSub":"Their spend is invisible in the figures above. Register the ad id to pull them in — past leads are linked retroactively.",
+        "camp.unattributed":"leads with no known ad origin (organic, referral, direct)",
+        "camp.thin":"too few leads to trust yet",
+        "camp.untracked":"not tracked","camp.untrackedHint":"No ad id registered, so no lead can ever be attributed to this campaign — these are blanks, not zeros. Add the Meta ad id or utm_campaign value to start tracing it.",
     "tbl.conversion":"Conv.",
     "cmd.chartTitle":"Leads — last 14 days","cmd.clinicalAlerts":"Clinical alerts — urgent medical escalations",
     "badge.urgent":"URGENT","btn.openNow":"Open now","cmd.actionCenter":"Action Center — leads waiting for a human",
@@ -916,7 +926,17 @@ const I18N = {
     "kpi.aiAutonomy":"AI özerkliği","kpi.autonomyFoot":"görüşme hâlâ insansız yürüyor",
     "kpi.occupancyFoot":"bugün, tüm cihazların ortalaması",
     "analytics.byChannel":"Kanala göre reklam harcaması","analytics.cpc":"TBM",
-        "analytics.attributionNote":"CAC ve ROAS toplamdır, kanal bazlı değildir: bir lead nasıl geldiğini (WhatsApp, widget) kaydeder, hangi kampanyanın parasını ödediğini değil. Kanal bazlı CAC için lead üzerinde kampanya referansı gerekir.",
+        "analytics.attributionNote":"Bu toplamlar yalnızca kaynağı henüz bilinmeyen lead'leri kapsar. Kampanya bazlı CAC ve ROAS aşağıda.",
+        "camp.title":"Hangi reklam gerçekten hasta üretti",
+        "camp.sub":"Harcama, tıklamaya kadar değil; rezervasyona ve tahsil edilen gelire kadar izlendi.",
+        "camp.campaign":"Kampanya","camp.spend":"Harcama","camp.leads":"Lead","camp.booked":"Rezervasyon",
+        "camp.cac":"Lead maliyeti","camp.cpb":"Rezervasyon maliyeti","camp.revenue":"Gelir","camp.roas":"ROAS",
+        "camp.none":"Henüz kayıtlı kampanya yok. Meta'daki reklam kimliğini ya da utm_campaign değerini girin; o reklamın ürettiği her hasta, tıklamadan ameliyata kadar izlenir.",
+        "camp.unmatched":"Hasta üreten ama henüz kaydetmediğiniz reklamlar",
+        "camp.unmatchedSub":"Bunların harcaması yukarıdaki tabloda görünmüyor. Reklam kimliğini kaydedin — geçmiş lead'ler geriye dönük bağlanır.",
+        "camp.unattributed":"lead'in reklam kaynağı bilinmiyor (organik, referans, doğrudan)",
+        "camp.thin":"güvenmek için lead sayısı az",
+        "camp.untracked":"izlenmiyor","camp.untrackedHint":"Reklam kimliği kayıtlı değil, yani bu kampanyaya hiçbir lead bağlanamaz — bunlar sıfır değil, boş. İzlemeye başlamak için Meta reklam kimliğini ya da utm_campaign değerini girin.",
     "tbl.conversion":"Dönüşüm",
     "cmd.chartTitle":"Lead'ler — son 14 gün",
     "cmd.clinicalAlerts":"Klinik uyarılar — acil tıbbi yönlendirmeler",
@@ -2068,9 +2088,92 @@ function Analytics({ analytics, profitability }){
       </div>`)}
       ${analytics.channel_attribution===false? html`<div class="sub" style="margin:14px 0 0;font-size:12.5px">${T("analytics.attributionNote")}</div>`:null}
     </div>
+    <${CampaignPerformance} />
     ${analytics.revenue===0 && !analytics.payments_pending? html`<div class="sub" style="margin:16px 0 0;font-size:12.5px">${T("analytics.noPaymentsNote")}</div>`
       : analytics.payments_pending? html`<div class="sub" style="margin:16px 0 0;font-size:12.5px">€${analytics.payments_pending.toLocaleString()} ${T("analytics.pendingNote")} ${analytics.payments_pending_count} ${T("analytics.pendingNote2")}</div>`
       : null}
+  </div>`;
+}
+
+// Reklam → Hasta Atfetme. The one screen that answers "which ad actually
+// produced a patient", rather than the click-level vanity the ad platforms
+// report. Loaded on its own (not folded into /analytics) because it does
+// per-row FX conversion server-side — see getCampaignPerformance().
+const VIP_THIN_SAMPLE = 5; // below this, a ratio is noise dressed as a number
+
+function CampaignPerformance(){
+  const [d,setD]=useState(null);
+  const [err,setErr]=useState(null);
+  useEffect(()=>{ api("/campaigns/performance").then(setD).catch(e=>setErr(e.message)); }, []);
+  if(err) return html`<div class="err">${err}</div>`;
+  if(!d) return html`<div class="empty"><${Spinner}/> ${T("load.generic")}</div>`;
+
+  const grid="display:grid;grid-template-columns:1.6fr .8fr .6fr .7fr .8fr .9fr .9fr .7fr;gap:8px";
+  const money=(v)=> v==null? "–" : "€"+Number(v).toLocaleString(undefined,{maximumFractionDigits:0});
+
+  return html`<div style="margin-top:26px">
+    <div class="section-title">${T("camp.title")}</div>
+    <div class="sub" style="margin:-4px 0 14px">${T("camp.sub")}</div>
+
+    ${d.campaigns.length===0
+      ? emptyBox(T("camp.none"))
+      : html`<div class="glass" style="padding:4px 0">
+        <div class="rowgrid rowhead" style="${grid};padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+          <span>${T("camp.campaign")}</span><span>${T("camp.spend")}</span><span>${T("camp.leads")}</span>
+          <span>${T("camp.booked")}</span><span>${T("camp.cac")}</span><span>${T("camp.cpb")}</span>
+          <span>${T("camp.revenue")}</span><span>ROAS</span>
+        </div>
+        ${d.campaigns.map((c)=>{
+          // A ROAS built on two leads is arithmetic, not evidence. Saying so
+          // next to the number is the difference between a dashboard a
+          // clinic can move budget on and one that just looks confident.
+          const thin = c.leads > 0 && c.leads < VIP_THIN_SAMPLE;
+          // A campaign with no registered ad id CANNOT receive attribution,
+          // so its zeros are missing data, not a verdict. Printing "0×" next
+          // to a real spend would read as "this ad returned nothing" and
+          // could get a perfectly good campaign killed — the exact opposite
+          // of what this screen is for.
+          const untracked = !c.external_ref;
+          const roasClass = untracked || c.roas==null? "" : c.roas>=1 ? "pos" : "alert";
+          return html`<div key=${c.id} class="rowgrid" style="${grid};padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+            <span>
+              <span style="font-weight:700">${c.name}</span>
+              ${c.channel? html`<span class="badge" style="margin-left:6px">${c.channel}</span>`:null}
+              ${thin? html`<div style="font-size:11px;color:var(--ink-3);margin-top:3px">${T("camp.thin")}</div>`:null}
+
+            </span>
+            <span>${money(c.spend)}</span>
+            <span>${untracked? "–" : c.leads}</span>
+            <span style="font-weight:600">${untracked? "–" : c.booked}</span>
+            <span>${untracked? "–" : money(c.cac_eur)}</span>
+            <span>${untracked? "–" : money(c.cost_per_booking_eur)}</span>
+            <span style=${untracked?"":"color:var(--pos)"}>${untracked? "–" : money(c.revenue_eur)}</span>
+            <span class=${roasClass} style="font-weight:700">
+              ${untracked? html`<span class="badge" title=${T("camp.untrackedHint")}>${T("camp.untracked")}</span>`
+                : c.roas==null? "–" : c.roas+"×"}
+            </span>
+          </div>`;
+        })}
+      </div>`}
+
+    ${d.campaigns.some(c=>!c.external_ref)? html`<div class="sub" style="margin:10px 0 0;font-size:12.5px">${T("camp.untrackedHint")}</div>`:null}
+
+    ${d.unmatched_ads.length? html`<div style="margin-top:20px">
+      <div class="section-title">${T("camp.unmatched")}</div>
+      <div class="sub" style="margin:-4px 0 10px">${T("camp.unmatchedSub")}</div>
+      <div class="glass" style="padding:4px 0">
+        ${d.unmatched_ads.map((u,i)=> html`<div key=${i} class="pf-row" style="padding:11px 18px">
+          <span class="k">${u.ad_source_id}</span>
+          <span style="font-size:12.5px;color:var(--ink-2)">
+            ${u.ad_headline? u.ad_headline+" · " : ""}${u.leads} ${T("camp.leads")} · ${u.booked} ${T("camp.booked")}
+          </span>
+        </div>`)}
+      </div>
+    </div>`:null}
+
+    ${d.unattributed_leads? html`<div class="sub" style="margin:14px 0 0;font-size:12.5px">
+      ${d.unattributed_leads} ${T("camp.unattributed")}
+    </div>`:null}
   </div>`;
 }
 

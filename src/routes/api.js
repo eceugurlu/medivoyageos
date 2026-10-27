@@ -13,6 +13,8 @@ import { getAutomationStatus } from '../services/automationStatus.js';
 import { guardUuidParams } from '../middleware/validateUuidParams.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import {
+  attachLeadAttribution,
+  getCampaignPerformance,
   getStats,
   listConversations,
   getHandoverQueue,
@@ -142,6 +144,21 @@ publicRouter.post('/lead', rateLimit(), (req, res) => {
       // see migration 022 / createPartner().
       referralCode: clamp(b.referralCode, 64),
     });
+
+    // Reklam → Hasta Atfetme. Clamped like every other field on this public
+    // boundary, and recorded AFTER the lead exists so a malformed attribution
+    // payload can never cost the clinic the lead itself. First touch wins, so
+    // a returning visitor's second ad click does not overwrite the first.
+    const a = b.attribution;
+    if (a && typeof a === 'object') {
+      await attachLeadAttribution(leadId, {
+        sourceId: clamp(a.sourceId, 190),
+        sourceType: clamp(a.sourceType, 40) || 'utm',
+        sourceUrl: clamp(a.sourceUrl, 500),
+        headline: clamp(a.headline, 190),
+        ctwaClid: clamp(a.clickId, 190),
+      }).catch((err) => console.error('[public] attribution failed (non-fatal):', err.message));
+    }
     res.json({ ok: true, leadId });
   })().catch((err) => {
     console.error('[public] lead error:', err.message);
@@ -737,6 +754,15 @@ apiRouter.post('/conversations/:leadId/reply', h(async (req, res) => {
 }));
 
 // Analytics: CAC / ROAS / funnel / 14-day trend / sources / by_branch.
+// Kampanya bazlı CAC/ROAS — the figure /analytics has always had to refuse
+// to show (its own note says spend is real but CAC/ROAS are not derivable
+// per channel). It is a separate endpoint rather than more fields on
+// /analytics because it does per-row FX conversion and a clinic with no
+// registered campaigns should not pay that cost on every dashboard load.
+apiRouter.get('/campaigns/performance', h(async (req, res) => {
+  res.json(await getCampaignPerformance({ branchId: normalizeBranchId(req.query.branch_id) }));
+}));
+
 apiRouter.get('/analytics', h(async (req, res) => {
   res.json(await getAnalytics({ branchId: normalizeBranchId(req.query.branch_id) }));
 }));

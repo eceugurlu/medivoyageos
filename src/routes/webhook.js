@@ -7,6 +7,7 @@ import { sendInstagramText, sendMessengerText, sendTypingAction } from '../servi
 import { generateReply } from '../services/concierge.js';
 import { transcribeAudio, transcriptionEnabled } from '../services/audioTranscriber.js';
 import { loadContext, saveExchange, getLead, setCrmLeadId } from '../store/index.js';
+import { attachLeadAttribution } from '../store/repository.js';
 import { assignCoordinatorByLanguage } from '../store/repository.js';
 import { zohoEnabled, syncLeadToCrm } from '../services/zoho.js';
 import { notifyHandover } from '../services/notify.js';
@@ -161,6 +162,29 @@ async function _handleWhatsAppEvent(body) {
   if (duplicate) {
     console.log(`[dedup] message ${message.id} already handled — skipping`);
     return;
+  }
+
+  // Reklam → Hasta Atfetme. Meta attaches `referral` ONLY when the patient
+  // arrived by tapping a Click to WhatsApp ad, and only on that first
+  // message — the ad that produced this patient is knowable for exactly one
+  // webhook delivery and never again, so it is recorded here rather than
+  // anywhere more convenient. Deliberately not awaited into the reply path:
+  // attribution is a bookkeeping side effect and must never delay, or fail,
+  // a patient's answer. First-touch wins (see attachLeadAttribution).
+  if (message.referral) {
+    const r = message.referral;
+    attachLeadAttribution(ctx.leadId, {
+      sourceId: r.source_id,
+      sourceType: r.source_type,
+      sourceUrl: r.source_url,
+      headline: r.headline,
+      // Omitted entirely for ads served in WhatsApp Status, per Meta's own
+      // webhook reference — so attribution keys off source_id and treats
+      // this as a bonus for Conversions API reporting, never a requirement.
+      ctwaClid: r.ctwa_clid || null,
+    })
+      .then((row) => row && console.log(`[attribution] lead ${ctx.leadId} ← ad ${r.source_id}${row.campaign_id ? '' : ' (no campaign registered yet)'}`))
+      .catch((err) => console.error('[attribution] failed (non-fatal):', err.message));
   }
 
   await processConversationTurn({

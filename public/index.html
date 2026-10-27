@@ -79,7 +79,14 @@
     --display:"Fraunces",Georgia,"Times New Roman",serif;
     --ui:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-    --r:3px;
+    /* Rounded, not square — sharp corners read as colder/more clinical and
+       psychologically less "safe" than soft ones; this is a deliberate
+       reversal of the original "ledger, square corners" direction. --r for
+       main surfaces (cards, buttons, inputs, bubbles, dialogs); --r-sm for
+       small elements (badges, chips, the brand/gate marks) so they don't
+       end up looking like rounded pills at their own, smaller scale. */
+    --r:14px;
+    --r-sm:8px;
     --lift:0 1px 0 rgba(12,19,22,.04), 0 6px 18px rgba(12,19,22,.07);
   }
   :root[data-theme="dark"]{
@@ -146,7 +153,7 @@
   }
   .brand{display:flex;align-items:center;gap:11px}
   .brand-mark{
-    width:27px;height:27px;border-radius:2px;display:grid;place-items:center;
+    width:27px;height:27px;border-radius:var(--r-sm);display:grid;place-items:center;
     background:var(--accent);color:var(--paper);
   }
   .logo{font-family:var(--display);font-weight:600;font-size:19px;letter-spacing:-.015em}
@@ -300,7 +307,7 @@
   /* ── Badges ───────────────────────────────────────────────────────────── */
   .badge{
     font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.09em; /* was 9.5px — under the 10pt caption floor */
-    text-transform:uppercase;padding:2px 6px;border-radius:2px;
+    text-transform:uppercase;padding:2px 6px;border-radius:var(--r-sm);
     border:1px solid var(--rule-2);color:var(--ink-2);background:transparent;white-space:nowrap;
   }
   .badge.hot{color:var(--alert);border-color:var(--alert-line);background:var(--alert-wash)}
@@ -358,7 +365,7 @@
      in the 300px column instead of orphaning the last chip. */
   .chip{
     font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.03em;text-transform:uppercase; /* was 9.5px — under the 10pt caption floor */
-    padding:4px 7px;border-radius:2px;border:1px solid var(--rule-2);
+    padding:4px 7px;border-radius:var(--r-sm);border:1px solid var(--rule-2);
     background:transparent;color:var(--ink-3);cursor:pointer;transition:.13s;
     min-height:32px;display:inline-flex;align-items:center; /* Fitts's Law: a filter chip is a real tap target, not just a text run */
   }
@@ -537,7 +544,7 @@
   }
   .gate-card{position:relative;width:100%;max-width:400px;text-align:center}
   .gate-mark{
-    width:46px;height:46px;margin:0 auto 26px;border-radius:1px;display:grid;place-items:center;
+    width:46px;height:46px;margin:0 auto 26px;border-radius:var(--r-sm);display:grid;place-items:center;
     background:linear-gradient(155deg,#5fb3a4,#0e5750);color:#eaf4f1;
     box-shadow:0 0 0 1px rgba(211,164,92,.35), 0 18px 40px -12px rgba(15,90,80,.55);
   }
@@ -564,7 +571,7 @@
   .gate-field input:focus{outline:none;border-bottom-color:#d3a45c}
   .gate-field input::placeholder{color:#465452}
   .gate-btn{
-    width:100%;margin-top:8px;padding:13px;border:1px solid #d3a45c;border-radius:1px;
+    width:100%;margin-top:8px;padding:13px;border:1px solid #d3a45c;border-radius:var(--r-sm);
     background:transparent;color:#eee0c4;font-family:"Instrument Sans",sans-serif;font-size:12.5px;
     letter-spacing:.14em;text-transform:uppercase;cursor:pointer;transition:background .18s,color .18s;
   }

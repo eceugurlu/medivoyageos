@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import { pool } from '../db/pool.js';
 import { getProfile } from '../services/profile.js'; // draftQuoteFromLead() için — bkz. devresel import notu
 import { toEur, isRatesLive } from '../services/fx.js';
+import { config } from '../config.js';
+import { computeAiCostFromTotals } from '../services/aiCost.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -144,7 +146,7 @@ export async function loadContext({ phone, externalId, source, name, wamid, user
  * NOT inserted here — loadContext() already claimed and inserted it,
  * atomically, before the AI call this reply came from (see its docstring).
  */
-export async function saveExchange(phone, { reply, meta, ctx }) {
+export async function saveExchange(phone, { reply, meta, usage, ctx }) {
   const { leadId, conversationId } = ctx;
   const client = await pool.connect();
   try {
@@ -152,10 +154,14 @@ export async function saveExchange(phone, { reply, meta, ctx }) {
 
     // Assistant reply. is_ai=true marks it as AI-authored (vs. a human agent's
     // reply via recordAgentMessage) — see the ROI Widget's getRoiStats().
+    // Token counts are NULL for a failed-call fallback reply (usage=null,
+    // see webhook.js) and for anything from before this column existed —
+    // both are correctly excluded from the AI Maliyet Panosu's SUMs, not
+    // zeroed out (a real $0 would be indistinguishable from "unknown").
     await client.query(
-      `INSERT INTO messages (conversation_id, role, content, is_ai)
-         VALUES ($1, 'assistant', $2, true)`,
-      [conversationId, reply],
+      `INSERT INTO messages (conversation_id, role, content, is_ai, llm_input_tokens, llm_output_tokens, llm_cached_read_tokens)
+         VALUES ($1, 'assistant', $2, true, $3, $4, $5)`,
+      [conversationId, reply, usage?.inputTokens ?? null, usage?.outputTokens ?? null, usage?.cachedReadTokens ?? null],
     );
 
     // Update the lead from the AI's structured read of the conversation.
@@ -816,7 +822,7 @@ const BUSINESS_HOURS = { startHour: 9, endHour: 19, timezone: 'Europe/Istanbul' 
 export async function getRoiStats({ branchId = null } = {}) {
   const bid = normalizeBranchId(branchId);
   // Independent of each other — parallelized rather than sequential.
-  const [q, totals] = await Promise.all([
+  const [q, monthly, totals] = await Promise.all([
     pool.query(
       `
     SELECT
@@ -833,10 +839,42 @@ export async function getRoiStats({ branchId = null } = {}) {
   `,
       [bid, BUSINESS_HOURS.timezone, BUSINESS_HOURS.startHour, BUSINESS_HOURS.endHour],
     ),
+    // AI Maliyet Panosu — scoped to the CURRENT calendar month in the
+    // clinic's own local time (same timezone-aware boundary technique as
+    // the trend chart above: convert both sides to local wall-clock via
+    // AT TIME ZONE before comparing, so the month doesn't flip a few hours
+    // early/late against UTC). "Konuşma" = a distinct lead the AI replied
+    // to at least once this month, matching how the monthly cap is meant
+    // (one patient asking 10 questions is one conversation, not ten).
+    pool.query(
+      `
+    SELECT
+      count(DISTINCT l.id) FILTER (WHERE m.is_ai) AS monthly_ai_conversations,
+      COALESCE(sum(m.llm_input_tokens), 0) AS monthly_input_tokens,
+      COALESCE(sum(m.llm_output_tokens), 0) AS monthly_output_tokens,
+      COALESCE(sum(m.llm_cached_read_tokens), 0) AS monthly_cached_read_tokens
+    FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    JOIN leads l ON l.id = c.lead_id
+    WHERE m.is_ai
+      AND (m.created_at AT TIME ZONE $2) >= date_trunc('month', now() AT TIME ZONE $2)
+      AND ($1::uuid IS NULL OR l.branch_id = $1)
+  `,
+      [bid, BUSINESS_HOURS.timezone],
+    ),
     getPaymentTotals({ branchId }),
   ]);
   const r = q.rows[0];
   const aiReplies = Number(r.ai_replies);
+  const m = monthly.rows[0];
+  const monthlyCostUsd = computeAiCostFromTotals(
+    {
+      inputTokens: Number(m.monthly_input_tokens),
+      outputTokens: Number(m.monthly_output_tokens),
+      cachedReadTokens: Number(m.monthly_cached_read_tokens),
+    },
+    config.ai.pricing,
+  );
 
   return {
     ai_replies: aiReplies,
@@ -846,6 +884,15 @@ export async function getRoiStats({ branchId = null } = {}) {
     minutes_per_reply_assumption: MINUTES_PER_AI_REPLY,
     revenue_collected: totals.collected,
     business_hours: `${BUSINESS_HOURS.startHour}:00–${BUSINESS_HOURS.endHour}:00`,
+    // AI Maliyet Panosu — token totals from messages predating this
+    // feature are NULL and contribute 0 via COALESCE, not a gap; cost is
+    // only ever as complete as the token data actually stored.
+    monthly_ai_conversations: Number(m.monthly_ai_conversations),
+    monthly_conversation_limit: config.ai.monthlyConversationLimit || null,
+    monthly_llm_input_tokens: Number(m.monthly_input_tokens),
+    monthly_llm_output_tokens: Number(m.monthly_output_tokens),
+    monthly_llm_cached_read_tokens: Number(m.monthly_cached_read_tokens),
+    monthly_cost_usd: monthlyCostUsd,
   };
 }
 

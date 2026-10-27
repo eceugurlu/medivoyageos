@@ -22,12 +22,12 @@ export async function loadContext({ phone, externalId, source, name, wamid, user
   return { duplicate: false, history: getHistory(phone || externalId), ctx: {} };
 }
 
-export async function saveExchange(identity, { userText, reply, meta, ctx } = {}) {
+export async function saveExchange(identity, { userText, reply, meta, usage, ctx } = {}) {
   if (dbEnabled) {
     // The DB path's inbound-message insert already happened inside
     // loadContext() (see its docstring) — db.saveExchange only needs
-    // reply/meta/ctx now; userText is simply ignored if passed.
-    return db.saveExchange(identity, { reply, meta, ctx });
+    // reply/meta/usage/ctx now; userText is simply ignored if passed.
+    return db.saveExchange(identity, { reply, meta, usage, ctx });
   }
   // In-memory fallback has no such claim mechanism (single-process, dev/test
   // only) — both turns are appended here, same as before.

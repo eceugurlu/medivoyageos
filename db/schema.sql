@@ -288,3 +288,9 @@ ALTER TABLE logistics
   ADD COLUMN IF NOT EXISTS next_appointment_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS next_appointment_note TEXT,
   ADD COLUMN IF NOT EXISTS view_token TEXT UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex');
+
+-- ── AI Maliyet Panosu (see 023_ai_cost_tracking.sql) ───────────────────────
+ALTER TABLE messages
+  ADD COLUMN IF NOT EXISTS llm_input_tokens       INTEGER,
+  ADD COLUMN IF NOT EXISTS llm_output_tokens      INTEGER,
+  ADD COLUMN IF NOT EXISTS llm_cached_read_tokens INTEGER;

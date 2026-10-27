@@ -162,6 +162,7 @@ export async function generateReply({ history, userText, image }) {
     return {
       reply: `«${image ? '[photo] ' + userText : userText}» — (echo mode: set ANTHROPIC_API_KEY to turn on the AI concierge)`,
       meta: null,
+      usage: null,
     };
   }
 
@@ -216,6 +217,14 @@ export async function generateReply({ history, userText, image }) {
       detected_language: parsed.detected_language || null,
       lead: parsed.lead || null,
       handover: parsed.handover || { needed: false, urgent: false, reason: null },
+    },
+    // For the AI Maliyet Panosu (see repository.js::saveExchange() /
+    // getRoiStats()'s monthly_* fields) — persisted onto the assistant
+    // message row, never recomputed later from a token estimate.
+    usage: {
+      inputTokens: resp.usage?.input_tokens || 0,
+      outputTokens: resp.usage?.output_tokens || 0,
+      cachedReadTokens: resp.usage?.cache_read_input_tokens || 0,
     },
   };
 }

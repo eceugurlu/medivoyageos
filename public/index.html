@@ -773,6 +773,8 @@ const I18N = {
     "roi.hoursSaved":"Staff hours saved","roi.repliesFoot":"AI replies sent",
     "roi.afterHours":"Replies outside business hours","roi.afterHoursFoot":"handled while your team was off",
     "roi.revenue":"Revenue collected","roi.revenueFoot":"from bookings this AI helped qualify",
+    "roi.monthlyUsage":"AI conversations this month","roi.monthlyUsageFootOf":"of","roi.monthlyUsageFootCap":"monthly plan limit",
+    "roi.monthlyCost":"AI cost this month","roi.monthlyCostFoot":"Anthropic token usage — estimated from current published rates",
     "roi.assumption":"Estimate: {min} min/reply — reading, pricing lookup and typing one WhatsApp reply by hand. Human-agent replies aren't counted.",
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
@@ -992,6 +994,8 @@ const I18N = {
     "roi.hoursSaved":"Kazanılan personel saati","roi.repliesFoot":"AI yanıtı gönderildi",
     "roi.afterHours":"Mesai dışı yanıtlar","roi.afterHoursFoot":"ekibiniz çevrimdışıyken karşılandı",
     "roi.revenue":"Tahsil edilen gelir","roi.revenueFoot":"AI'ın nitelendirdiği rezervasyonlardan",
+    "roi.monthlyUsage":"Bu ay AI konuşması","roi.monthlyUsageFootOf":"/","roi.monthlyUsageFootCap":"aylık plan limiti",
+    "roi.monthlyCost":"Bu ay AI maliyeti","roi.monthlyCostFoot":"Anthropic token kullanımı — güncel yayınlanmış fiyatlardan tahmini",
     "roi.assumption":"Varsayım: yanıt başına {min} dk — okuma, fiyat kontrolü ve elle bir WhatsApp yanıtı yazma. İnsan temsilcinin yanıtları sayılmıyor.",
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
@@ -1189,6 +1193,14 @@ function CommandCenter({ stats, analytics, handovers, risks, roi, onOpenLead }){
   const s = stats||{};
   const n = (v)=> v==null? "–" : v;
   const hoursSaved = roi? Math.round((roi.minutes_saved/60)*10)/10 : null;
+  // AI Maliyet Panosu: color escalates as the clinic approaches its monthly
+  // AI-conversation cap — 80% is a deliberate early warning, not the cap
+  // itself, so there's time to act before anything is actually blocked
+  // (nothing in the backend enforces this cap yet; it's informational).
+  const usagePct = roi?.monthly_conversation_limit
+    ? Math.round((roi.monthly_ai_conversations / roi.monthly_conversation_limit) * 100)
+    : null;
+  const usageValClass = usagePct != null && usagePct >= 80 ? "alert" : "cyan";
   return html`
     <div>
       <h1>${T("nav.command")}</h1>
@@ -1226,6 +1238,16 @@ function CommandCenter({ stats, analytics, handovers, risks, roi, onOpenLead }){
               <div class="label">${T("roi.revenue")}</div>
               <div class="val mint">€${Number(roi.revenue_collected||0).toLocaleString()}</div>
               <div class="foot">${T("roi.revenueFoot")}</div>
+            </div>
+            <div class="glass kpi">
+              <div class="label">${T("roi.monthlyUsage")}</div>
+              <div class="val ${usageValClass}">${n(roi.monthly_ai_conversations)}</div>
+              <div class="foot">${roi.monthly_conversation_limit ? `${T("roi.monthlyUsageFootOf")} ${roi.monthly_conversation_limit} ${T("roi.monthlyUsageFootCap")} (${usagePct}%)` : T("roi.monthlyUsageFootCap")}</div>
+            </div>
+            <div class="glass kpi">
+              <div class="label">${T("roi.monthlyCost")}</div>
+              <div class="val">$${Number(roi.monthly_cost_usd||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:4})}</div>
+              <div class="foot">${T("roi.monthlyCostFoot")}</div>
             </div>
           </div>
           <div class="sub" style="margin:10px 0 0;font-size:11.5px">${T("roi.assumption").replace("{min}", roi.minutes_per_reply_assumption)}</div>

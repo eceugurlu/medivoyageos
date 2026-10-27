@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { DEFAULT_AI_PRICING } from './services/aiCost.js';
 
 // We warn (not throw) on missing values so the server can still boot in
 // "dry-run / echo" mode. That lets you test the WhatsApp plumbing before you
@@ -46,6 +47,23 @@ export const config = {
     apiKey: process.env.ANTHROPIC_API_KEY || null,
     model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
     maxTokens: Number(process.env.ANTHROPIC_MAX_TOKENS || 1024),
+  },
+
+  // AI Maliyet Panosu — monthly usage/cost tracking for the TEXT concierge
+  // (see services/aiCost.js + repository.js::getRoiStats()'s monthly_* fields).
+  ai: {
+    // "Konuşma" here means a distinct lead conversation the AI replied in
+    // at least once this calendar month — see getRoiStats(). 0/unset = no
+    // limit tracked (the panel just won't show a "X / cap" warning).
+    monthlyConversationLimit: Number(process.env.AI_MONTHLY_CONVERSATION_LIMIT || 300),
+    // Every rate services/aiCost.js needs, overridable per unit without a
+    // code change — defaults are DEFAULT_AI_PRICING (claude-sonnet-5's own
+    // published rates at the time this was written, not hardcoded twice).
+    pricing: {
+      inputPerMTokUsd: Number(process.env.AI_PRICE_INPUT_PER_MTOK || DEFAULT_AI_PRICING.inputPerMTokUsd),
+      outputPerMTokUsd: Number(process.env.AI_PRICE_OUTPUT_PER_MTOK || DEFAULT_AI_PRICING.outputPerMTokUsd),
+      cachedReadPerMTokUsd: Number(process.env.AI_PRICE_CACHED_READ_PER_MTOK || DEFAULT_AI_PRICING.cachedReadPerMTokUsd),
+    },
   },
 
   openai: {

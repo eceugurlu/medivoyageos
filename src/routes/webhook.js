@@ -284,13 +284,15 @@ async function processConversationTurn({ channel, identity, profileName, userTex
 
   let reply;
   let meta;
+  let usage;
   try {
-    ({ reply, meta } = await generateReply({ history, userText, image }));
+    ({ reply, meta, usage } = await generateReply({ history, userText, image }));
   } catch (err) {
     // AI failed — don't leave the patient hanging. Send a holding message and
     // force a human handover so nothing falls through the cracks.
     console.error(`[concierge] AI call failed for ${identity}, using fallback reply:`, err.message);
     reply = FALLBACK_REPLY;
+    usage = null; // the failed call never actually billed any tokens worth recording
     meta = {
       detected_language: null,
       lead: null,
@@ -319,7 +321,7 @@ async function processConversationTurn({ channel, identity, profileName, userTex
   // in-memory) and update the lead from the AI's read of the conversation.
   // The inbound side is already saved — loadContext() claimed/inserted it
   // atomically before the AI call above ever ran.
-  await saveExchange(identity, { userText, reply, meta, ctx });
+  await saveExchange(identity, { userText, reply, meta, usage, ctx });
 
   try {
     await sendReply(reply);

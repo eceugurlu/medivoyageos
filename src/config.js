@@ -117,6 +117,17 @@ export const config = {
     // Optional: a Slack (or any) incoming webhook URL to ping on new handovers.
     // Leave blank to rely on the panel's Action Center queue instead.
     webhookUrl: process.env.HANDOVER_WEBHOOK_URL || null,
+    // Devir SLA Alarmı — a SEPARATE, more visible webhook (e.g. a manager's
+    // own Slack channel) for the second-tier "still unanswered" escalation.
+    // Leave blank to reuse the same webhookUrl above for both tiers — the
+    // escalation message is still clearly labeled as a repeat/escalated
+    // alert in that case, so nothing is silently missed either way.
+    managerWebhookUrl: process.env.HANDOVER_SLA_MANAGER_WEBHOOK_URL || process.env.HANDOVER_WEBHOOK_URL || null,
+    // How long an unanswered handover sits in the Action Center queue before
+    // each tier fires. The escalate threshold must be checked to be at least
+    // past the first-reminder one — see the warning below.
+    slaFirstReminderMinutes: Number(process.env.HANDOVER_SLA_FIRST_REMINDER_MINUTES || 10),
+    slaEscalateMinutes: Number(process.env.HANDOVER_SLA_ESCALATE_MINUTES || 30),
     // Optional, SEPARATE webhook for engineering/ops alerts (AI outage,
     // payment-webhook processing failures, uncaught exceptions) — a clinic
     // coordinator's channel ideally shouldn't fill up with "the AI is down"
@@ -155,5 +166,17 @@ if (config.stripe.secretKey && !config.stripe.webhookSecret) {
     '[config] STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET is not — ' +
       '/webhooks/stripe will accept unsigned requests as genuine payment confirmations. ' +
       'Set STRIPE_WEBHOOK_SECRET before relying on this in production.',
+  );
+}
+
+// A misconfigured pair here would mean the "still unanswered" escalation
+// tier fires BEFORE (or at the same time as) the first reminder — defeats
+// the whole point of having two tiers, so it's worth a loud warning rather
+// than a confusing SLA alert order in Slack.
+if (config.notify.slaEscalateMinutes <= config.notify.slaFirstReminderMinutes) {
+  console.warn(
+    `[config] HANDOVER_SLA_ESCALATE_MINUTES (${config.notify.slaEscalateMinutes}) should be greater than ` +
+      `HANDOVER_SLA_FIRST_REMINDER_MINUTES (${config.notify.slaFirstReminderMinutes}) — the manager escalation ` +
+      'would otherwise fire before or alongside the first coordinator reminder.',
   );
 }

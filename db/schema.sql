@@ -288,3 +288,11 @@ ALTER TABLE logistics
   ADD COLUMN IF NOT EXISTS next_appointment_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS next_appointment_note TEXT,
   ADD COLUMN IF NOT EXISTS view_token TEXT UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex');
+
+-- ── Devir SLA Alarmı (see 023_handover_sla.sql) ────────────────────────────
+ALTER TABLE conversations
+  ADD COLUMN IF NOT EXISTS escalated_at           TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS sla_first_reminder_at  TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS sla_escalated_at        TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_conversations_needs_human_escalated
+  ON conversations (escalated_at) WHERE status = 'needs_human';

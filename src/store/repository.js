@@ -200,7 +200,8 @@ export async function saveExchange(phone, { reply, meta, ctx }) {
         const urgent = Boolean(meta.handover?.urgent);
         await client.query(
           `UPDATE conversations
-             SET status = 'needs_human', handover_reason = $2, urgent = urgent OR $3, updated_at = now()
+             SET status = 'needs_human', handover_reason = $2, urgent = urgent OR $3,
+                 escalated_at = COALESCE(escalated_at, now()), updated_at = now()
            WHERE id = $1`,
           [conversationId, meta.handover.reason || 'unspecified', urgent],
         );
@@ -363,6 +364,77 @@ export async function getHandoverQueue({ branchId = null } = {}) {
     [bid],
   );
   return q.rows;
+}
+
+// ── Devir SLA Alarmı ─────────────────────────────────────────────────────
+// Two independent atomic-claim tiers, same pattern as markRiskNotified/
+// markPostOpSent in repository.js's post-op/no-show jobs: the SELECT finds
+// candidates, the UPDATE ... WHERE <reminder column> IS NULL claims one
+// before acting on it, so two overlapping scheduler runs (a slow local tick
+// plus the next one, or local dev racing Vercel Cron against the same DB)
+// can never send the same reminder twice. Keyed off escalated_at, NOT
+// updated_at — see 023_handover_sla.sql's comment for why that distinction
+// matters here specifically.
+export async function getHandoversNeedingFirstReminder(afterMinutes, { branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  const q = await pool.query(
+    `
+    SELECT c.id AS conversation_id, c.lead_id, l.name, l.phone, l.language, l.score, l.medical_note,
+           l.coordinator_id, co.name AS coordinator_name, l.source, l.external_id,
+           c.handover_reason, c.urgent, c.escalated_at
+    FROM conversations c
+      JOIN leads l ON l.id = c.lead_id
+      LEFT JOIN coordinators co ON co.id = l.coordinator_id
+    WHERE c.status = 'needs_human'
+      AND c.escalated_at IS NOT NULL
+      AND c.escalated_at <= now() - ($1 * interval '1 minute')
+      AND c.sla_first_reminder_at IS NULL
+      AND ($2::uuid IS NULL OR l.branch_id = $2)
+    ORDER BY c.escalated_at ASC
+  `,
+    [afterMinutes, bid],
+  );
+  return q.rows;
+}
+
+export async function markSlaFirstReminderSent(conversationId) {
+  const q = await pool.query(
+    `UPDATE conversations SET sla_first_reminder_at = now()
+       WHERE id = $1 AND sla_first_reminder_at IS NULL RETURNING id`,
+    [conversationId],
+  );
+  return Boolean(q.rows[0]);
+}
+
+export async function getHandoversNeedingEscalation(afterMinutes, { branchId = null } = {}) {
+  const bid = normalizeBranchId(branchId);
+  const q = await pool.query(
+    `
+    SELECT c.id AS conversation_id, c.lead_id, l.name, l.phone, l.language, l.score, l.medical_note,
+           l.coordinator_id, co.name AS coordinator_name, l.source, l.external_id,
+           c.handover_reason, c.urgent, c.escalated_at
+    FROM conversations c
+      JOIN leads l ON l.id = c.lead_id
+      LEFT JOIN coordinators co ON co.id = l.coordinator_id
+    WHERE c.status = 'needs_human'
+      AND c.escalated_at IS NOT NULL
+      AND c.escalated_at <= now() - ($1 * interval '1 minute')
+      AND c.sla_escalated_at IS NULL
+      AND ($2::uuid IS NULL OR l.branch_id = $2)
+    ORDER BY c.escalated_at ASC
+  `,
+    [afterMinutes, bid],
+  );
+  return q.rows;
+}
+
+export async function markSlaEscalated(conversationId) {
+  const q = await pool.query(
+    `UPDATE conversations SET sla_escalated_at = now()
+       WHERE id = $1 AND sla_escalated_at IS NULL RETURNING id`,
+    [conversationId],
+  );
+  return Boolean(q.rows[0]);
 }
 
 // Full thread for one lead.
@@ -1190,11 +1262,20 @@ export async function clearRiskNotified(leadId) {
   );
 }
 
-// Set a conversation's status (takeover / hand back to AI / close).
+// Set a conversation's status (takeover / hand back to AI / close). Clears
+// the Devir SLA Alarmı tracking columns whenever the conversation leaves
+// 'needs_human' — a coordinator taking it over (or closing it) genuinely
+// resolves the wait, so a LATER, fresh escalation on the same lead must start
+// its own SLA clock rather than look like a reminder/escalation already sent.
 export async function setConversationStatus(leadId, status) {
   const q = await pool.query(
-    `UPDATE conversations SET status = $2, updated_at = now()
-       WHERE lead_id = $1 RETURNING id, status`,
+    `UPDATE conversations SET
+       status = $2,
+       escalated_at          = CASE WHEN $2 = 'needs_human' THEN escalated_at          ELSE NULL END,
+       sla_first_reminder_at = CASE WHEN $2 = 'needs_human' THEN sla_first_reminder_at ELSE NULL END,
+       sla_escalated_at      = CASE WHEN $2 = 'needs_human' THEN sla_escalated_at      ELSE NULL END,
+       updated_at = now()
+     WHERE lead_id = $1 RETURNING id, status`,
     [leadId, status],
   );
   return q.rows[0] || null;

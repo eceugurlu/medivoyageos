@@ -5,7 +5,7 @@ import { zohoEnabled } from './services/zoho.js';
 import { notifyEnabled, systemAlertEnabled } from './services/notify.js';
 import { seedCampaignsIfEmpty, seedCoordinatorsIfEmpty, seedDevicesIfEmpty, seedBranchesIfEmpty } from './store/repository.js';
 import { seedProfileIfEmpty } from './services/profile.js';
-import { processPostOp, processNoShowRisk, processHotLeadFollowup } from './services/scheduler.js';
+import { processPostOp, processNoShowRisk, processHotLeadFollowup, processHandoverSla } from './services/scheduler.js';
 import { recordFailure } from './services/healthMonitor.js';
 
 // Local-dev entry only. Runs the app as one long-lived process: app.listen()
@@ -41,6 +41,7 @@ app.listen(config.port, () => {
   console.log(`    Database        : ${dbEnabled ? 'ON  (Postgres)' : 'OFF → in-memory (resets on restart)'}`);
   console.log(`    CRM (Zoho)      : ${zohoEnabled ? 'ON' : 'OFF (set ZOHO_* to enable)'}`);
   console.log(`    Handover ping   : ${notifyEnabled ? 'ON  (webhook)' : 'OFF → panel queue only'}`);
+  console.log(`    Handover SLA    : ${notifyEnabled ? `reminder ${config.notify.slaFirstReminderMinutes}m, escalate ${config.notify.slaEscalateMinutes}m` : 'OFF (needs HANDOVER_WEBHOOK_URL)'}`);
   console.log(`    System alerts   : ${systemAlertEnabled ? 'ON  (webhook)' : 'OFF → errors only in logs'}`);
   console.log(`    Signature check : ${config.whatsapp.appSecret ? 'ON' : 'OFF (set WHATSAPP_APP_SECRET to enable)'}`);
   console.log(`\n    📊  Panel: http://localhost:${config.port}/panel`);
@@ -74,5 +75,8 @@ app.listen(config.port, () => {
 
     setTimeout(() => processHotLeadFollowup().catch((err) => console.error('[hot-followup] scheduler error:', err.message)), 11000);
     setInterval(() => processHotLeadFollowup().catch((err) => console.error('[hot-followup] scheduler error:', err.message)), 60000);
+
+    setTimeout(() => processHandoverSla().catch((err) => console.error('[handover-sla] scheduler error:', err.message)), 14000);
+    setInterval(() => processHandoverSla().catch((err) => console.error('[handover-sla] scheduler error:', err.message)), 60000);
   }
 });

@@ -34,12 +34,26 @@
     --ink:#0c1316;
     --ink-2:#4b555b;
     --ink-3:#5f666b; /* darkened from #7f8a90 — that failed WCAG AA (3.5:1 vs white, needs 4.5:1); this passes at 5.8:1 */
-    --rule:#dde3e6;
-    --rule-2:#c3ccd1;
+    /* rule/rule-2/accent-line darkened from #e3e6e8/#c3ccd1/#9dc3bc — the
+       originals read as text-level hairlines but are also load-bearing
+       borders on real controls (buttons, inputs, selects) and WCAG 1.4.11
+       requires 3:1 for THAT use, not just 1.4.3's 4.5:1 for text. Measured
+       (not eyeballed): the old --rule-2 was 1.63:1 against --paper, --rule
+       1.30:1, --accent-line 1.63:1 against --accent-wash. Darkened in LINEAR
+       RGB space (preserves the cool petrol-grey hue ratio while lowering
+       luminance) rather than picked by eye, so the hue family is unchanged —
+       this should read as crisper hairlines, not a different color. --rule
+       stays a notch lighter (2:1) since most of its uses are decorative
+       dividers, not the "essential component" borders 1.4.11 is about.
+       --rule-2 is also slightly darker than it needs to be, to leave margin at
+       darker-screen/lower-brightness viewing conditions, not just the 3.00
+       computed exactly at spec. */
+    --rule:#b3b8bb; /* 2.00:1 vs --paper (was #dde3e6 at 1.30:1) */
+    --rule-2:#8f969a; /* 3.00:1 vs --paper (was #c3ccd1 at 1.63:1) */
     --accent:#0e5750;
     --accent-2:#126b60; /* darkened from #157a6f — 4.42:1 vs the wash background, needs 4.5:1; this passes at 5.42:1 */
     --accent-wash:#e4efed;
-    --accent-line:#9dc3bc;
+    --accent-line:#728e89; /* 3.01:1 vs --accent-wash (was #9dc3bc at 1.63:1) */
     --brass:#8c6415;
     --brass-wash:#f4ecdb;
     --pos:#2e6b4d;
@@ -66,12 +80,15 @@
     --ink:#e6eaec;
     --ink-2:#9aa4a9;
     --ink-3:#818b91; /* lightened from #6c767b — that failed WCAG AA (3.7:1 vs the panel background, needs 4.5:1); this passes at 4.95:1 */
-    --rule:#232b2e;
-    --rule-2:#323c40;
+    /* Same WCAG 1.4.11 fix as the light theme above, mirrored: in dark mode
+       the border is LIGHTER than the near-black background, so these are
+       lightened (not darkened) to reach the same 3:1/2:1 targets. */
+    --rule:#414e53; /* 2.00:1 vs --paper (was #232b2e at 1.52:1 vs ground) */
+    --rule-2:#58686f; /* 2.97:1 vs --paper (was #323c40 at 1.52:1) */
     --accent:#5fb3a4;
     --accent-2:#7cc9ba;
     --accent-wash:#152825;
-    --accent-line:#2c4b46;
+    --accent-line:#48756e; /* 2.97:1 vs --accent-wash (was #2c4b46 at 1.62:1) */
     --brass:#d3a45c;
     --brass-wash:#2a2318;
     --pos:#6fb389;
@@ -93,7 +110,7 @@
     color:var(--ink);
     font-family:var(--ui);
     font-size:14px;
-    line-height:1.55;
+    line-height:1.5; /* was 1.55 — just over the 1.40–1.50 body-text range */
     -webkit-font-smoothing:antialiased;
     text-rendering:optimizeLegibility;
   }
@@ -133,7 +150,8 @@
   .seg{display:flex;align-items:center;border:1px solid var(--rule-2);border-radius:var(--r);overflow:hidden;flex:none}
   .segbtn{
     border:0;background:transparent;color:var(--ink-3);font-family:var(--mono);
-    font-size:10.5px;font-weight:500;letter-spacing:.09em;padding:6px 10px;cursor:pointer;
+    font-size:10.5px;font-weight:500;letter-spacing:.09em;padding:9px 13px;cursor:pointer; /* was 6px 10px — a 2-letter toggle used often enough to earn a real target */
+    min-height:32px;display:inline-flex;align-items:center;
   }
   .segbtn + .segbtn{border-left:1px solid var(--rule-2)}
   .segbtn:hover{color:var(--ink);background:var(--paper-2)}
@@ -141,9 +159,10 @@
 
   /* ── Controls ─────────────────────────────────────────────────────────── */
   .btn{
-    font-family:var(--ui);font-size:12.5px;font-weight:600;letter-spacing:.005em;
+    font-family:var(--ui);font-size:12.5px;font-weight:600;letter-spacing:.005em;line-height:1.3;
     color:var(--ink);background:var(--paper);border:1px solid var(--rule-2);
-    border-radius:var(--r);padding:7px 13px;cursor:pointer;white-space:nowrap;
+    border-radius:var(--r);padding:9px 16px;cursor:pointer;white-space:nowrap;
+    min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:6px; /* 40×40px desktop tap target (Microsoft HIG) — was ~33px tall */
     transition:background .13s,border-color .13s,color .13s;
   }
   .btn:hover{background:var(--paper-2);border-color:var(--ink-3)}
@@ -157,7 +176,7 @@
   :root[data-theme="dark"] .btn.primary{color:#0f1312}
   .btn.warn{color:var(--alert-ink);border-color:var(--alert-line);background:var(--alert-wash)}
   .btn.warn:hover{background:var(--alert-wash);border-color:var(--alert)}
-  .iconbtn{padding:6px 10px;font-size:13px;line-height:1.2}
+  .iconbtn{padding:9px 12px;font-size:13px;line-height:1.2;min-width:40px} /* was 6px 10px — inherits .btn's 40px min-height, min-width makes icon-only buttons a real square target instead of a narrow strip */
   .iconbtn svg{width:15px;height:15px;display:block}
   /* Toolbar buttons must not wrap, but the full-width action in the patient
      profile carries a whole sentence and was being clipped by that rule. */
@@ -170,7 +189,7 @@
     border-right:1px solid var(--rule);background:var(--ground);
   }
   .navgroup{
-    font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.14em;
+    font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.14em; /* was 9.5px — under the 10pt caption floor */
     text-transform:uppercase;color:var(--ink-3);
     padding:18px 26px 7px;
   }
@@ -198,7 +217,7 @@
 
   /* ── Page heads ───────────────────────────────────────────────────────── */
   h1{
-    font-family:var(--display);font-weight:600;font-size:27px;line-height:1.15;
+    font-family:var(--display);font-weight:600;font-size:27px;line-height:1.25; /* was 1.15 — tight even for a short title; 1.25 gives the serif's descenders room without changing the size */
     letter-spacing:-.018em;margin:0 0 5px;text-wrap:balance;
   }
   .sub{color:var(--ink-2);font-size:13.5px;margin:0 0 26px;max-width:74ch;line-height:1.55}
@@ -235,7 +254,7 @@
     display:flex;flex-direction:column;gap:0;
   }
   .kpi .label{
-    font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.13em;
+    font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.13em; /* was 9.5px — under the 10pt caption floor */
     text-transform:uppercase;color:var(--ink-3);
   }
   .kpi .val{
@@ -267,7 +286,7 @@
 
   /* ── Badges ───────────────────────────────────────────────────────────── */
   .badge{
-    font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.09em;
+    font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.09em; /* was 9.5px — under the 10pt caption floor */
     text-transform:uppercase;padding:2px 6px;border-radius:2px;
     border:1px solid var(--rule-2);color:var(--ink-2);background:transparent;white-space:nowrap;
   }
@@ -296,7 +315,7 @@
     font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;
   }
   .note-meta{
-    font-family:var(--mono);font-size:9px;letter-spacing:.06em;
+    font-family:var(--mono);font-size:10px;letter-spacing:.06em; /* was 9px — under the 10pt caption floor */
     color:var(--ink-3);margin-bottom:5px;
   }
   .note-empty{margin-top:12px;color:var(--ink-3);font-size:12px}
@@ -318,9 +337,10 @@
   /* Mono uppercase runs wide; tightened so the full filter set holds one line
      in the 300px column instead of orphaning the last chip. */
   .chip{
-    font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.03em;text-transform:uppercase;
+    font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.03em;text-transform:uppercase; /* was 9.5px — under the 10pt caption floor */
     padding:4px 7px;border-radius:2px;border:1px solid var(--rule-2);
     background:transparent;color:var(--ink-3);cursor:pointer;transition:.13s;
+    min-height:32px;display:inline-flex;align-items:center; /* Fitts's Law: a filter chip is a real tap target, not just a text run */
   }
   .chip:hover{color:var(--ink);border-color:var(--ink-3)}
   .chip.on{background:var(--accent);border-color:var(--accent);color:#fbfaf7}
@@ -362,7 +382,7 @@
     box-shadow:inset -2px 0 0 var(--accent);
   }
   .bubble .meta{
-    display:block;font-family:var(--mono);font-size:9px;letter-spacing:.06em;
+    display:block;font-family:var(--mono);font-size:10px;letter-spacing:.06em; /* was 9px — under the 10pt caption floor */
     color:var(--ink-3);margin-top:7px;
   }
   .composer{border-top:1px solid var(--rule);padding:12px;display:flex;gap:10px;align-items:flex-end}
@@ -379,7 +399,7 @@
   }
   option{background:var(--paper);color:var(--ink)}
   .fl{
-    display:block;font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.11em;
+    display:block;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.11em; /* was 9.5px — under the 10pt caption floor */
     text-transform:uppercase;color:var(--ink-3);margin-bottom:6px;
   }
 
@@ -398,7 +418,27 @@
   /* ── States ───────────────────────────────────────────────────────────── */
   .empty{
     display:flex;align-items:center;justify-content:center;height:100%;
-    color:var(--ink-3);font-size:13px;text-align:center;padding:26px;line-height:1.55;
+    color:var(--ink-3);font-size:13px;text-align:center;padding:26px;line-height:1.5;
+  }
+
+  /* ── Progress feedback ────────────────────────────────────────────────────
+     Until now every wait in this panel was a text swap to "Loading…" — no
+     actual motion, so a slow request and a stalled one looked identical.
+     An indeterminate ring (this app's data loads are all sub-few-seconds;
+     nothing here yet needs the determinate/percentage variant) gives real
+     visual confirmation that something is still in flight, same spirit as
+     the existing .badge.urgent pulse — spent only where a wait can actually
+     happen. Respects prefers-reduced-motion via the blanket rule below. */
+  .spinner{
+    width:15px;height:15px;flex:none;
+    border:2px solid var(--rule-2);border-top-color:var(--accent);border-radius:50%;
+    animation:spin .7s linear infinite;
+  }
+  .spinner.lg{width:22px;height:22px;border-width:2.5px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .initload{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    height:50vh;min-height:220px;color:var(--ink-3);font-size:13px;
   }
   .err{
     background:var(--alert-wash);border:1px solid var(--alert-line);
@@ -441,7 +481,7 @@
      resolve as a set. */
   .chart-grid{stroke:var(--chart-grid);stroke-width:1}
   .chart-axis{stroke:var(--rule-2);stroke-width:1}
-  .chart-label{fill:var(--ink-3);font-family:var(--mono);font-size:8px;letter-spacing:.04em}
+  .chart-label{fill:var(--ink-3);font-family:var(--mono);font-size:10px;letter-spacing:.04em} /* was 8px — the smallest text in the whole panel, well under the 10pt caption floor */
   .chart-bar{fill:var(--chart-a)}
   .chart-bar.peak{fill:var(--chart-b)}
   .chart-bar.zero{fill:var(--rule)}
@@ -528,7 +568,7 @@
     .sidebar{width:58px}
     .navitem span{display:none}
     .navitem{justify-content:center;padding:9px 0}
-    .navgroup{text-align:center;font-size:8px;padding:14px 0 6px;letter-spacing:.08em}
+    .navgroup{text-align:center;font-size:9px;padding:14px 0 6px;letter-spacing:.08em} /* was 8px — still tight at 58px collapsed width, nudged up without risking wrap */
     .main{padding:20px 16px 40px}
     .kpis{grid-template-columns:1fr 1fr}
     .topbar{padding:0 14px;gap:12px}
@@ -1467,7 +1507,7 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
           }
           ${(convTotal||0)>0? html`<div style=${{padding:"10px 12px 14px",borderTop:"1px solid var(--rule)"}}>
             <div class="sub" style=${{margin:"0 0 8px",fontSize:"12px"}}>${showingLabel}</div>
-            ${hasMore? html`<button class="btn" style=${{width:"100%"}} disabled=${loadingMore} onClick=${onLoadMore}>${loadingMore?T("load.generic"):T("inbox.loadMore")}</button>`:null}
+            ${hasMore? html`<button class="btn" style=${{width:"100%"}} disabled=${loadingMore} onClick=${onLoadMore}>${loadingMore?html`<${Spinner}/> ${T("load.generic")}`:T("inbox.loadMore")}</button>`:null}
           </div>`:null}
         </div>
 
@@ -2902,6 +2942,14 @@ function Icon({name}){
   return html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML=${{__html:ICONS[name]||""}} />`;
 }
 
+// Indeterminate progress ring — see .spinner's own comment for why this
+// exists now (every wait used to be a plain text swap, no actual motion).
+// `large` is for a standalone/centered use (initial load); the default
+// small size sits inline next to a button's own label.
+function Spinner({large}){
+  return html`<span class="spinner ${large?"lg":""}" role="status" aria-label=${T("load.generic")}/>`;
+}
+
 function App(){
   const [tab, setTab] = useState("command");
   const [stats, setStats] = useState(null);
@@ -3020,7 +3068,8 @@ function App(){
       </div>
       <div class="main">
         ${fatal? html`<div class="err">${T("shell.backendDown")}: ${fatal}. ${T("shell.backendHint")}</div>`:null}
-        <div class="view" key=${tab}>
+        ${!fatal && stats===null ? html`<div class="initload"><${Spinner} large/> <span>${T("load.generic")}</span></div>` : null}
+        <div class="view" key=${tab} hidden=${!fatal && stats===null}>
         <${ErrorBoundary} key=${"eb-"+tab}>
         ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} roi=${roi} onOpenLead=${openLead} />`
           : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} convTotal=${convTotal} onLoadMore=${loadMoreConversations} loadingMore=${loadingMore} branches=${branches} partners=${partners} doctors=${doctors} />`

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { waitUntil } from '@vercel/functions';
 import { retrieveCheckoutForm } from '../services/iyzico.js';
 import { finalizePaidPayment } from '../services/paymentFinalize.js';
+import { notifySystemAlert } from '../services/notify.js';
 
 export const iyzicoWebhookRouter = Router();
 
@@ -25,6 +26,15 @@ iyzicoWebhookRouter.post('/callback', async (req, res) => {
     result = await retrieveCheckoutForm(token);
   } catch (err) {
     console.error('[iyzico-webhook] retrieve failed', err.message);
+    // A failed Retrieve call means we genuinely don't know whether this
+    // patient's money moved — worth a direct, unconditional alert, same
+    // reasoning as the Stripe handler-error alert (each one is its own
+    // patient, never suppressed by a cooldown meant for repeating blips).
+    notifySystemAlert({
+      severity: 'critical',
+      title: 'İyzico retrieve-checkout-form failed — payment status unknown',
+      detail: err.message,
+    }).catch(() => {});
     return res.redirect(`/panel/payment-result.html?status=cancel&lang=${lang}`);
   }
 
@@ -36,6 +46,13 @@ iyzicoWebhookRouter.post('/callback', async (req, res) => {
   // conversationId is OUR payment row id — set as such at createCheckoutForm() time.
   waitUntil(
     finalizePaidPayment(result.conversationId, result.raw?.token, 'iyzico-webhook')
-      .catch((err) => console.error('[iyzico-webhook] finalize error', err)),
+      .catch((err) => {
+        console.error('[iyzico-webhook] finalize error', err);
+        notifySystemAlert({
+          severity: 'critical',
+          title: 'İyzico webhook failed to finalize a confirmed payment',
+          detail: err.message,
+        }).catch(() => {});
+      }),
   );
 });

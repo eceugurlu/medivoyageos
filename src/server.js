@@ -2,10 +2,11 @@ import { app } from './app.js';
 import { config, aiEnabled, sendEnabled } from './config.js';
 import { dbEnabled } from './db/pool.js';
 import { zohoEnabled } from './services/zoho.js';
-import { notifyEnabled } from './services/notify.js';
+import { notifyEnabled, systemAlertEnabled } from './services/notify.js';
 import { seedCampaignsIfEmpty, seedCoordinatorsIfEmpty, seedDevicesIfEmpty, seedBranchesIfEmpty } from './store/repository.js';
 import { seedProfileIfEmpty } from './services/profile.js';
 import { processPostOp, processNoShowRisk, processHotLeadFollowup } from './services/scheduler.js';
+import { recordFailure } from './services/healthMonitor.js';
 
 // Local-dev entry only. Runs the app as one long-lived process: app.listen()
 // plus the setInterval timers that stand in for Vercel Cron in production
@@ -16,11 +17,21 @@ import { processPostOp, processNoShowRisk, processHotLeadFollowup } from './serv
 // CRM sync or scheduler tick — the same spirit as the pool's error handler.
 // (Deliberate trade-off: we stay up and log loudly. In production, behind a
 // supervisor, you'd exit here and let it restart clean.)
+// threshold:1 means every occurrence is reported — unlike the AI-outage
+// tracking in webhook.js, this is already a rare, always-significant event
+// (most errors are caught locally; one reaching all the way here is a real
+// bug). The cooldown still applies, though: a pathological code path that
+// throws in a tight loop shouldn't be able to flood the alert channel.
+const PROCESS_CRASH_ALERT = { threshold: 1, cooldownMs: 5 * 60_000, severity: 'critical' };
+
 process.on('unhandledRejection', (reason) => {
-  console.error('[process] unhandled promise rejection:', reason instanceof Error ? reason.stack : reason);
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  console.error('[process] unhandled promise rejection:', err.stack);
+  recordFailure('process-crash', { ...PROCESS_CRASH_ALERT, title: 'Unhandled promise rejection', detail: err.message });
 });
 process.on('uncaughtException', (err) => {
   console.error('[process] uncaught exception:', err && err.stack ? err.stack : err);
+  recordFailure('process-crash', { ...PROCESS_CRASH_ALERT, title: 'Uncaught exception', detail: err?.message || String(err) });
 });
 
 app.listen(config.port, () => {
@@ -30,6 +41,7 @@ app.listen(config.port, () => {
   console.log(`    Database        : ${dbEnabled ? 'ON  (Postgres)' : 'OFF → in-memory (resets on restart)'}`);
   console.log(`    CRM (Zoho)      : ${zohoEnabled ? 'ON' : 'OFF (set ZOHO_* to enable)'}`);
   console.log(`    Handover ping   : ${notifyEnabled ? 'ON  (webhook)' : 'OFF → panel queue only'}`);
+  console.log(`    System alerts   : ${systemAlertEnabled ? 'ON  (webhook)' : 'OFF → errors only in logs'}`);
   console.log(`    Signature check : ${config.whatsapp.appSecret ? 'ON' : 'OFF (set WHATSAPP_APP_SECRET to enable)'}`);
   console.log(`\n    📊  Panel: http://localhost:${config.port}/panel`);
   console.log(`    🧩  Lead widget demo: http://localhost:${config.port}/panel/widget.html\n`);

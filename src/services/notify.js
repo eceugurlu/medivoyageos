@@ -118,6 +118,57 @@ export async function notifySystemAlert({ severity = 'warning', title, detail, c
   }
 }
 
+// Monday's report is a business summary, not an urgent alert — a SEPARATE
+// optional channel from the handover webhook so a clinic owner's weekly
+// digest doesn't get buried between individual patient pings, or vice versa.
+// Falls back to the same webhookUrl when unset, same "never silently drop
+// it for lack of a second webhook" reasoning as every other optional channel
+// in this file.
+export const weeklyReportEnabled = Boolean(config.notify.weeklyReportWebhookUrl);
+
+function formatDuration(totalSeconds) {
+  if (totalSeconds == null) return 'n/a (no replied messages this week)';
+  const minutes = Math.round(totalSeconds / 60);
+  if (minutes < 1) return `${totalSeconds}s`;
+  if (minutes < 60) return `${minutes} min`;
+  return `${(minutes / 60).toFixed(1)} hr`;
+}
+
+/**
+ * Monday's automatic weekly summary — see repository.js::getWeeklyReportStats()
+ * for exactly what each figure means and its known approximations (stated
+ * there, not hidden). Best-effort like every other notify* function: never
+ * throws, no-op when no webhook is configured.
+ */
+export async function notifyWeeklyReport(stats) {
+  if (!weeklyReportEnabled) return;
+
+  const periodLabel = `${new Date(stats.period.start).toLocaleDateString('en-GB')} – ${new Date(stats.period.end).toLocaleDateString('en-GB')}`;
+  const text =
+    `📊 *Weekly report — ${periodLabel}*\n\n` +
+    `New leads: ${stats.new_leads}\n` +
+    `Qualified (hot/handed over/booked): ${stats.qualified_leads}\n` +
+    `Currently hot: ${stats.hot_leads}\n` +
+    `Appointments booked: ${stats.appointments_booked}\n` +
+    `Deposits collected: €${stats.deposits_collected_eur.toLocaleString()}\n` +
+    `Avg. reply time: ${formatDuration(stats.avg_response_seconds)}` +
+    (stats.replied_turns ? ` (over ${stats.replied_turns} replies)` : '') + `\n` +
+    `⏳ Waiting for a human right now: ${stats.missed_conversations_now}`;
+
+  try {
+    const res = await fetch(config.notify.weeklyReportWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+    });
+    if (!res.ok) console.error(`[notify] weekly-report webhook returned ${res.status}`);
+    else console.log(`[notify] weekly report sent for ${periodLabel}`);
+  } catch (err) {
+    console.error('[notify] weekly-report webhook failed (non-fatal):', err.message);
+  }
+}
+
 /**
  * Devir SLA Alarmı, first tier: a handover has sat unanswered in the Action
  * Center queue past HANDOVER_SLA_FIRST_REMINDER_MINUTES. Names the assigned

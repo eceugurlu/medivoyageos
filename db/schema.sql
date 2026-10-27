@@ -296,3 +296,7 @@ ALTER TABLE conversations
   ADD COLUMN IF NOT EXISTS sla_escalated_at        TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_conversations_needs_human_escalated
   ON conversations (escalated_at) WHERE status = 'needs_human';
+
+-- ── Haftalık Sonuç Raporu (see 024_weekly_report.sql) ──────────────────────
+ALTER TABLE clinics
+  ADD COLUMN IF NOT EXISTS last_weekly_report_sent_at TIMESTAMPTZ;

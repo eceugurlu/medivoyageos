@@ -7,6 +7,7 @@
     "dev": "node --watch src/server.js",
     "check:ai": "node scripts/ai-quality-check.mjs",
     "check:monitoring": "node scripts/test-health-monitor.mjs",
+    "check:weekly-report": "node scripts/test-weekly-report.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

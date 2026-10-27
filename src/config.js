@@ -128,6 +128,11 @@ export const config = {
     // past the first-reminder one — see the warning below.
     slaFirstReminderMinutes: Number(process.env.HANDOVER_SLA_FIRST_REMINDER_MINUTES || 10),
     slaEscalateMinutes: Number(process.env.HANDOVER_SLA_ESCALATE_MINUTES || 30),
+    // Optional, SEPARATE webhook for the automatic Monday business summary
+    // (see services/notify.js::notifyWeeklyReport) — falls back to the same
+    // webhookUrl above when unset, so it's never silently skipped for lack
+    // of a dedicated second webhook.
+    weeklyReportWebhookUrl: process.env.WEEKLY_REPORT_WEBHOOK_URL || process.env.HANDOVER_WEBHOOK_URL || null,
     // Optional, SEPARATE webhook for engineering/ops alerts (AI outage,
     // payment-webhook processing failures, uncaught exceptions) — a clinic
     // coordinator's channel ideally shouldn't fill up with "the AI is down"

@@ -10,6 +10,8 @@ import { createCheckoutSession } from '../services/stripe.js';
 import { createCheckoutForm } from '../services/iyzico.js';
 import { sendToLead } from '../services/channelSend.js';
 import { getAutomationStatus } from '../services/automationStatus.js';
+import { guardUuidParams } from '../middleware/validateUuidParams.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import {
   getStats,
   listConversations,
@@ -122,7 +124,7 @@ const clamp = (v, max) => {
   return s ? s.slice(0, max) : undefined;
 };
 
-publicRouter.post('/lead', (req, res) => {
+publicRouter.post('/lead', rateLimit(), (req, res) => {
   (async () => {
     const b = req.body || {};
     // A real E.164 number is at most 15 digits; the slack absorbs a stray
@@ -232,6 +234,10 @@ apiRouter.use((req, res, next) => {
   if (crypto.timingSafeEqual(a, b)) return next();
   return res.status(401).json({ error: 'Unauthorized' });
 });
+
+// Reject a malformed :id with 400 before it ever reaches a query — see
+// middleware/validateUuidParams.js for why this is central and not per-route.
+guardUuidParams(apiRouter);
 
 // Small async wrapper so a thrown error becomes a clean 500 instead of a crash.
 const h = (fn) => (req, res) =>

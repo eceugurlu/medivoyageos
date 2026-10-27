@@ -56,6 +56,17 @@
     --accent-line:#728e89; /* 3.01:1 vs --accent-wash (was #9dc3bc at 1.63:1) */
     --brass:#8c6415;
     --brass-wash:#f4ecdb;
+    /* A second, rarer accent — a wine/burgundy pulled toward violet rather
+       than pure red specifically so it stays clearly distinct from --alert
+       under protanopia/deuteranopia simulation (checked, not assumed: raw
+       distance 36–41 vs ~46 at normal vision — still a clearly separate
+       color under both common red-green deficiencies, not collapsed onto
+       the alert color the way a more orange-leaning wine would be).
+       9.94:1 vs --paper. Used only for a VIP/high-score marker — never
+       redefines what --alert means, so a true clinical emergency is never
+       the ambiguous one. */
+    --burgundy:#7a2238;
+    --burgundy-wash:#f2e9eb;
     --pos:#2e6b4d;
     --pos-wash:#e5efe9;
     --alert:#a02e21;
@@ -91,6 +102,8 @@
     --accent-line:#48756e; /* 2.97:1 vs --accent-wash (was #2c4b46 at 1.62:1) */
     --brass:#d3a45c;
     --brass-wash:#2a2318;
+    --burgundy:#f74e79; /* 5.18:1 vs --paper (dark) — lightened, same violet-leaning hue as the light-mode value */
+    --burgundy-wash:#2d2128;
     --pos:#6fb389;
     --pos-wash:#182a20;
     --alert:#e07a68;
@@ -300,6 +313,13 @@
   .badge.awaiting{color:var(--brass);border-color:var(--brass);background:var(--brass-wash)}
   .conv-item.awaits{box-shadow:inset 2px 0 0 var(--brass)}
   .offhours{color:var(--alert)}
+
+  /* A high-score lead with nothing else more urgent to show (not awaiting
+     reply, not escalated) still deserves to stand out in a long list — this
+     is the ONLY place burgundy appears outside the gate screen, and only
+     when it's genuinely informative (score ≥ VIP_SCORE_THRESHOLD in the JS),
+     never decorative. */
+  .badge.vip{color:var(--burgundy);border-color:var(--burgundy);background:var(--burgundy-wash);font-weight:600}
 
   /* ── Internal notes ───────────────────────────────────────────────────── */
   .notes{margin-top:4px}
@@ -525,7 +545,7 @@
     font-family:"Bodoni Moda",Georgia,serif;font-weight:500;font-size:40px;letter-spacing:-.01em;
     color:#f4efe6;line-height:1.05;margin-bottom:6px;
   }
-  .gate-word i{font-style:italic;font-weight:400;color:#d3a45c}
+  .gate-word i{font-style:italic;font-weight:400;color:#f74e79} /* was pure brass #d3a45c — a two-ink wordmark (ivory + wine italic), the one deliberate burgundy touch on this screen's own fixed dark treatment */
   .gate-kicker{
     font-family:"Instrument Sans",-apple-system,sans-serif;font-size:11.5px;letter-spacing:.22em;
     text-transform:uppercase;color:#7c9691;margin-bottom:34px;
@@ -717,6 +737,7 @@ const I18N = {
     "analytics.pendingNote2":"lead(s) — not counted until marked paid.",
     "notes.add":"Add note","notes.empty":"No notes yet.","notes.saved":"Note added",
     "confirm.discharge":"Mark this patient as discharged? This starts the post-op sequence and cannot be undone from the panel.","badge.human":"human","badge.agent":"agent",
+    "badge.vipHint":"VIP lead — score 85 or higher",
     "inbox.noConversations":"No conversations yet. Send a WhatsApp message to your number to see it appear here.","msg.patient":"patient",
     "msg.photoAlt":"Photo sent by the patient — opens full size in a new tab",
     "inbox.selectConv":"Select a conversation to view the thread.",
@@ -933,6 +954,7 @@ const I18N = {
     "inbox.noConversations":"Henüz görüşme yok. Numaranıza bir WhatsApp mesajı gönderin, burada görünsün.","msg.patient":"hasta",
     "msg.photoAlt":"Hastanın gönderdiği fotoğraf — yeni sekmede tam boy açılır",
     "badge.human":"insan","badge.agent":"temsilci",
+    "badge.vipHint":"VIP lead — skor 85 veya üzeri",
     "inbox.selectConv":"Konuşmayı görmek için bir görüşme seçin.",
     "inbox.youHandling":"Bu görüşmeyi siz yönetiyorsunuz — AI duraklatıldı.",
     "inbox.aiHandling":"Bu görüşmeyi AI konsiyerj yönetiyor.",
@@ -1499,7 +1521,10 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
                     : c.conv_status==="needs_human"?html`<span class="badge hot">${T("badge.human")}</span>`
                     : c.last_role==="user"?html`<span class="badge awaiting" title=${T("inbox.awaitingMark")}>${T("filter.awaiting")}</span>`
                     : c.conv_status==="human_handling"?html`<span class="badge human">${T("badge.agent")}</span>`
-                    : c.score!=null?html`<span class="badge">${c.score}</span>`:null}
+                    : c.score!=null?(c.score>=85
+                        ? html`<span class="badge vip" title=${T("badge.vipHint")}>★ ${c.score}</span>` // VIP_SCORE_THRESHOLD=85 — top of the "ready_to_book" band (see concierge.js's LEAD SCORE rubric), the one case burgundy marks
+                        : html`<span class="badge">${c.score}</span>`)
+                      :null}
                 </div>
                 <div class="conv-prev">${c.last_role==="assistant"?"↩ ":""}${c.last_message||"—"}</div>
                 <div class="conv-time">${depositLeadIds.has(c.lead_id)?html`<span class="dep-flag" title=${T("payments.pendingBadge")}>€</span> `:null}${timeAgo(c.last_message_at)}</div>

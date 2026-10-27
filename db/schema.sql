@@ -300,3 +300,9 @@ CREATE INDEX IF NOT EXISTS idx_conversations_needs_human_escalated
 -- ── Haftalık Sonuç Raporu (see 024_weekly_report.sql) ──────────────────────
 ALTER TABLE clinics
   ADD COLUMN IF NOT EXISTS last_weekly_report_sent_at TIMESTAMPTZ;
+
+-- ── AI Maliyet Panosu (see 025_ai_cost_tracking.sql) ───────────────────────
+ALTER TABLE messages
+  ADD COLUMN IF NOT EXISTS llm_input_tokens       INTEGER,
+  ADD COLUMN IF NOT EXISTS llm_output_tokens      INTEGER,
+  ADD COLUMN IF NOT EXISTS llm_cached_read_tokens INTEGER;

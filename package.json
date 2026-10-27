@@ -8,6 +8,7 @@
     "check:ai": "node scripts/ai-quality-check.mjs",
     "check:monitoring": "node scripts/test-health-monitor.mjs",
     "check:weekly-report": "node scripts/test-weekly-report.mjs",
+    "check:ai-cost": "node scripts/test-ai-cost.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

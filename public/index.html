@@ -640,6 +640,11 @@
     /* Chip filters and any other inline control strip wrap instead of
        extending past the screen edge. */
     .filters{flex-wrap:wrap}
+    /* Risk & Uyum'un iki sütunu (Uyum | Sonuç & risk) telefonda alt alta
+       geçer. Aynı kırpılma tuzağı: sayfa yatay kaydırma bildirmiyordu ama
+       sağdaki sütun ekranın dışında kalıyordu. Grid şablonu bileşende satır
+       içi stil olduğu için !important yük taşıyor. */
+    .comp-cols{grid-template-columns:1fr!important;gap:22px!important}
   }
 </style>
 </head>
@@ -856,6 +861,35 @@ const I18N = {
     "roi.assumption":"Estimate: {min} min/reply — reading, pricing lookup and typing one WhatsApp reply by hand. Human-agent replies aren't counted.",
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
+    "nav.compliance":"Risk & Compliance",
+    "comp.title":"Clinic Risk & Compliance Score",
+    "comp.sub":"Two questions on one screen. Compliance: does the clinic meet the Health Tourism Regulation of 26 Apr 2025 (Official Gazette 32882)? Risk: what does the clinic's own outcome data actually say? The second question has no answer anywhere in this sector today — complication insurance is mandatory, yet no insurer has clinic-level claims data to price it on. This screen is where that data starts.",
+    "comp.score":"Score","comp.scoreFoot":"Weighted average of the items that have data.",
+    "comp.noScore":"No data entered yet — this is not a zero.",
+    "comp.coverage":"Coverage","comp.coverageFoot":"Share of total weight that could be measured. A high score at low coverage is not a high score.",
+    "comp.accDeadline":"Days to accreditation","comp.accFoot":"Deadline 31 Dec 2026. Counted from today, not typed in.",
+    "comp.aiSpeed":"AI reply (median)","comp.aiFoot":"Measured from your own message log, patient's first message to reply.",
+    "comp.aiNone":"Not enough turns to take a median yet.",
+    "comp.complRate":"Complication + revision","comp.complFoot":"Measured, not graded — no published sector benchmark exists.",
+    "comp.complNone":"Below the clinical sample floor — a rate here would mislead.",
+    "comp.st.ok":"ok","comp.st.warn":"warning","comp.st.fail":"failing","comp.st.unknown":"no data","comp.st.measured":"measured",
+    "comp.notGraded":"measured, not graded","comp.overdue":"overdue","comp.daysLeft":"days left",
+    "comp.inForce":"mandatory","comp.inForceHint":"Already in force since 1 Jan 2026 for surgical and interventional procedures on patients from abroad — this is not a future deadline, it is an obligation that already applies.",
+    "comp.declaredOnly":"Clinic's own declaration — not verified by us.",
+    "comp.gaps":"Open gaps","comp.gapsSub":"Legally required items that are either failing or have no data entered. \"We do not know\" is not the same as \"fine\".",
+    "comp.gapUnknown":"No record entered, so this cannot be scored — and cannot be shown to an auditor either.",
+    "comp.gapFail":"Measured and failing. This is the one to fix first.",
+    "comp.groupCompliance":"Compliance","comp.groupComplianceSub":"Against the regulation. Documents are declarations; the rates below are measured from your own data.",
+    "comp.groupRisk":"Outcome & risk","comp.groupRiskSub":"What your own data says. This is what an underwriter would price on — and what nobody can produce today.",
+    "comp.byDoctor":"Outcomes by doctor","comp.byDoctorSub":"The table an insurer actually wants. Rates stay hidden below the sample floor: judging a surgeon on seven operations is not measurement.",
+    "comp.byDoctorNone":"No operated patient has a doctor assigned yet. Assign a doctor on the patient record and set an operation date to start building this.",
+    "comp.doctor":"Doctor","comp.specialty":"Specialty","comp.operated":"Operated","comp.recorded":"Recorded","comp.complications":"Compl.","comp.rate":"Rate",
+    "comp.thin":"thin","comp.thinHint":"Below {n} recorded outcomes a rate is noise. The count is shown; the percentage is withheld until the sample supports it.",
+    "comp.docs":"Documents","comp.docsSub":"What the clinic declares. We deliberately cannot mark anything \"verified\" from this panel — verification is a separate process, and blurring the two would destroy the only thing this score is worth.",
+    "comp.kind.health_tourism_authorization":"Health tourism authorisation","comp.kind.accreditation":"Accreditation",
+    "comp.kind.complication_insurance":"Complication insurance","comp.kind.kvkk_registry":"KVKK / VERBİS registry","comp.kind.call_center_contract":"24/7 call centre",
+    "comp.docst.missing":"not entered","comp.docst.in_progress":"in progress","comp.docst.valid":"valid","comp.docst.expired":"expired",
+    "comp.issuer":"Issuer","comp.reference":"Reference no","comp.save":"Save",
     "admin.name":"Name","admin.languages":"Languages spoken","admin.branch":"Branch","admin.noBranch":"No branch",
     "admin.type":"Type","admin.code":"Short code","admin.city":"City","admin.default":"Default",
     "admin.activate":"Activate","admin.deactivate":"Deactivate","admin.inactive":"Inactive",
@@ -1088,6 +1122,35 @@ const I18N = {
     "roi.assumption":"Varsayım: yanıt başına {min} dk — okuma, fiyat kontrolü ve elle bir WhatsApp yanıtı yazma. İnsan temsilcinin yanıtları sayılmıyor.",
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
+    "nav.compliance":"Risk & Uyum",
+    "comp.title":"Klinik Risk & Uyum Skoru",
+    "comp.sub":"Tek ekranda iki soru. Uyum: klinik 26.04.2025 tarihli Sağlık Turizmi Yönetmeliği'nin (RG 32882) gerekliliklerini karşılıyor mu? Risk: kliniğin kendi sonuç verisi ne söylüyor? İkinci sorunun bugün bu sektörde hiçbir yerde cevabı yok — komplikasyon sigortası zorunlu ama hiçbir sigortacının fiyatlayacağı klinik bazlı hasar verisi yok. O veri burada başlıyor.",
+    "comp.score":"Skor","comp.scoreFoot":"Yalnızca verisi olan maddelerin ağırlıklı ortalaması.",
+    "comp.noScore":"Henüz veri girilmedi — bu sıfır puan değil.",
+    "comp.coverage":"Kapsam","comp.coverageFoot":"Ölçülebilen ağırlığın toplam ağırlığa oranı. Kapsamı düşük bir yüksek skor, yüksek skor değildir.",
+    "comp.accDeadline":"Akreditasyona kalan","comp.accFoot":"Son tarih 31.12.2026. Bugünden hesaplandı, elle yazılmadı.",
+    "comp.aiSpeed":"AI cevap (medyan)","comp.aiFoot":"Kendi mesaj kaydınızdan ölçüldü: hastanın ilk mesajından cevaba.",
+    "comp.aiNone":"Medyan almak için yeterli tur yok.",
+    "comp.complRate":"Komplikasyon + revizyon","comp.complFoot":"Ölçüldü, puanlanmadı — yayınlanmış sektör kıyaslaması yok.",
+    "comp.complNone":"Klinik örneklem tabanının altında — burada bir oran yanıltırdı.",
+    "comp.st.ok":"tamam","comp.st.warn":"uyarı","comp.st.fail":"açık","comp.st.unknown":"veri yok","comp.st.measured":"ölçüm",
+    "comp.notGraded":"ölçüm, not değil","comp.overdue":"süresi geçti","comp.daysLeft":"gün",
+    "comp.inForce":"zorunlu","comp.inForceHint":"01.01.2026'dan beri yürürlükte: yurt dışından gelen hastaların cerrahi ve girişimsel işlemleri için. Bu gelecekteki bir son tarih değil, hâlihazırda geçerli bir yükümlülük.",
+    "comp.declaredOnly":"Klinik beyanı — bizim doğrulamamız değil.",
+    "comp.gaps":"Açık maddeler","comp.gapsSub":"Yasal zorunlu olup ya başarısız ya da hiç veri girilmemiş maddeler. \"Bilmiyoruz\" ile \"tamam\" aynı şey değildir.",
+    "comp.gapUnknown":"Kayıt girilmemiş; bu yüzden puanlanamıyor — denetçiye de gösterilemez.",
+    "comp.gapFail":"Ölçüldü ve açık. İlk kapatılacak madde bu.",
+    "comp.groupCompliance":"Uyum","comp.groupComplianceSub":"Yönetmeliğe karşı. Belgeler beyandır; aşağıdaki oranlar kendi verinizden ölçüldü.",
+    "comp.groupRisk":"Sonuç & risk","comp.groupRiskSub":"Kendi verinizin söylediği. Bir sigortacının fiyatlayacağı şey bu — ve bugün kimsenin üretemediği şey.",
+    "comp.byDoctor":"Doktor bazlı sonuçlar","comp.byDoctorSub":"Sigortacının asıl istediği tablo. Örneklem tabanının altında oran gizli kalır: bir cerrahı yedi ameliyatla yargılamak ölçüm değildir.",
+    "comp.byDoctorNone":"Ameliyat edilmiş hiçbir hastaya doktor atanmamış. Hasta kaydında doktor atayıp ameliyat tarihi girin; tablo oradan dolar.",
+    "comp.doctor":"Doktor","comp.specialty":"Branş","comp.operated":"Ameliyat","comp.recorded":"Kayıtlı","comp.complications":"Kompl.","comp.rate":"Oran",
+    "comp.thin":"az veri","comp.thinHint":"{n} kayıtlı sonucun altında oran gürültüdür. Sayı gösterilir; yüzde, örneklem taşıyana kadar gösterilmez.",
+    "comp.docs":"Belgeler","comp.docsSub":"Kliniğin beyan ettikleri. Bu panelden hiçbir şeyi \"doğrulandı\" işaretleyemiyoruz, bilerek — doğrulama ayrı bir süreç ve ikisini karıştırmak bu skorun tek değerli yanını bitirirdi.",
+    "comp.kind.health_tourism_authorization":"Sağlık turizmi yetki belgesi","comp.kind.accreditation":"Akreditasyon",
+    "comp.kind.complication_insurance":"Komplikasyon sigortası","comp.kind.kvkk_registry":"KVKK / VERBİS kaydı","comp.kind.call_center_contract":"7/24 çağrı merkezi",
+    "comp.docst.missing":"girilmedi","comp.docst.in_progress":"süreçte","comp.docst.valid":"geçerli","comp.docst.expired":"süresi doldu",
+    "comp.issuer":"Veren kurum","comp.reference":"Belge no","comp.save":"Kaydet",
     "admin.name":"Ad","admin.languages":"Konuştuğu diller","admin.branch":"Şube","admin.noBranch":"Şube yok",
     "admin.type":"Tip","admin.code":"Kısa kod","admin.city":"Şehir","admin.default":"Varsayılan",
     "admin.activate":"Aktifleştir","admin.deactivate":"Pasifleştir","admin.inactive":"Pasif",
@@ -2100,6 +2163,11 @@ function Analytics({ analytics, profitability }){
 // report. Loaded on its own (not folded into /analytics) because it does
 // per-row FX conversion server-side — see getCampaignPerformance().
 const VIP_THIN_SAMPLE = 5; // below this, a ratio is noise dressed as a number
+// Klinik oran eşiği. services/compliance.js'teki MIN_CLINICAL_SAMPLE ile aynı
+// sayı olmak ZORUNDA: sunucu oranı gizlerken panel gösterirse, ekranda
+// sunucunun bilerek saklandığı sayı görünür. İkisi ayrışırsa doktor bazlı
+// tablo yanlış olur, o yüzden burada da adı geçiyor.
+const COMP_MIN_CLINICAL = 20;
 
 function CampaignPerformance(){
   const [d,setD]=useState(null);
@@ -2174,6 +2242,218 @@ function CampaignPerformance(){
     ${d.unattributed_leads? html`<div class="sub" style="margin:14px 0 0;font-size:12.5px">
       ${d.unattributed_leads} ${T("camp.unattributed")}
     </div>`:null}
+  </div>`;
+}
+
+// ── Klinik Risk & Uyum Skoru ────────────────────────────────────────────────
+// Ekranın tek tasarım kuralı: ölçülmüş sayı ile ölçülmemiş sayı asla aynı
+// görünmez. Veri yoksa büyük bir rakam değil, "—" ve neden ölçülemediği yazar.
+// 92/100 gösterip altına "kapsam %18" yazmayan bir uyum ekranı, klinik sahibini
+// denetime hazır sanarak gönderir.
+const COMP_ST = {
+  ok:       { cls:"human",    key:"comp.st.ok" },
+  warn:     { cls:"awaiting", key:"comp.st.warn" },
+  fail:     { cls:"hot",      key:"comp.st.fail" },
+  unknown:  { cls:"",         key:"comp.st.unknown" },
+  measured: { cls:"",         key:"comp.st.measured" },
+};
+const COMP_KINDS = ["health_tourism_authorization","accreditation","complication_insurance","kvkk_registry","call_center_contract"];
+const COMP_DOC_STATUSES = ["missing","in_progress","valid","expired"];
+
+// T() yer tutucu desteklemiyor; {n} burada doldurulur, yoksa ekranda
+// harfi harfine "{n}" yazar.
+const compThinHint=()=> T("comp.thinHint").replace("{n}", COMP_MIN_CLINICAL);
+
+function compValue(item){
+  if(item.value==null) return "–";
+  if(item.unit==="rate"||item.unit==="score") return "%"+(Math.round(item.value*1000)/10);
+  if(item.unit==="minutes") return item.value<1 ? "<1 dk" : Math.round(item.value*10)/10+" dk";
+  if(item.unit==="seconds") return (Math.round(item.value*10)/10)+" sn";
+  return String(item.value);
+}
+
+function ComplianceItem({ item }){
+  const st = COMP_ST[item.status] || COMP_ST.unknown;
+  // Puanlanmayan maddeler (ağırlık 0) kasten gri kalır: bunlar not değil,
+  // ölçüm. Renk vermek onları başarı/başarısızlık gibi okuturdu.
+  const graded = item.weight > 0 && item.score != null;
+  return html`<div class="glass" style="padding:13px 16px;display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+      <span style="font-weight:600;font-size:13.5px">${item.label}</span>
+      <span class="badge ${st.cls}">${T(st.key)}</span>
+    </div>
+    <div style="display:flex;align-items:baseline;gap:10px">
+      ${/* Belge maddelerinin ölçüm birimi yoktur; onlara büyük puntoda "–"
+            basmak, ölçülüp boş çıkmış gibi okunuyordu. Sayı alanı yalnızca
+            gerçekten bir ölçüm olan maddelerde var. */ null}
+      ${item.unit? html`<span style="font-family:var(--display);font-size:25px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:${item.value==null?"var(--ink-3)":"var(--ink)"}">
+        ${compValue(item)}
+      </span>`:null}
+      ${graded? html`<span style="font-size:11.5px;color:var(--ink-3);font-family:var(--mono)">${Math.round(item.score*100)}/100 · ×${item.weight}</span>`
+        : item.weight===0? html`<span style="font-size:11.5px;color:var(--ink-3)">${T("comp.notGraded")}</span>`:null}
+      ${item.deadline_days!=null? html`<span class="badge ${item.deadline_days<=90?"hot":""}" style="margin-left:auto">
+        ${item.deadline_days<0 ? T("comp.overdue") : item.deadline_days+" "+T("comp.daysLeft")}
+      </span>`
+       : item.in_force_since? html`<span class="badge ${item.status==="ok"?"":"hot"}" style="margin-left:auto"
+           title=${T("comp.inForceHint")}>${T("comp.inForce")}</span>`:null}
+    </div>
+    <div style="font-size:12px;color:var(--ink-2);line-height:1.5">${item.evidence}</div>
+    ${item.declared && !item.verified? html`<div style="font-size:11.5px;color:var(--brass)">${T("comp.declaredOnly")}</div>`:null}
+  </div>`;
+}
+
+function DocRow({ rec, kind, onSave, busy }){
+  const [status,setStatus]=useState(rec? rec.status : "missing");
+  const [issuer,setIssuer]=useState(rec&&rec.issuer? rec.issuer : "");
+  const [reference,setReference]=useState(rec&&rec.reference? rec.reference : "");
+  const [validUntil,setValidUntil]=useState(rec&&rec.valid_until? String(rec.valid_until).slice(0,10) : "");
+  const dirty = status!==(rec?rec.status:"missing")
+    || issuer!==((rec&&rec.issuer)||"") || reference!==((rec&&rec.reference)||"")
+    || validUntil!==((rec&&rec.valid_until)? String(rec.valid_until).slice(0,10):"");
+  return html`<div class="rowgrid" style="display:grid;grid-template-columns:1.5fr .9fr 1.1fr .9fr .8fr .6fr;gap:8px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--rule)">
+    <span style="font-weight:600;font-size:13px">${T("comp.kind."+kind)}</span>
+    <select value=${status} onChange=${(e)=>setStatus(e.target.value)} style="font-size:12.5px">
+      ${COMP_DOC_STATUSES.map(s=> html`<option key=${s} value=${s}>${T("comp.docst."+s)}</option>`)}
+    </select>
+    <input value=${issuer} placeholder=${T("comp.issuer")} onInput=${(e)=>setIssuer(e.target.value)} style="font-size:12.5px"/>
+    <input value=${reference} placeholder=${T("comp.reference")} onInput=${(e)=>setReference(e.target.value)} style="font-size:12.5px"/>
+    <input type="date" value=${validUntil} onInput=${(e)=>setValidUntil(e.target.value)} style="font-size:12.5px"/>
+    <button class="btn" disabled=${!dirty||busy} onClick=${()=>onSave(kind,{status,issuer,reference,valid_until:validUntil||null})}>
+      ${busy===kind? html`<${Spinner}/>` : T("comp.save")}
+    </button>
+  </div>`;
+}
+
+function Compliance(){
+  const [d,setD]=useState(null);
+  const [err,setErr]=useState(null);
+  const [busy,setBusy]=useState("");
+  const load=()=> api("/compliance").then(setD).catch(e=>setErr(e.message));
+  useEffect(()=>{ load(); },[]);
+
+  const save=async(kind,fields)=>{
+    setBusy(kind);
+    try{ await api("/compliance/"+kind,{method:"PUT",body:JSON.stringify(fields)}); await load(); }
+    catch(e){ setErr(e.message); }
+    finally{ setBusy(""); }
+  };
+
+  if(err) return html`<div class="err">${err}</div>`;
+  if(!d) return loadingBox();
+
+  const byId=(id)=> d.items.find(i=>i.id===id);
+  const group=(g)=> d.items.filter(i=>i.group===g);
+  const ai=byId("ai_response_time"), comp=byId("complication_rate");
+  const recByKind=new Map((d.records||[]).map(r=>[r.kind,r]));
+  const accDays=d.deadlines.accreditation_days;
+
+  return html`<div>
+    <div class="section-title">${T("comp.title")}</div>
+    <div class="sub">${T("comp.sub")}</div>
+
+    <div class="kpis">
+      <div class="glass kpi">
+        <span class="label">${T("comp.score")}</span>
+        <span class="val ${d.score==null?"":d.score>=85?"mint":d.score>=60?"":"alert"}">
+          ${d.score==null? "–" : d.score}
+        </span>
+        <span class="foot">${d.score==null? T("comp.noScore") : T("comp.scoreFoot")}</span>
+      </div>
+      <div class="glass kpi">
+        <span class="label">${T("comp.coverage")}</span>
+        <span class="val ${d.coverage>=0.8?"":"alert"}">%${Math.round(d.coverage*100)}</span>
+        <span class="foot">${T("comp.coverageFoot")}</span>
+      </div>
+      <div class="glass kpi">
+        <span class="label">${T("comp.accDeadline")}</span>
+        <span class="val ${accDays!=null&&accDays<=90?"alert":""}">${accDays==null? "–" : accDays}</span>
+        <span class="foot">${T("comp.accFoot")}</span>
+      </div>
+      <div class="glass kpi">
+        <span class="label">${T("comp.aiSpeed")}</span>
+        <span class="val ${ai&&ai.value!=null?"cyan":""}">${ai? compValue(ai) : "–"}</span>
+        <span class="foot">${ai&&ai.value!=null? T("comp.aiFoot") : T("comp.aiNone")}</span>
+      </div>
+      <div class="glass kpi">
+        <span class="label">${T("comp.complRate")}</span>
+        <span class="val">${comp? compValue(comp) : "–"}</span>
+        <span class="foot">${comp&&comp.value!=null? T("comp.complFoot") : T("comp.complNone")}</span>
+      </div>
+    </div>
+
+    ${d.gaps.length? html`<div style="margin-bottom:26px">
+      <div class="section-title">${T("comp.gaps")} <span class="badge hot">${d.gaps.length}</span></div>
+      <div class="sub" style="margin:-4px 0 12px">${T("comp.gapsSub")}</div>
+      ${d.gaps.map(g=> html`<div key=${g.id} class="action-card ${g.status==="fail"?"alert-card":""}">
+        <div class="action-left">
+          <div class="action-name">${g.label}
+            <span class="badge ${g.status==="fail"?"hot":""}">${T(COMP_ST[g.status].key)}</span>
+            ${g.deadline_days!=null&&g.deadline_days<=90? html`<span class="badge hot">${g.deadline_days<0? T("comp.overdue") : g.deadline_days+" "+T("comp.daysLeft")}</span>`
+              : g.in_force_since? html`<span class="badge hot" title=${T("comp.inForceHint")}>${T("comp.inForce")}</span>`:null}
+          </div>
+          <div class="action-reason">${g.status==="unknown"? T("comp.gapUnknown") : T("comp.gapFail")}</div>
+        </div>
+      </div>`)}
+    </div>`:null}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-bottom:26px" class="comp-cols">
+      <div>
+        <div class="section-title">${T("comp.groupCompliance")}
+          ${d.groups.compliance.score!=null? html`<span class="badge">${d.groups.compliance.score}/100 · ${T("comp.coverage").toLowerCase()} %${Math.round(d.groups.compliance.coverage*100)}</span>`:null}</div>
+        <div class="sub" style="margin:-4px 0 12px">${T("comp.groupComplianceSub")}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${group("compliance").map(i=> html`<${ComplianceItem} key=${i.id} item=${i}/>`)}
+        </div>
+      </div>
+      <div>
+        <div class="section-title">${T("comp.groupRisk")}
+          ${d.groups.risk.score!=null? html`<span class="badge">${d.groups.risk.score}/100 · ${T("comp.coverage").toLowerCase()} %${Math.round(d.groups.risk.coverage*100)}</span>`:null}</div>
+        <div class="sub" style="margin:-4px 0 12px">${T("comp.groupRiskSub")}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${group("risk").map(i=> html`<${ComplianceItem} key=${i.id} item=${i}/>`)}
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:26px">
+      <div class="section-title">${T("comp.byDoctor")}</div>
+      <div class="sub" style="margin:-4px 0 12px">${T("comp.byDoctorSub")}</div>
+      ${d.by_doctor.length===0
+        ? emptyBox(T("comp.byDoctorNone"))
+        : html`<div class="glass" style="padding:4px 0">
+          <div class="rowgrid rowhead" style="display:grid;grid-template-columns:1.6fr 1fr .7fr .7fr .8fr .8fr;gap:8px;padding:12px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+            <span>${T("comp.doctor")}</span><span>${T("comp.specialty")}</span>
+            <span>${T("comp.operated")}</span><span>${T("comp.recorded")}</span>
+            <span>${T("comp.complications")}</span><span>${T("comp.rate")}</span>
+          </div>
+          ${d.by_doctor.map(r=>{
+            // Doktor bazlı oranda eşik daha da kritik: 7 ameliyattan 1
+            // komplikasyon "%14" diye yazılırsa, o doktor o sayıyla yargılanır.
+            // Taban altında oran GÖSTERİLMEZ, kaç kayıt gerektiği yazılır.
+            const thin = r.recorded < COMP_MIN_CLINICAL;
+            const rate = thin? null : (r.complications + r.revisions)/r.recorded;
+            return html`<div key=${r.doctor_id} class="rowgrid" style="display:grid;grid-template-columns:1.6fr 1fr .7fr .7fr .8fr .8fr;gap:8px;padding:13px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+              <span style="font-weight:600">${r.name}</span>
+              <span style="color:var(--ink-2)">${r.specialty||"–"}</span>
+              <span>${r.operated}</span>
+              <span>${r.recorded}</span>
+              <span>${r.complications}${r.revisions? " +"+r.revisions : ""}</span>
+              <span>${thin
+                ? html`<span class="badge" title=${compThinHint()}>${T("comp.thin")}</span>`
+                : html`<span style="font-weight:700">%${Math.round(rate*1000)/10}</span>`}</span>
+            </div>`;
+          })}
+        </div>`}
+      ${d.by_doctor.some(r=>r.recorded<COMP_MIN_CLINICAL)? html`<div class="sub" style="margin:10px 0 0;font-size:12.5px">${compThinHint()}</div>`:null}
+    </div>
+
+    <div>
+      <div class="section-title">${T("comp.docs")}</div>
+      <div class="sub" style="margin:-4px 0 12px">${T("comp.docsSub")}</div>
+      <div class="glass" style="padding:4px 0">
+        ${COMP_KINDS.map(k=> html`<${DocRow} key=${k} kind=${k} rec=${recByKind.get(k)} onSave=${save} busy=${busy}/>`)}
+      </div>
+    </div>
   </div>`;
 }
 
@@ -3065,14 +3345,15 @@ const NAV_META={
   partners:{label:"nav.partners",icon:"handshake"},
   doctors:{label:"nav.doctors",icon:"stethoscope"},
   branches:{label:"nav.branches",icon:"grid"},
+  compliance:{label:"nav.compliance",icon:"shield"},
 };
 const NAV_GROUPS=[
-  ["group.overview",["command","inbox"]],
+  ["group.overview",["command","inbox","compliance"]],
   ["group.growth",["analytics","campaigns","widget","studio","partners"]],
   ["group.team",["consultants","matching","doctors","branches"]],
   ["group.operations",["devices","logistics","postop","reviews","workflow"]],
 ];
-const ENABLED = new Set(["command","inbox","analytics","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
+const ENABLED = new Set(["command","inbox","compliance","analytics","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
 
 const ICONS={
   grid:'<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
@@ -3095,6 +3376,7 @@ const ICONS={
   moon:'<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/>',
   handshake:'<path d="M3 11l4-4 4 3.5-2 2"/><path d="M21 11l-4-4-6 5.5a1.4 1.4 0 0 0 2 2L15 12l2 2a1.4 1.4 0 0 0 2-2"/><path d="M7 10.5L3 14v3h3"/><path d="M17 7l4 3.5V14l-3 3"/>',
   stethoscope:'<path d="M5 3v6a4 4 0 0 0 8 0V3"/><path d="M9 13v3a5 5 0 0 0 10 0v-2"/><circle cx="19" cy="11" r="2"/>',
+  shield:'<path d="M12 3l8 3v6c0 4.4-3.1 7.9-8 9-4.9-1.1-8-4.6-8-9V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
 };
 function Icon({name}){
   return html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML=${{__html:ICONS[name]||""}} />`;
@@ -3230,6 +3512,7 @@ function App(){
         <div class="view" key=${tab} hidden=${!fatal && stats===null}>
         <${ErrorBoundary} key=${"eb-"+tab}>
         ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} roi=${roi} onOpenLead=${openLead} />`
+          : tab==="compliance" ? html`<${Compliance} />`
           : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} convTotal=${convTotal} onLoadMore=${loadMoreConversations} loadingMore=${loadingMore} branches=${branches} partners=${partners} doctors=${doctors} />`
           : tab==="analytics" ? html`<${Analytics} analytics=${analytics} profitability=${profitability} />`
           : tab==="campaigns" ? html`<${Campaigns} templates=${templates} reloadShared=${reloadShared} />`

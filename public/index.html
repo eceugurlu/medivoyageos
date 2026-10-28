@@ -862,6 +862,23 @@ const I18N = {
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
     "nav.compliance":"Risk & Compliance",
+    "pp.title":"Outcome Passport","pp.live":"live","pp.draft":"draft","pp.revokedBadge":"withdrawn",
+    "pp.hint":"The record the patient carries home — what was done, which implant, which medication — for whichever doctor treats them next. Saving is not publishing: the link only goes live when you issue it.",
+    "pp.edit":"Edit passport","pp.collapse":"Collapse",
+    "pp.procedure":"Procedure","pp.date":"Date","pp.anesthesia":"Anaesthesia","pp.emergency":"Emergency contact",
+    "pp.contentLang":"Text language","pp.contentLangHint":"The language you type the free text in. Labels are shown in 7 languages; your text is never machine-translated, and the page says so.",
+    "pp.implants":"Implants & materials","pp.implantsHint":"The lot / serial number is the field a foreign doctor actually needs — it is what a recall check runs on.",
+    "pp.meds":"Medications","pp.warnings":"Seek help immediately if…","pp.aftercare":"Aftercare instructions",
+    "pp.warningsPlaceholder":"Fever above 38°, bleeding that will not stop, sudden swelling…",
+    "pp.aftercarePlaceholder":"Dressing, washing, sleeping position, when to resume exercise…",
+    "pp.addImplant":"Add implant","pp.addMed":"Add medication","pp.remove":"Remove row",
+    "pp.c.type":"Type","pp.c.brand":"Brand","pp.c.model":"Model","pp.c.lot":"Lot","pp.c.side":"Side",
+    "pp.c.name":"Name","pp.c.dose":"Dose","pp.c.duration":"Duration",
+    "pp.save":"Save draft","pp.issue":"Issue to patient","pp.revokeBtn":"Withdraw",
+    "pp.needFields":"A procedure name and date are required before issuing — a record without them tells a foreign doctor nothing.",
+    "pp.saved":"Draft saved.","pp.issued":"Passport issued — the link is live.","pp.revoked":"Passport withdrawn. The link no longer works.",
+    "pp.confirmRevoke":"Withdraw this passport? The link stops working immediately for the patient and any doctor they shared it with.",
+    "pp.linkLabel":"Patient link","pp.copy":"Copy link","pp.open":"Open","pp.copied":"Link copied.",
     "capi.title":"Meta Conversions API","capi.off":"not connected",
     "capi.sub":"Conversions reported back to Meta. Once Meta learns which click became an operation, it optimises the ad toward that audience — the same budget buys more patients.",
     "capi.offSub":"Not connected yet, so nothing is being reported. Events are still queued, not discarded: add META_CAPI_DATASET_ID and an access token and the backlog goes out on the next run.",
@@ -1140,6 +1157,23 @@ const I18N = {
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
     "nav.compliance":"Risk & Uyum",
+    "pp.title":"Sonuç Pasaportu","pp.live":"yayında","pp.draft":"taslak","pp.revokedBadge":"geri çekildi",
+    "pp.hint":"Hastanın yanında götürdüğü kayıt — ne yapıldı, hangi implant, hangi ilaç — kendisini sonra tedavi edecek hekim için. Kaydetmek yayınlamak değildir: link ancak siz yayınlayınca canlıya çıkar.",
+    "pp.edit":"Pasaportu düzenle","pp.collapse":"Kapat",
+    "pp.procedure":"İşlem","pp.date":"Tarih","pp.anesthesia":"Anestezi","pp.emergency":"Acil iletişim",
+    "pp.contentLang":"Metin dili","pp.contentLangHint":"Serbest metinleri hangi dilde yazdığınız. Etiketler 7 dilde görünür; yazdığınız metin makineyle ÇEVRİLMEZ ve sayfa bunu açıkça söyler.",
+    "pp.implants":"İmplant ve malzemeler","pp.implantsHint":"Lot / seri numarası, yabancı hekimin gerçekten ihtiyaç duyduğu alandır — geri çağırma (recall) kontrolü onunla yapılır.",
+    "pp.meds":"İlaçlar","pp.warnings":"Şu durumlarda derhal doktora…","pp.aftercare":"Ameliyat sonrası talimatlar",
+    "pp.warningsPlaceholder":"38° üstü ateş, durmayan kanama, ani şişlik…",
+    "pp.aftercarePlaceholder":"Pansuman, yıkanma, yatış pozisyonu, spora ne zaman dönülür…",
+    "pp.addImplant":"İmplant ekle","pp.addMed":"İlaç ekle","pp.remove":"Satırı sil",
+    "pp.c.type":"Tür","pp.c.brand":"Marka","pp.c.model":"Model","pp.c.lot":"Lot","pp.c.side":"Taraf",
+    "pp.c.name":"Ad","pp.c.dose":"Doz","pp.c.duration":"Süre",
+    "pp.save":"Taslağı kaydet","pp.issue":"Hastaya yayınla","pp.revokeBtn":"Geri çek",
+    "pp.needFields":"Yayınlamak için işlem adı ve tarihi zorunlu — ikisi olmadan kayıt, yabancı bir hekime hiçbir şey söylemez.",
+    "pp.saved":"Taslak kaydedildi.","pp.issued":"Pasaport yayınlandı — link canlı.","pp.revoked":"Pasaport geri çekildi. Link artık çalışmıyor.",
+    "pp.confirmRevoke":"Bu pasaport geri çekilsin mi? Link hem hasta hem de paylaştığı her hekim için anında çalışmaz olur.",
+    "pp.linkLabel":"Hasta linki","pp.copy":"Linki kopyala","pp.open":"Aç","pp.copied":"Link kopyalandı.",
     "capi.title":"Meta Conversions API","capi.off":"bağlı değil",
     "capi.sub":"Meta'ya geri bildirilen dönüşümler. Meta hangi tıklamanın ameliyata döndüğünü öğrenince reklamı o kitleye optimize eder — aynı bütçe daha çok hasta getirir.",
     "capi.offSub":"Henüz bağlı değil, yani hiçbir şey bildirilmiyor. Olaylar yine de kuyrukta bekliyor, atılmıyor: META_CAPI_DATASET_ID ve erişim anahtarını girin, biriken her şey bir sonraki turda gider.",
@@ -1799,6 +1833,7 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
             ${lead.medical_note? html`<div class="med-note"><span class="lbl"><${Icon} name="alert"/> ${T("pf.clinicalNote")}</span>${lead.medical_note}</div>`:null}
             <button class="btn" style="width:100%;margin-top:14px" disabled=${busy} onClick=${discharge}>${T("btn.markDischarged")}</button>
             <${Outcome} lead=${lead} onChanged=${()=>{ loadDetail(lead.id); reloadShared(); }} />
+            <${Passport} lead=${lead} />
             <${Notes} leadId=${lead.id} notes=${detail.notes} onAdded=${()=>loadDetail(lead.id)} />
             <${Payments} leadId=${lead.id} payments=${detail.payments} onChanged=${()=>{ loadDetail(lead.id); reloadShared(); }} />
             <${Costs} leadId=${lead.id} costs=${detail.costs} onChanged=${()=>{ loadDetail(lead.id); reloadShared(); }} />
@@ -1878,6 +1913,141 @@ function Outcome({ lead, onChanged }){
       ${busy? html`<${Spinner}/>` : T("out.save")}
     </button>
     ${lead.outcome_recorded_at? html`<div class="note-meta" style="margin-top:7px">${T("out.recordedAt")} ${fmtTime(lead.outcome_recorded_at)}</div>`:null}
+  </div>`;
+}
+
+// Sonuç Pasaportu — panel tarafı.
+//
+// Hasta ameliyattan birkaç gün sonra uçup gidiyor ve ülkesindeki hekim
+// hiçbir şey bilmiyor. Bu kart o boşluğu dolduran belgeyi üretir.
+//
+// Tasarım kuralı: KAYDETMEK ≠ YAYINLAMAK. Taslak serbestçe düzenlenir ama
+// hastanın eline geçen linki canlıya almak ayrı ve kasıtlı bir tıklamadır.
+// Yarım doldurulmuş bir kaydın yabancı bir acil servise ulaşması, hiç kayıt
+// olmamasından kötüdür.
+const PASSPORT_LANGS = ["tr","en","de","ar","ru","fr","it"];
+const IMPLANT_COLS = [["type","pp.c.type"],["brand","pp.c.brand"],["model","pp.c.model"],["lot","pp.c.lot"],["side","pp.c.side"]];
+const MED_COLS = [["name","pp.c.name"],["dose","pp.c.dose"],["duration","pp.c.duration"]];
+
+// Satır listeleri (implant, ilaç) için küçük düzenleyici. Boş satır
+// kaydedilmez — sunucu da ayıklıyor ama kullanıcıya da göstermemek gerek.
+function RowList({ rows, cols, onChange, addLabel, busy }){
+  const set=(i,key,val)=>{ const next=rows.map((r,j)=> j===i? {...r,[key]:val} : r); onChange(next); };
+  const del=(i)=> onChange(rows.filter((_,j)=>j!==i));
+  return html`<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+    ${rows.map((r,i)=> html`<div key=${i} style="display:flex;gap:4px;align-items:center">
+      <div style="display:grid;grid-template-columns:repeat(${cols.length},1fr);gap:4px;flex:1;min-width:0">
+        ${cols.map(([key,label])=> html`<input key=${key} value=${r[key]||""} disabled=${busy}
+          placeholder=${T(label)} onInput=${(e)=>set(i,key,e.target.value)}
+          style="font-size:12px;min-width:0"/>`)}
+      </div>
+      <button class="btn" disabled=${busy} title=${T("pp.remove")} aria-label=${T("pp.remove")}
+        style="padding:4px 8px;font-size:11px;flex:none" onClick=${()=>del(i)}>×</button>
+    </div>`)}
+    <button class="btn" disabled=${busy} style="font-size:12px;padding:5px 10px;align-self:flex-start"
+      onClick=${()=>onChange([...rows,{}])}>+ ${T(addLabel)}</button>
+  </div>`;
+}
+
+function Passport({ lead, onChanged }){
+  const [p,setP]=useState(null);
+  const [form,setForm]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [open,setOpen]=useState(false);
+
+  const blank=()=>({ procedure_name:"", procedure_date:"", anesthesia:"", implants:[], medications:[],
+                     aftercare:"", warning_signs:"", emergency_contact:"", content_language:lead.language||"tr" });
+  const toForm=(d)=> !d? blank() : {
+    procedure_name:d.procedure_name||"", procedure_date:d.procedure_date? String(d.procedure_date).slice(0,10):"",
+    anesthesia:d.anesthesia||"", implants:d.implants||[], medications:d.medications||[],
+    aftercare:d.aftercare||"", warning_signs:d.warning_signs||"",
+    emergency_contact:d.emergency_contact||"", content_language:d.content_language||lead.language||"tr",
+  };
+  const load=()=> api("/conversations/"+lead.id+"/passport").then((d)=>{ setP(d); setForm(toForm(d)); });
+  // Hasta değişince kart o hastanın kaydına sıfırlanmalı — yoksa bir önceki
+  // hastanın implant lot numarası yenisinin belgesine yazılır.
+  useEffect(()=>{ setP(null); setForm(null); setOpen(false); load().catch(()=>{ setP(null); setForm(blank()); }); },[lead.id]);
+
+  const call=async(fn)=>{ setBusy(true); try{ await fn(); await load(); if(onChanged) await onChanged(); }
+    catch(e){ showToast(e.message,"error"); } finally{ setBusy(false); } };
+  const save  =()=> call(async()=>{ await api("/conversations/"+lead.id+"/passport",{method:"PUT",body:JSON.stringify(form)}); showToast(T("pp.saved")); });
+  const issue =()=> call(async()=>{ await api("/conversations/"+lead.id+"/passport",{method:"PUT",body:JSON.stringify(form)});
+                                    await api("/conversations/"+lead.id+"/passport/issue",{method:"POST"}); showToast(T("pp.issued")); });
+  const revoke=()=>{ if(!window.confirm(T("pp.confirmRevoke"))) return;
+                     call(async()=>{ await api("/conversations/"+lead.id+"/passport/revoke",{method:"POST"}); showToast(T("pp.revoked")); }); };
+
+  if(!form) return html`<div class="notes"><div class="section-title" style=${{marginTop:"20px",fontSize:"13px"}}>${T("pp.title")}</div><${Spinner}/></div>`;
+
+  const live = Boolean(p && p.issued_at && !p.revoked_at);
+  const url = p && p.view_token ? `${location.origin}/panel/passport.html?token=${p.view_token}` : null;
+  const ready = Boolean(form.procedure_name.trim() && form.procedure_date);
+  const field=(key,label,type)=> html`<div class="pf-row" style=${{alignItems:"center"}}>
+    <span class="k">${T(label)}</span>
+    <input type=${type||"text"} value=${form[key]} disabled=${busy}
+      onInput=${(e)=>setForm({...form,[key]:e.target.value})} style="max-width:150px;font-size:12.5px"/>
+  </div>`;
+
+  return html`<div class="notes">
+    <div class="section-title" style=${{marginTop:"20px",marginBottom:"4px",fontSize:"13px"}}>
+      ${T("pp.title")}
+      ${live? html`<span class="badge human" style="margin-left:7px">${T("pp.live")}</span>`
+        : p && p.revoked_at? html`<span class="badge hot" style="margin-left:7px">${T("pp.revokedBadge")}</span>`
+        : html`<span class="badge" style="margin-left:7px">${T("pp.draft")}</span>`}
+    </div>
+    <div style="font-size:11.5px;color:var(--ink-3);line-height:1.45;margin-bottom:9px">${T("pp.hint")}</div>
+
+    ${live && url? html`<div class="glass" style="padding:9px 12px;margin-bottom:9px;background:var(--pos-wash);border-color:var(--pos)">
+      <div style="font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${T("pp.linkLabel")}</div>
+      <div style="font-family:ui-monospace,Menlo,monospace;font-size:11px;overflow-wrap:anywhere;margin-bottom:7px">${url}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" style="font-size:12px" onClick=${()=>{ navigator.clipboard.writeText(url); showToast(T("pp.copied")); }}>${T("pp.copy")}</button>
+        <button class="btn" style="font-size:12px" onClick=${()=>window.open(url,"_blank")}>${T("pp.open")}</button>
+      </div>
+    </div>`:null}
+
+    <button class="btn" style=${{width:"100%",marginBottom:"8px"}} onClick=${()=>setOpen(!open)}>
+      ${open? T("pp.collapse") : T("pp.edit")}
+    </button>
+
+    ${open? html`<div>
+      ${field("procedure_name","pp.procedure")}
+      ${field("procedure_date","pp.date","date")}
+      ${field("anesthesia","pp.anesthesia")}
+      ${field("emergency_contact","pp.emergency")}
+      <div class="pf-row" style=${{alignItems:"center"}}>
+        <span class="k">${T("pp.contentLang")}</span>
+        <select value=${form.content_language} disabled=${busy} style="max-width:150px;font-size:12.5px"
+          onChange=${(e)=>setForm({...form,content_language:e.target.value})}>
+          ${PASSPORT_LANGS.map((l)=> html`<option key=${l} value=${l}>${l.toUpperCase()}</option>`)}
+        </select>
+      </div>
+      <div style="font-size:11px;color:var(--ink-3);margin:2px 0 10px;line-height:1.4">${T("pp.contentLangHint")}</div>
+
+      <div style="font-size:12px;font-weight:600;margin-top:12px">${T("pp.implants")}</div>
+      <div style="font-size:11px;color:var(--ink-3);line-height:1.4">${T("pp.implantsHint")}</div>
+      <${RowList} rows=${form.implants} cols=${IMPLANT_COLS} busy=${busy}
+        addLabel="pp.addImplant" onChange=${(v)=>setForm({...form,implants:v})}/>
+
+      <div style="font-size:12px;font-weight:600;margin-top:14px">${T("pp.meds")}</div>
+      <${RowList} rows=${form.medications} cols=${MED_COLS} busy=${busy}
+        addLabel="pp.addMed" onChange=${(v)=>setForm({...form,medications:v})}/>
+
+      <div style="font-size:12px;font-weight:600;margin-top:14px">${T("pp.warnings")}</div>
+      <textarea class="note-input" placeholder=${T("pp.warningsPlaceholder")} value=${form.warning_signs} disabled=${busy}
+        onInput=${(e)=>setForm({...form,warning_signs:e.target.value})}></textarea>
+
+      <div style="font-size:12px;font-weight:600;margin-top:10px">${T("pp.aftercare")}</div>
+      <textarea class="note-input" placeholder=${T("pp.aftercarePlaceholder")} value=${form.aftercare} disabled=${busy}
+        onInput=${(e)=>setForm({...form,aftercare:e.target.value})}></textarea>
+
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn" style="flex:1" disabled=${busy} onClick=${save}>${T("pp.save")}</button>
+        ${live
+          ? html`<button class="btn" style="flex:1;color:var(--alert)" disabled=${busy} onClick=${revoke}>${T("pp.revokeBtn")}</button>`
+          : html`<button class="btn" style="flex:1" disabled=${busy||!ready} title=${ready?"":T("pp.needFields")} onClick=${issue}>${T("pp.issue")}</button>`}
+      </div>
+      ${!ready && !live? html`<div style="font-size:11px;color:var(--brass);margin-top:6px;line-height:1.4">${T("pp.needFields")}</div>`:null}
+    </div>`:null}
   </div>`;
 }
 

@@ -7,6 +7,7 @@ import { computeAiCostFromTotals } from '../services/aiCost.js';
 import {
   computeComplianceScore, COMPLIANCE_KINDS, COMPLIANCE_STATUSES, OUTCOME_STATUSES,
 } from '../services/compliance.js';
+import { isCapiConfigured } from '../services/metaCapi.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -157,7 +158,7 @@ export async function applyLeadSignal(leadId, meta, client = pool) {
   const score = Number.isFinite(lead.score) ? lead.score : null;
   const handover = Boolean(meta.handover?.needed);
 
-  await client.query(
+  const q = await client.query(
     `UPDATE leads SET
        name               = COALESCE(name, $2),
        country            = COALESCE($3, country),
@@ -174,7 +175,8 @@ export async function applyLeadSignal(leadId, meta, client = pool) {
                               ELSE status
                             END,
        updated_at = now()
-     WHERE id = $1`,
+     WHERE id = $1
+     RETURNING status`,
     [
       leadId,
       lead.name || null,
@@ -191,6 +193,18 @@ export async function applyLeadSignal(leadId, meta, client = pool) {
 
   if (handover) {
     await markConversationEscalated(leadId, { reason: meta.handover.reason, urgent: meta.handover?.urgent }, client);
+  }
+
+  // Lead nitelikli hâle geldi → Meta'ya bildir. dedup_key lead başına tek
+  // olduğu için hasta kaç kez yeniden puanlanırsa puanlansın olay bir kez
+  // gider. Aynı transaction'ın client'ı ile yazılıyor: konuşma geri alınırsa
+  // dönüşüm de geri alınır.
+  const newStatus = q.rows[0] ? q.rows[0].status : null;
+  if (newStatus && ['hot', 'handed_over', 'booked'].includes(newStatus)) {
+    await enqueueConversionEvent(
+      { leadId, eventName: 'QualifiedLead', dedupKey: `qualified:${leadId}` },
+      client,
+    ).catch((e) => console.error('[capi] QualifiedLead kuyruğa yazılamadı:', e.message));
   }
 }
 
@@ -531,6 +545,14 @@ export async function attachLeadAttribution(leadId, attribution = {}) {
     [leadId, campaignQ.rows[0]?.id || null, sourceId || null, sourceType || null,
      sourceUrl || null, headline || null, ctwaClid || null],
   );
+  // İlk temas gerçekten bize aitse (null değilse) Meta'ya "lead geldi" de.
+  // Burada gönderilmiyor, kuyruğa yazılıyor: webhook'un gecikmesi hastanın
+  // ilk mesajına verilecek cevabı bekletemez.
+  if (q.rows[0]) {
+    await enqueueConversionEvent({
+      leadId, eventName: 'LeadSubmitted', dedupKey: `lead:${leadId}`,
+    }).catch((e) => console.error('[capi] LeadSubmitted kuyruğa yazılamadı:', e.message));
+  }
   return q.rows[0] || null; // null = already attributed; the first touch stands
 }
 
@@ -895,6 +917,17 @@ export async function updatePayment(paymentId, { status, reminder }) {
     vals,
   );
   if (!q.rows[0]) throw new Error('payment not found');
+  // Panelden elle "ödendi" işaretleme de gerçek bir dönüşümdür — kliniklerin
+  // çoğu havaleyi böyle kapatıyor. dedup_key gateway yolundakiyle AYNI
+  // (`purchase:<payment_id>`), yani önce webhook sonra elle işaretlense bile
+  // Meta'ya tek Purchase gider.
+  if (status === 'paid') {
+    const row = q.rows[0];
+    await enqueueConversionEvent({
+      leadId: row.lead_id, eventName: 'Purchase', dedupKey: `purchase:${row.id}`,
+      value: row.amount, currency: row.currency,
+    }).catch((e) => console.error('[capi] elle ödeme kuyruğa yazılamadı:', e.message));
+  }
   return q.rows[0];
 }
 
@@ -3269,5 +3302,135 @@ export async function getComplianceSnapshot({ branchId } = {}) {
       postop: postopQ.rows[0],
       response,
     },
+  };
+}
+
+// ── Meta Conversions API kuyruğu ───────────────────────────────────────────
+// Olay ÜRETİMİ ile GÖNDERİMİ ayrıdır. Üretim, olayın gerçekleştiği anda
+// (ödeme onayı, lead girişi) satır yazar ve biter — ağ beklemez, çünkü bir
+// ödeme webhook'u Meta yavaşladı diye zaman aşımına uğrayamaz. Gönderimi
+// zamanlayıcı yapar ve başarısızlığı kaydeder.
+
+// `client`: çağıran bir transaction içindeyse onu geçsin. Pool'u kullanmak,
+// transaction geri alındığında gerçekleşmemiş bir dönüşümü kuyrukta bırakırdı.
+export async function enqueueConversionEvent({ leadId, eventName, dedupKey, value, currency, occurredAt } = {}, client = pool) {
+  if (!eventName || !dedupKey) throw new Error('enqueueConversionEvent: eventName ve dedupKey zorunlu');
+  const clinicId = await getDefaultClinicId();
+  // ON CONFLICT DO NOTHING tek savunma hattı: aynı ödeme iki kez bildirilse
+  // de ikinci satır hiç oluşmaz, yani Purchase iki kez gidemez.
+  const q = await client.query(
+    `INSERT INTO conversion_events (clinic_id, lead_id, event_name, dedup_key, value, currency, occurred_at)
+     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, now()))
+     ON CONFLICT (clinic_id, dedup_key) DO NOTHING
+     RETURNING id`,
+    [clinicId, leadId || null, eventName, dedupKey,
+      value == null ? null : Number(value),
+      currency ? String(currency).toUpperCase().slice(0, 3) : null,
+      occurredAt || null],
+  );
+  return q.rows[0] ? q.rows[0].id : null; // null = zaten kuyruktaydı
+}
+
+// FOR UPDATE SKIP LOCKED: yerel setInterval ile Vercel Cron aynı anda
+// çalışabilir (scheduler.js'in başındaki nota bakın). Bu olmadan ikisi aynı
+// satırı alıp Meta'ya iki kez gönderirdi — dedup_key kuyruğa ikinci SATIRI
+// engeller, aynı satırın iki kez GÖNDERİLMESİNİ değil.
+export async function claimPendingConversionEvents(limit = 20, maxAttempts = 4) {
+  const q = await pool.query(
+    `UPDATE conversion_events e
+        SET attempts = e.attempts + 1, updated_at = now()
+       FROM (
+         SELECT id FROM conversion_events
+          WHERE status = 'pending' AND attempts < $2
+          ORDER BY occurred_at
+          LIMIT $1
+          FOR UPDATE SKIP LOCKED
+       ) c
+      WHERE e.id = c.id
+      RETURNING e.id, e.lead_id, e.event_name, e.value, e.currency, e.occurred_at, e.attempts,
+                (SELECT row_to_json(l) FROM (
+                   SELECT source, external_id, ctwa_clid FROM leads WHERE id = e.lead_id
+                 ) l) AS lead`,
+    [limit, maxAttempts],
+  );
+  return q.rows;
+}
+
+export async function markConversionEventResult(id, { status, error, payload, skipReason, channel } = {}) {
+  const q = await pool.query(
+    `UPDATE conversion_events SET
+       status      = $2,
+       last_error  = $3,
+       payload     = COALESCE($4::jsonb, payload),
+       skip_reason = $5,
+       channel     = COALESCE($6, channel),
+       sent_at     = CASE WHEN $2 = 'sent' THEN now() ELSE sent_at END,
+       updated_at  = now()
+     WHERE id = $1 RETURNING id, status`,
+    [id, status, error || null, payload ? JSON.stringify(payload) : null, skipReason || null, channel || null],
+  );
+  return q.rows[0] || null;
+}
+
+// Deneme hakkı bitmiş ama hâlâ 'pending' duran satırları kalıcı hataya çevirir
+// ki panelde "beklemede" gibi görünüp sonsuza kadar orada kalmasınlar.
+export async function expireExhaustedConversionEvents(maxAttempts = 4) {
+  const q = await pool.query(
+    `UPDATE conversion_events
+        SET status = 'failed', updated_at = now(),
+            last_error = COALESCE(last_error, 'deneme hakkı doldu')
+      WHERE status = 'pending' AND attempts >= $1
+      RETURNING id`,
+    [maxAttempts],
+  );
+  return q.rowCount;
+}
+
+export async function getConversionEventStats({ branchId } = {}) {
+  const clinicId = await getDefaultClinicId();
+  const scope = normalizeUuid(branchId);
+  const [totals, reasons, recent] = await Promise.all([
+    pool.query(
+      // Her kolon e. ile nitelenmeli: leads de status taşıyor ve LEFT JOIN
+      // sonrası çıplak `status` belirsiz (42702) — sorgu çalışmıyordu.
+      `SELECT e.status, count(*)::int AS n,
+              sum(e.value) FILTER (WHERE e.event_name = 'Purchase' AND e.status = 'sent') AS sent_value
+         FROM conversion_events e
+         LEFT JOIN leads l ON l.id = e.lead_id
+        WHERE e.clinic_id = $1 AND ($2::uuid IS NULL OR l.branch_id = $2)
+        GROUP BY e.status`,
+      [clinicId, scope],
+    ),
+    // Atlanan olayların NEDENLERİ. Atfetmenin nerede koptuğunu söyleyen tek
+    // liste bu: "ctwa_clid yok" çoksa reklamlar tıklama kimliği taşımıyordur.
+    pool.query(
+      `SELECT e.skip_reason, count(*)::int AS n
+         FROM conversion_events e
+         LEFT JOIN leads l ON l.id = e.lead_id
+        WHERE e.clinic_id = $1 AND e.status = 'skipped' AND e.skip_reason IS NOT NULL
+          AND ($2::uuid IS NULL OR l.branch_id = $2)
+        GROUP BY e.skip_reason ORDER BY n DESC LIMIT 6`,
+      [clinicId, scope],
+    ),
+    pool.query(
+      `SELECT e.event_name, e.status, e.channel, e.value, e.currency, e.skip_reason,
+              e.last_error, e.occurred_at, l.name AS lead_name
+         FROM conversion_events e
+         LEFT JOIN leads l ON l.id = e.lead_id
+        WHERE e.clinic_id = $1 AND ($2::uuid IS NULL OR l.branch_id = $2)
+        ORDER BY e.occurred_at DESC LIMIT 12`,
+      [clinicId, scope],
+    ),
+  ]);
+  const by = Object.fromEntries(totals.rows.map((r) => [r.status, r.n]));
+  return {
+    configured: isCapiConfigured(),
+    pending: by.pending || 0,
+    sent: by.sent || 0,
+    failed: by.failed || 0,
+    skipped: by.skipped || 0,
+    sent_purchase_value: totals.rows.reduce((s, r) => s + Number(r.sent_value || 0), 0) || 0,
+    skip_reasons: reasons.rows,
+    recent: recent.rows,
   };
 }

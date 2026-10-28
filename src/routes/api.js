@@ -19,6 +19,7 @@ import {
   upsertComplianceRecord,
   setLeadOutcome,
   markOperatedIfUnset,
+  getConversionEventStats,
   getStats,
   listConversations,
   getHandoverQueue,
@@ -769,6 +770,12 @@ apiRouter.get('/campaigns/performance', h(async (req, res) => {
 
 // Klinik Risk & Uyum Skoru. Tek GET; hesabın tamamı
 // services/compliance.js içinde ve "veri yok"u 0 puana çevirmiyor.
+// Meta Conversions API kuyruğunun durumu. Asıl değeri "kaç gitti" değil,
+// "kaç gitmedi ve NEDEN" — atfetmenin nerede koptuğunu söyleyen tek liste.
+apiRouter.get('/capi', h(async (req, res) => {
+  res.json(await getConversionEventStats({ branchId: normalizeBranchId(req.query.branch_id) }));
+}));
+
 apiRouter.get('/compliance', h(async (req, res) => {
   res.json(await getComplianceSnapshot({ branchId: normalizeBranchId(req.query.branch_id) }));
 }));

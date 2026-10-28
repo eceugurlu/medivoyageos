@@ -8,6 +8,7 @@ import {
   computeComplianceScore, COMPLIANCE_KINDS, COMPLIANCE_STATUSES, OUTCOME_STATUSES,
 } from '../services/compliance.js';
 import { isCapiConfigured } from '../services/metaCapi.js';
+import { summarizeProbes, CHANNELS } from '../services/benchmark.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -3565,4 +3566,78 @@ export async function getPassportByToken(token) {
     [token],
   );
   return q.rows[0] || null;
+}
+
+// ── Rakip cevap süresi araştırması ─────────────────────────────────────────
+// Hesabın tamamı services/benchmark.js içinde, saf fonksiyon. Buradaki tek iş
+// satırları getirmek ve kendi ölçümümüzü (getResponseTimes) yanına koymak.
+
+export async function addBenchmarkProbe(fields = {}) {
+  const clinicId = await getDefaultClinicId();
+  if (!CHANNELS.includes(fields.channel)) throw new Error(`Unknown channel: ${fields.channel}`);
+  const label = String(fields.label || '').trim();
+  if (!label) throw new Error('label is required');
+  const sentAt = fields.sent_at ? new Date(fields.sent_at) : null;
+  if (!sentAt || Number.isNaN(sentAt.getTime())) throw new Error('sent_at is required');
+  const replyAt = fields.first_reply_at ? new Date(fields.first_reply_at) : null;
+  if (replyAt && Number.isNaN(replyAt.getTime())) throw new Error('first_reply_at is invalid');
+  if (replyAt && replyAt < sentAt) throw new Error('first_reply_at cannot be before sent_at');
+
+  const q = await pool.query(
+    `INSERT INTO benchmark_probes (clinic_id, label, channel, city, treatment, language, sent_at, first_reply_at, note)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     RETURNING id, label, channel, city, treatment, language, sent_at, first_reply_at, note`,
+    [clinicId, label.slice(0, 120), fields.channel,
+      fields.city || null, fields.treatment || null, fields.language || null,
+      sentAt.toISOString(), replyAt ? replyAt.toISOString() : null,
+      fields.note ? String(fields.note).slice(0, 500) : null],
+  );
+  return q.rows[0];
+}
+
+// Cevap sonradan gelir: ölçüm önce cevapsız kaydedilir, cevap düşünce
+// işaretlenir. Ayrı bir uç olması, "gönderdim" ile "cevap geldi" anlarının
+// gerçekten ayrı iki an olmasından.
+export async function setBenchmarkReply(probeId, firstReplyAt) {
+  const reply = firstReplyAt ? new Date(firstReplyAt) : null;
+  if (firstReplyAt && (!reply || Number.isNaN(reply.getTime()))) throw new Error('first_reply_at is invalid');
+  const q = await pool.query(
+    `UPDATE benchmark_probes SET first_reply_at = $2, updated_at = now()
+      WHERE id = $1 AND ($2::timestamptz IS NULL OR $2::timestamptz >= sent_at)
+      RETURNING id, label, sent_at, first_reply_at`,
+    [probeId, reply ? reply.toISOString() : null],
+  );
+  if (!q.rows[0]) {
+    const exists = await pool.query(`SELECT 1 FROM benchmark_probes WHERE id = $1`, [probeId]);
+    throw new Error(exists.rows[0] ? 'first_reply_at cannot be before sent_at' : 'probe not found');
+  }
+  return q.rows[0];
+}
+
+export async function deleteBenchmarkProbe(probeId) {
+  const q = await pool.query(`DELETE FROM benchmark_probes WHERE id = $1 RETURNING id`, [probeId]);
+  if (!q.rows[0]) throw new Error('probe not found');
+  return q.rows[0];
+}
+
+export async function listBenchmarkProbes() {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `SELECT id, label, channel, city, treatment, language, sent_at, first_reply_at, note
+       FROM benchmark_probes WHERE clinic_id = $1 ORDER BY sent_at DESC`,
+    [clinicId],
+  );
+  return q.rows;
+}
+
+export async function getBenchmarkStats() {
+  const [probes, ours] = await Promise.all([listBenchmarkProbes(), getResponseTimes()]);
+  return {
+    ...summarizeProbes(probes, {
+      now: new Date(),
+      ourMedianSeconds: ours.ai_median_seconds,
+      ourSamples: ours.ai_samples,
+    }),
+    probes,
+  };
 }

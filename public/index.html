@@ -645,6 +645,12 @@
        sağdaki sütun ekranın dışında kalıyordu. Grid şablonu bileşende satır
        içi stil olduğu için !important yük taşıyor. */
     .comp-cols{grid-template-columns:1fr!important;gap:22px!important}
+    .bm-cols{grid-template-columns:1fr!important;gap:18px!important}
+    /* Ölçüm formunun iki sütunu da tek sütuna düşer. datetime-local alanları
+       tarayıcıda geniş bir asgari genişlik taşıyor; yan yana bırakılırsa
+       sayfa yatay kayıyordu (ölçerek değil, 400px'te bakarak bulundu). */
+    .bm-frow{grid-template-columns:1fr!important}
+    .bm-frow > *{min-width:0}
   }
 </style>
 </head>
@@ -862,6 +868,27 @@ const I18N = {
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
     "nav.compliance":"Risk & Compliance",
+    "nav.benchmark":"Response Benchmark",
+    "bm.title":"Competitor response benchmark","bm.sub":"Our own field measurement: how long clinics take to answer a patient message. No published sector average exists, so this record creates one — and puts it next to what our own system measures. Clinic names are never stored.",
+    "bm.sectorMedian":"Sector median","bm.iqr":"middle half","bm.needMore":"not enough probes yet",
+    "bm.noReply":"Never answered","bm.hoursNoAnswer":"h with no reply",
+    "bm.nightRate":"Night reply rate","bm.turns":"turns",
+    "bm.ourMedian":"Our median","bm.ourNone":"No real traffic yet — demo data only.",
+    "bm.gap":"Gap","bm.gapFoot":"Both sides measured, not claimed.","bm.gapNone":"Needs both medians.",
+    "bm.thinTitle":"Not enough probes for a median.","bm.thinBody":"{have} of {n} settled probes. Counts and the distribution below are already correct; the median stays hidden until the sample supports it.",
+    "bm.chartTitle":"How long clinics take to answer","bm.chartSub":"Settled probes only — ones still inside the waiting window are excluded",
+    "bm.addTitle":"Log a probe","bm.addSub":"Use an anonymous label. Never store the clinic's real name.",
+    "bm.label":"Label (e.g. Clinic A)","bm.city":"City (optional)","bm.treatment":"Treatment (optional)",
+    "bm.sentAt":"Message sent","bm.replyAt":"First reply (leave blank if none)","bm.note":"Note (optional)",
+    "bm.add":"Add probe","bm.added":"Probe logged.",
+    "bm.ch.whatsapp":"WhatsApp","bm.ch.instagram":"Instagram","bm.ch.web_form":"Web form","bm.ch.phone":"Phone","bm.ch.email":"E-mail",
+    "bm.byChannel":"By channel","bm.channel":"Channel","bm.sent":"Probes","bm.replied":"Answered","bm.rate":"Reply rate","bm.median":"Median",
+    "bm.thin":"thin","bm.thinChannel":"Below the sample floor a channel median is noise — the counts are still exact.",
+    "bm.probes":"Probes","bm.probesSub":"Mark a reply the moment it arrives; the clock runs from the message you sent.",
+    "bm.none":"No probes yet. Log the first one on the right.",
+    "bm.st.none":"no reply","bm.st.pending":"waiting",
+    "bm.markReplied":"Replied now","bm.marked":"Reply time recorded.","bm.delete":"Delete","bm.deleted":"Probe deleted.",
+    "bm.confirmDelete":"Delete this probe? It will drop out of every figure on this screen.",
     "pp.title":"Outcome Passport","pp.live":"live","pp.draft":"draft","pp.revokedBadge":"withdrawn",
     "pp.hint":"The record the patient carries home — what was done, which implant, which medication — for whichever doctor treats them next. Saving is not publishing: the link only goes live when you issue it.",
     "pp.edit":"Edit passport","pp.collapse":"Collapse",
@@ -1157,6 +1184,27 @@ const I18N = {
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
     "nav.compliance":"Risk & Uyum",
+    "nav.benchmark":"Rakip Kıyaslama",
+    "bm.title":"Rakip cevap süresi araştırması","bm.sub":"Kendi saha ölçümümüz: klinikler bir hasta mesajına kaç dakikada cevap veriyor. Sektörde yayınlanmış bir ortalama yok, bu kayıt onu üretiyor — ve kendi sistemimizin ölçtüğü sürenin yanına koyuyor. Klinik isimleri saklanmıyor.",
+    "bm.sectorMedian":"Sektör medyanı","bm.iqr":"orta yarı","bm.needMore":"henüz yeterli ölçüm yok",
+    "bm.noReply":"Hiç cevap vermeyen","bm.hoursNoAnswer":"saat cevapsız",
+    "bm.nightRate":"Gece cevap oranı","bm.turns":"tur",
+    "bm.ourMedian":"Bizim medyanımız","bm.ourNone":"Henüz gerçek trafik yok — veritabanında demo verisi var.",
+    "bm.gap":"Fark","bm.gapFoot":"İki taraf da ölçüldü, iddia değil.","bm.gapNone":"İki medyan da gerekir.",
+    "bm.thinTitle":"Medyan için yeterli ölçüm yok.","bm.thinBody":"Sonucu belli {have} ölçüm var, {n} gerekiyor. Aşağıdaki sayılar ve dağılım şimdiden doğru; medyan, örneklem taşıyana kadar gizli kalıyor.",
+    "bm.chartTitle":"Klinikler kaç dakikada cevap veriyor","bm.chartSub":"Yalnızca sonucu belli ölçümler — bekleme penceresi dolmamışlar hariç",
+    "bm.addTitle":"Ölçüm ekle","bm.addSub":"Anonim etiket kullan. Kliniğin gerçek adını asla kaydetme.",
+    "bm.label":"Etiket (ör. Klinik A)","bm.city":"Şehir (isteğe bağlı)","bm.treatment":"Tedavi (isteğe bağlı)",
+    "bm.sentAt":"Mesaj gönderildi","bm.replyAt":"İlk cevap (yoksa boş bırak)","bm.note":"Not (isteğe bağlı)",
+    "bm.add":"Ölçümü ekle","bm.added":"Ölçüm kaydedildi.",
+    "bm.ch.whatsapp":"WhatsApp","bm.ch.instagram":"Instagram","bm.ch.web_form":"Web formu","bm.ch.phone":"Telefon","bm.ch.email":"E-posta",
+    "bm.byChannel":"Kanala göre","bm.channel":"Kanal","bm.sent":"Ölçüm","bm.replied":"Cevaplayan","bm.rate":"Cevap oranı","bm.median":"Medyan",
+    "bm.thin":"az veri","bm.thinChannel":"Örneklem tabanının altında kanal medyanı gürültüdür — sayılar yine kesin.",
+    "bm.probes":"Ölçümler","bm.probesSub":"Cevap gelir gelmez işaretle; saat senin gönderdiğin mesajdan işliyor.",
+    "bm.none":"Henüz ölçüm yok. İlkini sağdaki formdan ekle.",
+    "bm.st.none":"cevap yok","bm.st.pending":"bekliyor",
+    "bm.markReplied":"Şimdi cevapladı","bm.marked":"Cevap zamanı kaydedildi.","bm.delete":"Sil","bm.deleted":"Ölçüm silindi.",
+    "bm.confirmDelete":"Bu ölçüm silinsin mi? Bu ekrandaki her rakamdan düşer.",
     "pp.title":"Sonuç Pasaportu","pp.live":"yayında","pp.draft":"taslak","pp.revokedBadge":"geri çekildi",
     "pp.hint":"Hastanın yanında götürdüğü kayıt — ne yapıldı, hangi implant, hangi ilaç — kendisini sonra tedavi edecek hekim için. Kaydetmek yayınlamak değildir: link ancak siz yayınlayınca canlıya çıkar.",
     "pp.edit":"Pasaportu düzenle","pp.collapse":"Kapat",
@@ -2789,6 +2837,229 @@ function Compliance(){
   </div>`;
 }
 
+// ── Rakip Cevap Süresi Araştırması ──────────────────────────────────────────
+//
+// Bu ekran ürün verisi göstermiyor: kurucunun kliniklere kendi attığı
+// mesajların kaydı. Sektörde yayınlanmış bir "ortalama cevap süresi" yok;
+// burada üretiliyor ve kendi ölçümümüzün yanına konuyor.
+//
+// Grafik tek seri ve SIRALI (zaman kovaları), o yüzden tek hue'nun açıktan
+// koyuya giden tonları kullanılıyor — kategorik palet değil. "Hiç cevap yok"
+// bir zaman aralığı değil, bir durum; o yüzden ayrı (uyarı) rengi hak ediyor.
+const BM_CHANNELS = ["whatsapp","instagram","web_form","phone","email"];
+
+const fmtDur = (min)=>{
+  if(min==null) return "–";
+  if(min < 1) return "<1 dk";
+  if(min < 60) return Math.round(min)+" dk";
+  const h = Math.floor(min/60), m = Math.round(min%60);
+  if(h < 24) return m? `${h} sa ${m} dk` : `${h} sa`;
+  return `${Math.floor(h/24)} gün ${h%24} sa`;
+};
+const fmtSec = (s)=> s==null? "–" : (s < 90 ? `${Math.round(s*10)/10} sn` : fmtDur(s/60));
+// datetime-local <-> ISO. Tarayıcı yerel saat veriyor; sunucuya ISO gidiyor.
+const toLocalInput = (d)=>{
+  const t = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return t.toISOString().slice(0,16);
+};
+
+function BenchmarkChart({ buckets, settled }){
+  const max = Math.max(1, ...buckets.map(b=>b.n));
+  return html`<div class="glass" style="padding:18px 20px">
+    <div style="font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">
+      ${T("bm.chartTitle")}
+    </div>
+    <div class="sub" style="margin:0 0 14px;font-size:12.5px">${T("bm.chartSub")} · n=${settled}</div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      ${buckets.map((b,i)=>{
+        const none = b.key==="none";
+        // Sıralı tonlama: kova uzadıkça koyulaşır. "Hiç cevap yok" sıralı
+        // ölçeğin parçası değil, ayrı durum rengi.
+        const alpha = 0.42 + (i/(buckets.length-2||1))*0.58;
+        return html`<div key=${b.key} style="display:grid;grid-template-columns:118px 1fr 92px;gap:11px;align-items:center">
+          <span style="font-size:12.5px;color:${none?"var(--alert)":"var(--ink-2)"};${none?"font-weight:600":""}">${b.label}</span>
+          <span style="display:block;height:17px;background:var(--rule);border-radius:4px;overflow:hidden">
+            <span style="display:block;height:100%;width:${Math.round((b.n/max)*100)}%;border-radius:4px;
+              background:${none?"var(--alert)":"var(--accent)"};${none?"":`opacity:${alpha}`}"></span>
+          </span>
+          <span style="font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums;text-align:right">
+            ${b.n}${b.share!=null? html`<span style="color:var(--ink-3)"> · %${b.share}</span>`:null}
+          </span>
+        </div>`;
+      })}
+    </div>
+  </div>`;
+}
+
+function ProbeForm({ onAdded }){
+  const blank=()=>({ label:"", channel:"whatsapp", city:"", treatment:"", language:"",
+                     sent_at: toLocalInput(new Date()), first_reply_at:"", note:"" });
+  const [f,setF]=useState(blank());
+  const [busy,setBusy]=useState(false);
+  const set=(k,v)=> setF({...f,[k]:v});
+  const save=async()=>{
+    setBusy(true);
+    try{
+      await api("/benchmark",{method:"POST",body:JSON.stringify({
+        ...f,
+        sent_at: new Date(f.sent_at).toISOString(),
+        first_reply_at: f.first_reply_at? new Date(f.first_reply_at).toISOString() : null,
+      })});
+      setF(blank()); showToast(T("bm.added")); await onAdded();
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(false); }
+  };
+  // Sınıf şart: bu satırlar satır içi grid ve telefonda tek sütuna düşmeleri
+  // gerekiyor. Özellikle iki datetime-local alanı yan yana 400px'e sığmıyor —
+  // tarayıcı onlara büyük bir asgari genişlik veriyor ve sayfa yana kayıyor.
+  const row="display:grid;grid-template-columns:1fr 1fr;gap:8px";
+  return html`<div class="glass" style="padding:16px 18px">
+    <div style="font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">${T("bm.addTitle")}</div>
+    <div class="sub" style="margin:0 0 12px;font-size:12.5px">${T("bm.addSub")}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="bm-frow" style=${row}>
+        <input value=${f.label} disabled=${busy} placeholder=${T("bm.label")} onInput=${(e)=>set("label",e.target.value)}/>
+        <select value=${f.channel} disabled=${busy} onChange=${(e)=>set("channel",e.target.value)}>
+          ${BM_CHANNELS.map((c)=> html`<option key=${c} value=${c}>${T("bm.ch."+c)}</option>`)}
+        </select>
+      </div>
+      <div class="bm-frow" style=${row}>
+        <input value=${f.city} disabled=${busy} placeholder=${T("bm.city")} onInput=${(e)=>set("city",e.target.value)}/>
+        <input value=${f.treatment} disabled=${busy} placeholder=${T("bm.treatment")} onInput=${(e)=>set("treatment",e.target.value)}/>
+      </div>
+      <div class="bm-frow" style=${row}>
+        <label style="font-size:11px;color:var(--ink-3);display:flex;flex-direction:column;gap:3px">${T("bm.sentAt")}
+          <input type="datetime-local" value=${f.sent_at} disabled=${busy} onInput=${(e)=>set("sent_at",e.target.value)}/></label>
+        <label style="font-size:11px;color:var(--ink-3);display:flex;flex-direction:column;gap:3px">${T("bm.replyAt")}
+          <input type="datetime-local" value=${f.first_reply_at} disabled=${busy} onInput=${(e)=>set("first_reply_at",e.target.value)}/></label>
+      </div>
+      <input value=${f.note} disabled=${busy} placeholder=${T("bm.note")} onInput=${(e)=>set("note",e.target.value)}/>
+      <button class="btn" disabled=${busy||!f.label.trim()||!f.sent_at} onClick=${save}>
+        ${busy? html`<${Spinner}/>` : T("bm.add")}
+      </button>
+    </div>
+  </div>`;
+}
+
+function Benchmark(){
+  const [d,setD]=useState(null);
+  const [err,setErr]=useState(null);
+  const [busy,setBusy]=useState("");
+  const load=()=> api("/benchmark").then(setD).catch(e=>setErr(e.message));
+  useEffect(()=>{ load(); },[]);
+
+  const act=async(id,fn)=>{ setBusy(id); try{ await fn(); await load(); }
+    catch(e){ showToast(e.message,"error"); } finally{ setBusy(""); } };
+  const markReplied=(p)=> act(p.id, async()=>{
+    await api("/benchmark/"+p.id,{method:"PUT",body:JSON.stringify({first_reply_at:new Date().toISOString()})});
+    showToast(T("bm.marked"));
+  });
+  const del=(p)=>{ if(!window.confirm(T("bm.confirmDelete"))) return;
+    act(p.id, async()=>{ await api("/benchmark/"+p.id,{method:"DELETE"}); showToast(T("bm.deleted")); }); };
+
+  if(err) return html`<div class="err">${err}</div>`;
+  if(!d) return loadingBox();
+
+  const s = d.sample;
+  const ours = d.ours;
+  const elapsedMin=(p)=> (Date.now() - new Date(p.sent_at).getTime())/60000;
+  const status=(p)=>{
+    if(p.first_reply_at) return {key:"replied", min:(new Date(p.first_reply_at)-new Date(p.sent_at))/60000};
+    return elapsedMin(p) >= s.cutoff_hours*60 ? {key:"none"} : {key:"pending"};
+  };
+
+  return html`<div>
+    <h1>${T("bm.title")}</h1>
+    <div class="sub">${T("bm.sub")}</div>
+
+    <div class="kpis">
+      <div class="glass kpi">
+        <span class="label">${T("bm.sectorMedian")}</span>
+        <span class="val">${s.enough? fmtDur(d.median_minutes) : "–"}</span>
+        <span class="foot">${s.enough
+          ? `${T("bm.iqr")} ${fmtDur(d.p25_minutes)} – ${fmtDur(d.p75_minutes)}`
+          : `${T("bm.needMore")} (${s.settled}/${s.min_sample})`}</span>
+      </div>
+      <div class="glass kpi">
+        <span class="label">${T("bm.noReply")}</span>
+        <span class="val ${d.no_reply_rate>=20?"alert":""}">${d.no_reply_rate==null? "–" : "%"+d.no_reply_rate}</span>
+        <span class="foot">${s.no_reply}/${s.settled} · ${s.cutoff_hours} ${T("bm.hoursNoAnswer")}</span>
+      </div>
+      <div class="glass kpi">
+        <span class="label">${T("bm.nightRate")}</span>
+        <span class="val ${d.night.reply_rate!=null&&d.night.reply_rate<30?"alert":""}">
+          ${d.night.reply_rate==null? "–" : "%"+d.night.reply_rate}</span>
+        <span class="foot">${d.night.replied}/${d.night.sent} · 23:00–07:00 TSİ</span>
+      </div>
+      <div class="glass kpi">
+        <span class="label">${T("bm.ourMedian")}</span>
+        <span class="val ${ours.median_seconds!=null?"cyan":""}">${fmtSec(ours.median_seconds)}</span>
+        <span class="foot">${ours.samples? `${ours.samples} ${T("bm.turns")}` : T("bm.ourNone")}</span>
+      </div>
+      <div class="glass kpi">
+        <span class="label">${T("bm.gap")}</span>
+        <span class="val ${ours.times_faster?"mint":""}">${ours.times_faster? ours.times_faster.toLocaleString()+"×" : "–"}</span>
+        <span class="foot">${ours.times_faster? T("bm.gapFoot") : T("bm.gapNone")}</span>
+      </div>
+    </div>
+
+    ${!s.enough? html`<div class="glass" style="padding:12px 16px;margin-bottom:20px;background:var(--brass-wash);border-color:var(--brass)">
+      <div style="font-size:13px;color:var(--ink);line-height:1.5">
+        <b>${T("bm.thinTitle")}</b> ${T("bm.thinBody").replace("{n}", s.min_sample).replace("{have}", s.settled)}
+      </div>
+    </div>`:null}
+
+    <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:20px;margin-bottom:24px" class="bm-cols">
+      <${BenchmarkChart} buckets=${d.buckets} settled=${s.settled}/>
+      <${ProbeForm} onAdded=${load}/>
+    </div>
+
+    ${d.by_channel.length? html`<div style="margin-bottom:24px">
+      <div class="section-title">${T("bm.byChannel")}</div>
+      <div class="glass" style="padding:4px 0">
+        <div class="rowgrid rowhead" style="display:grid;grid-template-columns:1.2fr .7fr .7fr .8fr .9fr;gap:8px;padding:11px 18px;font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--rule)">
+          <span>${T("bm.channel")}</span><span>${T("bm.sent")}</span><span>${T("bm.replied")}</span>
+          <span>${T("bm.rate")}</span><span>${T("bm.median")}</span>
+        </div>
+        ${d.by_channel.map((c)=> html`<div key=${c.channel} class="rowgrid" style="display:grid;grid-template-columns:1.2fr .7fr .7fr .8fr .9fr;gap:8px;padding:12px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+          <span style="font-weight:600">${T("bm.ch."+c.channel)}</span>
+          <span>${c.sent}</span><span>${c.replied}</span>
+          <span>${c.reply_rate==null? "–" : "%"+c.reply_rate}</span>
+          <span>${c.median_minutes==null
+            ? html`<span class="badge" title=${T("bm.thinChannel")}>${T("bm.thin")}</span>`
+            : fmtDur(c.median_minutes)}</span>
+        </div>`)}
+      </div>
+    </div>`:null}
+
+    <div class="section-title">${T("bm.probes")} <span class="badge">${d.probes.length}</span></div>
+    <div class="sub" style="margin:-4px 0 12px">${T("bm.probesSub")}</div>
+    ${d.probes.length===0
+      ? emptyBox(T("bm.none"))
+      : html`<div class="glass" style="padding:4px 0">
+        ${d.probes.map((p)=>{
+          const st = status(p);
+          return html`<div key=${p.id} class="rowgrid" style="display:grid;grid-template-columns:1.3fr .9fr 1fr 1.1fr auto;gap:8px;padding:11px 18px;font-size:13.5px;border-bottom:1px solid var(--rule);align-items:center">
+            <span style="font-weight:600">${p.label}${p.city? html`<span style="color:var(--ink-3);font-weight:400"> · ${p.city}</span>`:null}</span>
+            <span style="color:var(--ink-2)">${T("bm.ch."+p.channel)}</span>
+            <span style="color:var(--ink-3);font-size:12.5px">${fmtTime(p.sent_at)}</span>
+            <span>
+              ${st.key==="replied"? html`<span class="badge human">${fmtDur(st.min)}</span>`
+                : st.key==="none"? html`<span class="badge hot">${T("bm.st.none")}</span>`
+                : html`<span class="badge">${T("bm.st.pending")} · ${fmtDur(elapsedMin(p))}</span>`}
+            </span>
+            <span class="rowactions" style="display:flex;gap:6px;justify-content:flex-end">
+              ${!p.first_reply_at? html`<button class="btn" style="font-size:11.5px;padding:5px 10px" disabled=${busy===p.id}
+                onClick=${()=>markReplied(p)}>${T("bm.markReplied")}</button>`:null}
+              <button class="btn" style="font-size:11.5px;padding:5px 10px;color:var(--alert)" disabled=${busy===p.id}
+                onClick=${()=>del(p)}>${T("bm.delete")}</button>
+            </span>
+          </div>`;
+        })}
+      </div>`}
+  </div>`;
+}
+
 function Campaigns({ templates, reloadShared }){
   const [tpl,setTpl]=useState(null);
   const [segment,setSegment]=useState("past");
@@ -3678,14 +3949,15 @@ const NAV_META={
   doctors:{label:"nav.doctors",icon:"stethoscope"},
   branches:{label:"nav.branches",icon:"grid"},
   compliance:{label:"nav.compliance",icon:"shield"},
+  benchmark:{label:"nav.benchmark",icon:"stopwatch"},
 };
 const NAV_GROUPS=[
   ["group.overview",["command","inbox","compliance"]],
-  ["group.growth",["analytics","campaigns","widget","studio","partners"]],
+  ["group.growth",["analytics","benchmark","campaigns","widget","studio","partners"]],
   ["group.team",["consultants","matching","doctors","branches"]],
   ["group.operations",["devices","logistics","postop","reviews","workflow"]],
 ];
-const ENABLED = new Set(["command","inbox","compliance","analytics","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
+const ENABLED = new Set(["command","inbox","compliance","analytics","benchmark","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
 
 const ICONS={
   grid:'<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
@@ -3709,6 +3981,7 @@ const ICONS={
   handshake:'<path d="M3 11l4-4 4 3.5-2 2"/><path d="M21 11l-4-4-6 5.5a1.4 1.4 0 0 0 2 2L15 12l2 2a1.4 1.4 0 0 0 2-2"/><path d="M7 10.5L3 14v3h3"/><path d="M17 7l4 3.5V14l-3 3"/>',
   stethoscope:'<path d="M5 3v6a4 4 0 0 0 8 0V3"/><path d="M9 13v3a5 5 0 0 0 10 0v-2"/><circle cx="19" cy="11" r="2"/>',
   shield:'<path d="M12 3l8 3v6c0 4.4-3.1 7.9-8 9-4.9-1.1-8-4.6-8-9V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
+  stopwatch:'<circle cx="12" cy="13" r="8"/><path d="M12 13V9"/><path d="M9 2h6"/><path d="M19 6l1.5-1.5"/>',
 };
 function Icon({name}){
   return html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML=${{__html:ICONS[name]||""}} />`;
@@ -3845,6 +4118,7 @@ function App(){
         <${ErrorBoundary} key=${"eb-"+tab}>
         ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} roi=${roi} onOpenLead=${openLead} />`
           : tab==="compliance" ? html`<${Compliance} />`
+          : tab==="benchmark" ? html`<${Benchmark} />`
           : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} convTotal=${convTotal} onLoadMore=${loadMoreConversations} loadingMore=${loadingMore} branches=${branches} partners=${partners} doctors=${doctors} />`
           : tab==="analytics" ? html`<${Analytics} analytics=${analytics} profitability=${profitability} />`
           : tab==="campaigns" ? html`<${Campaigns} templates=${templates} reloadShared=${reloadShared} />`

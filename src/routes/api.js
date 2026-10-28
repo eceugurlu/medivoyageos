@@ -15,6 +15,9 @@ import { rateLimit } from '../middleware/rateLimit.js';
 import {
   attachLeadAttribution,
   getCampaignPerformance,
+  getComplianceSnapshot,
+  upsertComplianceRecord,
+  setLeadOutcome,
   getStats,
   listConversations,
   getHandoverQueue,
@@ -761,6 +764,43 @@ apiRouter.post('/conversations/:leadId/reply', h(async (req, res) => {
 // registered campaigns should not pay that cost on every dashboard load.
 apiRouter.get('/campaigns/performance', h(async (req, res) => {
   res.json(await getCampaignPerformance({ branchId: normalizeBranchId(req.query.branch_id) }));
+}));
+
+// Klinik Risk & Uyum Skoru. Tek GET; hesabın tamamı
+// services/compliance.js içinde ve "veri yok"u 0 puana çevirmiyor.
+apiRouter.get('/compliance', h(async (req, res) => {
+  res.json(await getComplianceSnapshot({ branchId: normalizeBranchId(req.query.branch_id) }));
+}));
+
+// Belge beyanı. verified_at bilerek yazılamaz — doğrulama panelden yapılmaz.
+apiRouter.put('/compliance/:kind', h(async (req, res) => {
+  const b = req.body || {};
+  try {
+    res.json(await upsertComplianceRecord(req.params.kind, {
+      status: b.status,
+      reference: b.reference, issuer: b.issuer,
+      valid_from: b.valid_from, valid_until: b.valid_until, note: b.note,
+    }));
+  } catch (err) {
+    // Bilinmeyen belge türü istemci hatasıdır, sunucu hatası değil.
+    if (/Unknown compliance kind/.test(err.message)) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+}));
+
+// Ameliyat sonucu. Underwriting verisinin tek giriş noktası.
+apiRouter.put('/conversations/:leadId/outcome', h(async (req, res) => {
+  const b = req.body || {};
+  try {
+    const row = await setLeadOutcome(req.params.leadId, {
+      operated_at: b.operated_at, outcome_status: b.outcome_status, outcome_note: b.outcome_note,
+    });
+    if (!row) return res.status(404).json({ error: 'Lead not found' });
+    res.json(row);
+  } catch (err) {
+    if (/Unknown outcome_status/.test(err.message)) return res.status(400).json({ error: err.message });
+    throw err;
+  }
 }));
 
 apiRouter.get('/analytics', h(async (req, res) => {

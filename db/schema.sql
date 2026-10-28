@@ -406,3 +406,41 @@ ALTER TABLE leads
   ADD COLUMN IF NOT EXISTS attributed_at    TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_leads_campaign ON leads (campaign_id) WHERE campaign_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_ad_source ON leads (ad_source_id) WHERE ad_source_id IS NOT NULL;
+
+-- ── Klinik Risk & Uyum Skoru (see 028_compliance_risk.sql) ─────────────────
+CREATE TABLE IF NOT EXISTS compliance_records (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id   UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL CHECK (kind IN (
+                'health_tourism_authorization', 'accreditation',
+                'complication_insurance', 'kvkk_registry', 'call_center_contract'
+              )),
+  status      TEXT NOT NULL DEFAULT 'missing'
+                CHECK (status IN ('missing','in_progress','valid','expired')),
+  reference   TEXT, issuer TEXT,
+  valid_from  DATE, valid_until DATE,
+  verified_at TIMESTAMPTZ,                       -- NULL = sadece klinik beyanı
+  note        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_compliance_clinic_kind
+  ON compliance_records (clinic_id, kind);
+
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS operated_at         DATE,
+  ADD COLUMN IF NOT EXISTS outcome_status      TEXT,
+  ADD COLUMN IF NOT EXISTS outcome_recorded_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS outcome_note        TEXT;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'leads_outcome_status_check') THEN
+    ALTER TABLE leads ADD CONSTRAINT leads_outcome_status_check
+      CHECK (outcome_status IS NULL OR outcome_status IN (
+        'recovering','recovered','complication','revision_needed','lost_contact'));
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_leads_operated ON leads (operated_at DESC)
+  WHERE operated_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_outcome ON leads (outcome_status)
+  WHERE outcome_status IS NOT NULL;

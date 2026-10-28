@@ -4,6 +4,9 @@ import { getProfile } from '../services/profile.js'; // draftQuoteFromLead() iç
 import { toEur, isRatesLive } from '../services/fx.js';
 import { config } from '../config.js';
 import { computeAiCostFromTotals } from '../services/aiCost.js';
+import {
+  computeComplianceScore, COMPLIANCE_KINDS, COMPLIANCE_STATUSES, OUTCOME_STATUSES,
+} from '../services/compliance.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -3010,4 +3013,241 @@ export async function finalizeCall(callId, {
   );
   if (!q.rows[0]) throw new Error('call not found');
   return q.rows[0];
+}
+
+// ── Klinik Risk & Uyum Skoru ───────────────────────────────────────────────
+// Skorun kendisi src/services/compliance.js içinde, saf fonksiyon. Buranın
+// tek işi o fonksiyonun girdisini gerçek veriden toplamak. Hiçbir oran burada
+// hesaplanmaz; pay ve payda ayrı ayrı gider, böylece "veri yok" ile "oran
+// sıfır" ayrımı tek yerde (motorda) verilir.
+
+// Serbest metin DATE kolonuna gidiyor: 'yakında' gibi bir değer Postgres'te
+// 22007 atar ve uç 500 döner. Aynı sınıf hatayı (bozuk girdi → 500 yerine 400)
+// bu turda bir kez daha ödemeyelim: sadece YYYY-MM-DD kabul edilir, gerisi
+// null sayılır — yani "tarih girilmemiş", ki motor bunu zaten biliyor.
+function isoDateOrNull(value) {
+  if (!value) return null;
+  const s = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00Z`);
+  // Takvim kontrolü: 2026-02-31 düzene uyar ama gerçek bir gün değil.
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s ? null : s;
+}
+
+export async function listComplianceRecords() {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    // DATE'i SQL'de metne çeviriyoruz. pg, DATE'i YEREL gece yarısına denk
+    // bir Date nesnesi olarak döndürüyor: '2027-03-01' → 2027-02-28T21:00Z.
+    // O nesne daysUntil()'e gidince son tarih bir gün kayıyordu — poliçenin
+    // dolduğu gün veya 31.12.2026 akreditasyon sayacı için kabul edilemez.
+    `SELECT kind, status, reference, issuer,
+            to_char(valid_from,  'YYYY-MM-DD') AS valid_from,
+            to_char(valid_until, 'YYYY-MM-DD') AS valid_until,
+            verified_at, note, updated_at
+       FROM compliance_records WHERE clinic_id = $1 ORDER BY kind`,
+    [clinicId],
+  );
+  return q.rows;
+}
+
+export async function upsertComplianceRecord(kind, fields = {}) {
+  if (!COMPLIANCE_KINDS.includes(kind)) throw new Error(`Unknown compliance kind: ${kind}`);
+  const status = COMPLIANCE_STATUSES.includes(fields.status) ? fields.status : 'missing';
+  const clinicId = await getDefaultClinicId();
+  // verified_at'i panel SET ETMEZ. Panelden giren her şey kliniğin beyanıdır;
+  // doğrulama (belgeyi gerçekten görmek) ayrı bir süreç. Beyanı doğrulama
+  // gibi göstermek, skorun tek değerli olduğu şeyi — güvenilirliğini — bitirir.
+  const q = await pool.query(
+    `INSERT INTO compliance_records (clinic_id, kind, status, reference, issuer, valid_from, valid_until, note)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (clinic_id, kind) DO UPDATE SET
+       status = EXCLUDED.status, reference = EXCLUDED.reference, issuer = EXCLUDED.issuer,
+       valid_from = EXCLUDED.valid_from, valid_until = EXCLUDED.valid_until,
+       note = EXCLUDED.note, updated_at = now()
+     RETURNING kind, status, reference, issuer,
+               to_char(valid_from,  'YYYY-MM-DD') AS valid_from,
+               to_char(valid_until, 'YYYY-MM-DD') AS valid_until,
+               verified_at, note, updated_at`,
+    [clinicId, kind, status,
+      fields.reference || null, fields.issuer || null,
+      isoDateOrNull(fields.valid_from), isoDateOrNull(fields.valid_until), fields.note || null],
+  );
+  return q.rows[0];
+}
+
+export async function setLeadOutcome(leadId, fields = {}) {
+  const outcome = fields.outcome_status == null || fields.outcome_status === ''
+    ? null
+    : (OUTCOME_STATUSES.includes(fields.outcome_status) ? fields.outcome_status : undefined);
+  if (outcome === undefined) throw new Error(`Unknown outcome_status: ${fields.outcome_status}`);
+  const q = await pool.query(
+    `UPDATE leads SET
+       operated_at         = COALESCE($2::date, operated_at),
+       outcome_status      = $3,
+       outcome_note        = $4,
+       outcome_recorded_at = CASE WHEN $3::text IS NULL THEN NULL ELSE now() END,
+       updated_at          = now()
+     WHERE id = $1
+     RETURNING id, to_char(operated_at, 'YYYY-MM-DD') AS operated_at,
+               outcome_status, outcome_note, outcome_recorded_at`,
+    [leadId, isoDateOrNull(fields.operated_at), outcome, fields.outcome_note || null],
+  );
+  return q.rows[0] || null;
+}
+
+// Hastanın mesajından cevaba kadar geçen süre.
+//
+// Her konuşmayı "tur"lara böler: bir tur = cevapsız hasta mesajları dizisi +
+// onu kapatan tek asistan mesajı. Süre, dizinin İLK mesajından ölçülür —
+// son mesajından ölçmek bizi haksız yere iyi gösterirdi; hastanın gerçek
+// bekleme süresi ilk mesajından başlar.
+//
+// is_ai 015'te geldiği için eski mesajlarda NULL. NULL = kaynağı bilinmiyor:
+// ne AI ne insan sayılır, ayrı raporlanır. Varsayıma yer yok.
+export async function getResponseTimes({ branchId } = {}) {
+  const clinicId = await getDefaultClinicId();
+  const scope = normalizeUuid(branchId);
+  const q = await pool.query(
+    `WITH tagged AS (
+       SELECT m.conversation_id, m.created_at, m.role, m.is_ai,
+              -- COALESCE şart: konuşmanın İLK satırında önceki satır yok ve
+              -- sum() 0 değil NULL döner. O NULL, hastanın ilk mesajını kendi
+              -- başına bir "tur"a düşürüp ölçümden atıyordu — ölçüm de
+              -- hastanın son mesajından başlıyor gibi görünüyordu (601 sn
+              -- yerine 1 sn). Testteki asıl soru buydu.
+              COALESCE(sum(CASE WHEN m.role = 'assistant' THEN 1 ELSE 0 END) OVER (
+                PARTITION BY m.conversation_id ORDER BY m.created_at, m.id
+                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+              ), 0) AS turn_no
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         JOIN leads l        ON l.id = c.lead_id
+        WHERE c.clinic_id = $1
+          AND ($2::uuid IS NULL OR l.branch_id = $2)
+     ),
+     turns AS (
+       SELECT conversation_id, turn_no,
+              min(created_at) FILTER (WHERE role = 'user')      AS asked_at,
+              min(created_at) FILTER (WHERE role = 'assistant') AS replied_at,
+              bool_or(is_ai)  FILTER (WHERE role = 'assistant') AS by_ai
+         FROM tagged
+        GROUP BY conversation_id, turn_no
+     ),
+     measured AS (
+       SELECT by_ai, EXTRACT(EPOCH FROM (replied_at - asked_at)) AS seconds
+         FROM turns
+        WHERE asked_at IS NOT NULL AND replied_at IS NOT NULL AND replied_at > asked_at
+     )
+     SELECT
+       count(*) FILTER (WHERE by_ai IS TRUE)::int  AS ai_samples,
+       count(*) FILTER (WHERE by_ai IS FALSE)::int AS human_samples,
+       count(*) FILTER (WHERE by_ai IS NULL)::int  AS unknown_samples,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY seconds) FILTER (WHERE by_ai IS TRUE)  AS ai_median_seconds,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY seconds) FILTER (WHERE by_ai IS FALSE) AS human_median_seconds
+     FROM measured`,
+    [clinicId, scope],
+  );
+  const r = q.rows[0] || {};
+  const round1 = (v) => (v == null ? null : Math.round(Number(v) * 10) / 10);
+  return {
+    ai_samples: Number(r.ai_samples || 0),
+    human_samples: Number(r.human_samples || 0),
+    unknown_samples: Number(r.unknown_samples || 0),
+    ai_median_seconds: round1(r.ai_median_seconds),
+    human_median_minutes: r.human_median_seconds == null ? null : Math.round(Number(r.human_median_seconds) / 6) / 10,
+  };
+}
+
+// Doktor bazlı sonuç kırılımı — underwriting'in asıl ilgilendiği tablo.
+// Oran HESAPLANMAZ: pay/payda gider, eşik kontrolü panelde tek yerde yapılır.
+export async function getOutcomesByDoctor({ branchId } = {}) {
+  const clinicId = await getDefaultClinicId();
+  const scope = normalizeUuid(branchId);
+  const q = await pool.query(
+    `SELECT d.id AS doctor_id, d.name, d.specialty,
+            count(*) FILTER (WHERE l.operated_at IS NOT NULL)::int AS operated,
+            count(*) FILTER (WHERE l.outcome_status IS NOT NULL)::int AS recorded,
+            count(*) FILTER (WHERE l.outcome_status = 'complication')::int AS complications,
+            count(*) FILTER (WHERE l.outcome_status = 'revision_needed')::int AS revisions,
+            count(*) FILTER (WHERE l.outcome_status = 'lost_contact')::int AS lost_contact
+       FROM doctors d
+       LEFT JOIN leads l ON l.doctor_id = d.id
+                        AND ($2::uuid IS NULL OR l.branch_id = $2)
+      WHERE d.clinic_id = $1
+      GROUP BY d.id, d.name, d.specialty
+      HAVING count(*) FILTER (WHERE l.operated_at IS NOT NULL) > 0
+      ORDER BY operated DESC, d.name`,
+    [clinicId, scope],
+  );
+  return q.rows;
+}
+
+export async function getComplianceSnapshot({ branchId } = {}) {
+  const clinicId = await getDefaultClinicId();
+  const scope = normalizeUuid(branchId);
+
+  const [records, consentQ, callsQ, outcomesQ, postopQ, response, byDoctor] = await Promise.all([
+    listComplianceRecords(),
+    pool.query(
+      `SELECT count(*)::int AS total, count(*) FILTER (WHERE consent)::int AS granted
+         FROM leads WHERE clinic_id = $1 AND ($2::uuid IS NULL OR branch_id = $2)`,
+      [clinicId, scope],
+    ),
+    pool.query(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (
+                WHERE lead_id IS NOT NULL AND status <> 'in_progress' AND outcome IS NOT NULL
+              )::int AS complete_logs,
+              count(DISTINCT date_part('hour', started_at))::int AS distinct_hours,
+              count(DISTINCT language) FILTER (WHERE language IS NOT NULL)::int AS distinct_languages
+         FROM calls WHERE clinic_id = $1 AND ($2::uuid IS NULL OR branch_id = $2)`,
+      [clinicId, scope],
+    ),
+    pool.query(
+      `SELECT count(*) FILTER (WHERE operated_at IS NOT NULL)::int AS operated,
+              count(*) FILTER (WHERE operated_at IS NOT NULL AND outcome_status IS NOT NULL)::int AS recorded,
+              count(*) FILTER (WHERE outcome_status = 'complication')::int AS complications,
+              count(*) FILTER (WHERE outcome_status = 'revision_needed')::int AS revisions,
+              count(*) FILTER (WHERE outcome_status = 'lost_contact')::int AS lost_contact
+         FROM leads WHERE clinic_id = $1 AND ($2::uuid IS NULL OR branch_id = $2)`,
+      [clinicId, scope],
+    ),
+    // Vadesi gelmemiş görev ne tamamlanmış ne gecikmiş sayılır — oranın
+    // paydasına girerse, yeni ameliyatlar kliniğin takip skorunu düşürür.
+    pool.query(
+      `SELECT count(*) FILTER (WHERE t.status = 'sent')::int AS completed,
+              count(*) FILTER (WHERE t.status = 'pending' AND t.due_at < now())::int AS overdue,
+              count(*) FILTER (WHERE t.status = 'pending' AND t.due_at >= now())::int AS upcoming
+         FROM post_op_tasks t
+         JOIN leads l ON l.id = t.lead_id
+        WHERE t.clinic_id = $1 AND ($2::uuid IS NULL OR l.branch_id = $2)`,
+      [clinicId, scope],
+    ),
+    getResponseTimes({ branchId }),
+    getOutcomesByDoctor({ branchId }),
+  ]);
+
+  const result = computeComplianceScore({
+    now: new Date(),
+    records,
+    consent: consentQ.rows[0],
+    calls: callsQ.rows[0],
+    outcomes: outcomesQ.rows[0],
+    postop: postopQ.rows[0],
+    response,
+  });
+
+  return {
+    ...result,
+    records,
+    by_doctor: byDoctor,
+    raw: {
+      consent: consentQ.rows[0],
+      calls: callsQ.rows[0],
+      outcomes: outcomesQ.rows[0],
+      postop: postopQ.rows[0],
+      response,
+    },
+  };
 }

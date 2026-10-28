@@ -388,3 +388,21 @@ CREATE TABLE IF NOT EXISTS call_jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_call_jobs_due ON call_jobs (scheduled_at) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_call_jobs_lead ON call_jobs (lead_id, created_at DESC);
+
+-- ── Reklam → Hasta Atfetme Zinciri (see 027_campaign_attribution.sql) ─────
+ALTER TABLE campaigns
+  ADD COLUMN IF NOT EXISTS external_ref TEXT,
+  ADD COLUMN IF NOT EXISTS active       BOOLEAN NOT NULL DEFAULT true;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_campaigns_external_ref
+  ON campaigns (clinic_id, external_ref) WHERE external_ref IS NOT NULL;
+
+ALTER TABLE leads
+  ADD COLUMN IF NOT EXISTS campaign_id      UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS ad_source_id     TEXT,
+  ADD COLUMN IF NOT EXISTS ad_source_type   TEXT,
+  ADD COLUMN IF NOT EXISTS ad_source_url    TEXT,
+  ADD COLUMN IF NOT EXISTS ad_headline      TEXT,
+  ADD COLUMN IF NOT EXISTS ctwa_clid        TEXT,
+  ADD COLUMN IF NOT EXISTS attributed_at    TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_leads_campaign ON leads (campaign_id) WHERE campaign_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_ad_source ON leads (ad_source_id) WHERE ad_source_id IS NOT NULL;

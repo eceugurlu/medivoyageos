@@ -174,6 +174,26 @@
   // (never their private portal token) — forwarded on submit so the lead is
   // attributed to them (see createWidgetLead server-side).
   const PARTNER_REF = new URLSearchParams(location.search).get("ref") || "";
+  // Reklam → Hasta Atfetme (widget tarafı). The clinic's ads land here with
+  // the usual UTM tags; without forwarding them the lead arrives as a bare
+  // "widget" and the campaign that paid for the click is unknowable from
+  // that point on. Also kept: the referring page, which catches traffic
+  // from a partner blog or directory that carries no UTM at all.
+  const AD_ATTRIBUTION = (() => {
+    const q = new URLSearchParams(location.search);
+    // utm_campaign is the clinic-chosen name; Meta/Google also append their
+    // own click ids, which are what a Conversions API callback needs later.
+    const sourceId = q.get("utm_campaign") || q.get("campaign_id") || "";
+    const clickId = q.get("fbclid") || q.get("gclid") || q.get("ttclid") || "";
+    if (!sourceId && !clickId) return undefined;
+    return {
+      sourceId: sourceId || undefined,
+      sourceType: "utm",
+      sourceUrl: location.href.slice(0, 500),
+      headline: q.get("utm_content") || q.get("utm_source") || undefined,
+      clickId: clickId || undefined,
+    };
+  })();
 
   function estimate(){
     const [lo,hi,cur] = PRICES[state.treatment] || [];
@@ -239,6 +259,7 @@
           treatment: state.treatment,
           consent: true,
           referralCode: PARTNER_REF || undefined,
+          attribution: AD_ATTRIBUTION,
         }),
       });
       if(!res.ok) throw new Error("We couldn't send that just now. Please try again in a moment.");

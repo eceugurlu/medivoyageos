@@ -485,6 +485,165 @@ export async function markSlaEscalated(conversationId) {
  * remove.
  */
 /**
+ * Reklam → Hasta Atfetme. Records WHICH ad produced this lead, on FIRST
+ * touch only.
+ *
+ * First-touch, not last-touch, and the reason matters: a patient researching
+ * surgery abroad clicks several ads over weeks before writing. Letting the
+ * most recent click overwrite the first would credit the ad that closed a
+ * decision the funnel's opening ad had already won, and the top of the funnel
+ * would look worthless. `attributed_at IS NULL` in the WHERE is what makes
+ * that a property of the data rather than of the caller remembering to check.
+ *
+ * The raw ad fields are stored even when no campaign row matches — a brand new
+ * ad the clinic hasn't registered in the panel yet would otherwise be thrown
+ * away at exactly the moment it is most interesting. resolveCampaignForLeads()
+ * below back-fills those once the campaign is created.
+ */
+export async function attachLeadAttribution(leadId, attribution = {}) {
+  const { sourceId, sourceType, sourceUrl, headline, ctwaClid } = attribution;
+  if (!sourceId && !ctwaClid) return null;
+
+  const clinicId = await getDefaultClinicId();
+  // Match the ad to a campaign the clinic has registered, if one exists.
+  const campaignQ = sourceId
+    ? await pool.query(
+        'SELECT id FROM campaigns WHERE clinic_id = $1 AND external_ref = $2',
+        [clinicId, sourceId],
+      )
+    : { rows: [] };
+
+  const q = await pool.query(
+    `UPDATE leads SET
+       campaign_id    = $2,
+       ad_source_id   = $3,
+       ad_source_type = $4,
+       ad_source_url  = $5,
+       ad_headline    = $6,
+       ctwa_clid      = $7,
+       attributed_at  = now(),
+       updated_at     = now()
+     WHERE id = $1 AND attributed_at IS NULL
+     RETURNING id, campaign_id, ad_source_id`,
+    [leadId, campaignQ.rows[0]?.id || null, sourceId || null, sourceType || null,
+     sourceUrl || null, headline || null, ctwaClid || null],
+  );
+  return q.rows[0] || null; // null = already attributed; the first touch stands
+}
+
+/**
+ * Back-fill: link leads whose ad was captured before the clinic registered
+ * the matching campaign. Without this the honest "keep the raw id anyway"
+ * choice above would still leave those leads out of every per-campaign
+ * figure, which is the whole point of having kept it.
+ */
+export async function resolveCampaignForLeads(campaignId, externalRef) {
+  if (!externalRef) return 0;
+  const q = await pool.query(
+    `UPDATE leads SET campaign_id = $1, updated_at = now()
+      WHERE ad_source_id = $2 AND campaign_id IS NULL
+      RETURNING id`,
+    [campaignId, externalRef],
+  );
+  return q.rowCount;
+}
+
+/**
+ * Per-campaign CAC and ROAS — the figure the panel previously had to refuse
+ * to show (see getAnalytics()'s note: spend was real, CAC/ROAS were not
+ * derivable because no lead could be tied to the campaign that paid for it).
+ *
+ * Revenue is EUR-converted per payment row before summing, same discipline as
+ * getPaymentTotals()/getProfitability(): a plain SQL sum() would add TRY and
+ * EUR together as one number and quietly inflate ROAS.
+ *
+ * `attributed_leads` is reported alongside every ratio on purpose. CAC over
+ * three leads is noise, and a clinic about to move real ad budget deserves to
+ * see the denominator rather than a confident-looking number built on it.
+ */
+export async function getCampaignPerformance({ branchId = null } = {}) {
+  const campaignsQ = await pool.query(
+    `SELECT c.id, c.name, c.channel, c.external_ref, c.active,
+            c.spend::float AS spend, c.clicks,
+            count(l.id)::int                                            AS leads,
+            count(l.id) FILTER (WHERE l.status IN ('hot','handed_over','booked'))::int AS qualified,
+            count(l.id) FILTER (WHERE l.status = 'booked')::int         AS booked
+       FROM campaigns c
+       LEFT JOIN leads l ON l.campaign_id = c.id AND ($1::uuid IS NULL OR l.branch_id = $1)
+      GROUP BY c.id
+      ORDER BY c.spend DESC NULLS LAST, c.name`,
+    [branchId],
+  );
+
+  // Paid revenue per campaign, one row per payment so each can be converted
+  // in its own currency before it joins the total.
+  const revenueQ = await pool.query(
+    `SELECT l.campaign_id, p.amount, p.currency
+       FROM payments p
+       JOIN leads l ON l.id = p.lead_id
+      WHERE p.status = 'paid' AND l.campaign_id IS NOT NULL
+        AND ($1::uuid IS NULL OR l.branch_id = $1)`,
+    [branchId],
+  );
+  const revenueByCampaign = new Map();
+  for (const r of revenueQ.rows) {
+    const eur = await toEur(Number(r.amount), r.currency);
+    revenueByCampaign.set(r.campaign_id, (revenueByCampaign.get(r.campaign_id) || 0) + eur);
+  }
+
+  // Ads that produced leads but match no registered campaign — shown rather
+  // than dropped, because "spend we cannot see" is exactly the blind spot
+  // this feature exists to remove, and silently omitting it would recreate it.
+  const unmatchedQ = await pool.query(
+    `SELECT l.ad_source_id, l.ad_headline, l.ad_source_type,
+            count(*)::int AS leads,
+            count(*) FILTER (WHERE l.status = 'booked')::int AS booked
+       FROM leads l
+      WHERE l.ad_source_id IS NOT NULL AND l.campaign_id IS NULL
+        AND ($1::uuid IS NULL OR l.branch_id = $1)
+      GROUP BY l.ad_source_id, l.ad_headline, l.ad_source_type
+      ORDER BY count(*) DESC
+      LIMIT 25`,
+    [branchId],
+  );
+
+  const campaigns = campaignsQ.rows.map((c) => {
+    const revenue = Math.round((revenueByCampaign.get(c.id) || 0) * 100) / 100;
+    const spend = Number(c.spend) || 0;
+    return {
+      ...c,
+      revenue_eur: revenue,
+      // Every ratio is null (not 0) when its denominator is zero: a campaign
+      // with no leads yet has an UNKNOWN cost per lead, and printing €0 would
+      // read as "free", the most flattering possible lie.
+      cac_eur: c.leads > 0 ? Math.round((spend / c.leads) * 100) / 100 : null,
+      cost_per_booking_eur: c.booked > 0 ? Math.round((spend / c.booked) * 100) / 100 : null,
+      roas: spend > 0 ? Math.round((revenue / spend) * 100) / 100 : null,
+      conversion_pct: c.leads > 0 ? Math.round((c.booked / c.leads) * 1000) / 10 : null,
+    };
+  });
+
+  const attributedLeads = campaigns.reduce((n, c) => n + c.leads, 0);
+  const unattributedQ = await pool.query(
+    `SELECT count(*)::int AS n FROM leads l
+      WHERE l.campaign_id IS NULL AND l.ad_source_id IS NULL
+        AND ($1::uuid IS NULL OR l.branch_id = $1)`,
+    [branchId],
+  );
+
+  return {
+    campaigns,
+    unmatched_ads: unmatchedQ.rows,
+    attributed_leads: attributedLeads,
+    // Organic/unknown origin. Reported so the clinic can see how much of its
+    // funnel attribution still cannot explain, instead of reading the
+    // attributed slice as if it were the whole business.
+    unattributed_leads: unattributedQ.rows[0].n,
+    rates_live: isRatesLive(),
+  };
+}
+
+/**
  * Correct a patient's own details. The AI fills these in from what the patient
  * writes, so a misheard name, a wrong country or a treatment guessed from an
  * ambiguous first message all end up on the record with no way to fix them —

@@ -704,7 +704,12 @@ export async function getConversationDetail(leadId) {
   const leadQ = await pool.query(
     `SELECT id, phone, name, country, language, treatment_interest, budget_hint,
             readiness, score, status, crm_lead_id, medical_note, branch_id, partner_id,
-            doctor_id, doctor_review_status, doctor_note, doctor_reviewed_at, source, external_id
+            doctor_id, doctor_review_status, doctor_note, doctor_reviewed_at, source, external_id,
+            -- Sonuç alanları: Risk & Uyum skorunun beslendiği yer. DATE burada
+            -- da metne çevriliyor; pg'nin yerel-gece-yarısı Date'i tarih
+            -- alanını bir gün geri kaydırıyor (bkz. listComplianceRecords).
+            to_char(operated_at, 'YYYY-MM-DD') AS operated_at,
+            outcome_status, outcome_note, outcome_recorded_at
        FROM leads WHERE id = $1`,
     [leadId],
   );
@@ -3074,6 +3079,21 @@ export async function upsertComplianceRecord(kind, fields = {}) {
       isoDateOrNull(fields.valid_from), isoDateOrNull(fields.valid_until), fields.note || null],
   );
   return q.rows[0];
+}
+
+// Taburcu, bir ameliyatın olduğunun en güçlü sinyalidir — ama tarihi değil.
+// operated_at boşsa bugüne kurulur ki hasta Risk & Uyum ekranının paydasına
+// girsin; dolu ise dokunulmaz ve koordinatör yanlışsa profilden düzeltir.
+// SONUÇ burada asla kurulmaz. Onu tahmin etmek, bu ekranın ürettiği tek
+// değerli şeyi — gerçekten bilinen sonuç verisini — kirletirdi.
+export async function markOperatedIfUnset(leadId) {
+  const q = await pool.query(
+    `UPDATE leads SET operated_at = current_date, updated_at = now()
+      WHERE id = $1 AND operated_at IS NULL
+      RETURNING to_char(operated_at, 'YYYY-MM-DD') AS operated_at`,
+    [leadId],
+  );
+  return q.rows[0] ? q.rows[0].operated_at : null;
 }
 
 export async function setLeadOutcome(leadId, fields = {}) {

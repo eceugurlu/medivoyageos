@@ -12,6 +12,7 @@ import { pool } from '../src/db/pool.js';
 import {
   getDefaultClinicId, getComplianceSnapshot, getResponseTimes, getOutcomesByDoctor,
   upsertComplianceRecord, listComplianceRecords, setLeadOutcome,
+  markOperatedIfUnset, getConversationDetail,
 } from '../src/store/repository.js';
 
 let failed = 0;
@@ -171,6 +172,30 @@ try {
   const reset = await setLeadOutcome(leadIds[2], { outcome_status: 'recovered', outcome_note: 'ok' });
   check('yeniden yazılabilir ve zaman damgası döner',
     reset.outcome_status === 'recovered' && reset.outcome_recorded_at !== null);
+
+  console.log('\n▶ Taburcu: tarihi kurar, sonucu ASLA');
+  {
+    // Taburcu akışı ameliyat tarihini varsayılan kurar ki hasta skorun
+    // paydasına girsin. Sonucu kurmaz — tahmin edilen sonuç, veriyi kirletir.
+    const fresh = (await pool.query(
+      `INSERT INTO leads (clinic_id, phone, name, branch_id, doctor_id) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [clinicId, `${TAG}-fresh`, `${TAG} Fresh`, branchId, doctorId],
+    )).rows[0].id;
+    const set = await markOperatedIfUnset(fresh);
+    check('ameliyat tarihi boşken bugüne kurulur', set === new Date().toISOString().slice(0, 10), set);
+    const after = await getConversationDetail(fresh);
+    check('sonuç otomatik kurulmadı', after.lead.outcome_status === null, after.lead.outcome_status);
+    check('sonuç zaman damgası da boş', after.lead.outcome_recorded_at === null);
+
+    // İkinci çağrı dolu tarihi EZMEMELİ: koordinatör gerçek tarihi düzeltmiş
+    // olabilir ve ikinci bir taburcu tıklaması onu bugüne geri çekerdi.
+    await setLeadOutcome(fresh, { operated_at: '2026-05-04' });
+    const again = await markOperatedIfUnset(fresh);
+    check('dolu tarih ikinci taburcuda ezilmez', again === null, again);
+    const kept = await getConversationDetail(fresh);
+    check('elle girilen tarih korundu', kept.lead.operated_at === '2026-05-04', kept.lead.operated_at);
+    check('detay sorgusu tarihi metin döner (Date değil)', typeof kept.lead.operated_at === 'string');
+  }
 
   console.log('\n▶ Skor ve kapsam birlikte raporlanır');
   check('skor sayı veya null, NaN değil', snap.score === null || Number.isFinite(snap.score), snap.score);

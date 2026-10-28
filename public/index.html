@@ -862,6 +862,13 @@ const I18N = {
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
     "nav.compliance":"Risk & Compliance",
+    "out.title":"Operation outcome","out.pending":"outcome missing",
+    "out.hint":"Feeds the Risk & Compliance score, and the only clinic-level outcome record this sector has. Nothing here is ever filled in automatically — a default nobody looked at is not data.",
+    "out.operatedAt":"Operation date","out.status":"Outcome","out.none":"not recorded",
+    "out.st.recovering":"Recovering","out.st.recovered":"Recovered, no issue","out.st.complication":"Complication",
+    "out.st.revision_needed":"Revision needed","out.st.lost_contact":"Lost contact",
+    "out.notePlaceholder":"What happened, in one line. Visible to coordinators only.",
+    "out.save":"Save outcome","out.saved":"Outcome saved.","out.recordedAt":"Recorded",
     "comp.title":"Clinic Risk & Compliance Score",
     "comp.sub":"Two questions on one screen. Compliance: does the clinic meet the Health Tourism Regulation of 26 Apr 2025 (Official Gazette 32882)? Risk: what does the clinic's own outcome data actually say? The second question has no answer anywhere in this sector today — complication insurance is mandatory, yet no insurer has clinic-level claims data to price it on. This screen is where that data starts.",
     "comp.score":"Score","comp.scoreFoot":"Weighted average of the items that have data.",
@@ -1123,6 +1130,13 @@ const I18N = {
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
     "nav.compliance":"Risk & Uyum",
+    "out.title":"Ameliyat sonucu","out.pending":"sonuç eksik",
+    "out.hint":"Risk & Uyum skorunu ve bu sektörde var olan tek klinik bazlı sonuç kaydını besler. Buradaki hiçbir alan otomatik doldurulmaz — kimsenin bakmadığı bir varsayılan, veri değildir.",
+    "out.operatedAt":"Ameliyat tarihi","out.status":"Sonuç","out.none":"kayıtlı değil",
+    "out.st.recovering":"İyileşme sürecinde","out.st.recovered":"Sorunsuz iyileşti","out.st.complication":"Komplikasyon",
+    "out.st.revision_needed":"Revizyon gerekiyor","out.st.lost_contact":"İletişim koptu",
+    "out.notePlaceholder":"Tek satırda ne oldu. Yalnızca koordinatörler görür.",
+    "out.save":"Sonucu kaydet","out.saved":"Sonuç kaydedildi.","out.recordedAt":"Kayıt",
     "comp.title":"Klinik Risk & Uyum Skoru",
     "comp.sub":"Tek ekranda iki soru. Uyum: klinik 26.04.2025 tarihli Sağlık Turizmi Yönetmeliği'nin (RG 32882) gerekliliklerini karşılıyor mu? Risk: kliniğin kendi sonuç verisi ne söylüyor? İkinci sorunun bugün bu sektörde hiçbir yerde cevabı yok — komplikasyon sigortası zorunlu ama hiçbir sigortacının fiyatlayacağı klinik bazlı hasar verisi yok. O veri burada başlıyor.",
     "comp.score":"Skor","comp.scoreFoot":"Yalnızca verisi olan maddelerin ağırlıklı ortalaması.",
@@ -1764,6 +1778,7 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
                 <span class=${clock.offHours?"offhours":""}>${clock.time}${clock.offHours?html` · ${T("pf.offHours")}`:null}</span></div>`:null; })()}
             ${lead.medical_note? html`<div class="med-note"><span class="lbl"><${Icon} name="alert"/> ${T("pf.clinicalNote")}</span>${lead.medical_note}</div>`:null}
             <button class="btn" style="width:100%;margin-top:14px" disabled=${busy} onClick=${discharge}>${T("btn.markDischarged")}</button>
+            <${Outcome} lead=${lead} onChanged=${()=>{ loadDetail(lead.id); reloadShared(); }} />
             <${Notes} leadId=${lead.id} notes=${detail.notes} onAdded=${()=>loadDetail(lead.id)} />
             <${Payments} leadId=${lead.id} payments=${detail.payments} onChanged=${()=>{ loadDetail(lead.id); reloadShared(); }} />
             <${Costs} leadId=${lead.id} costs=${detail.costs} onChanged=${()=>{ loadDetail(lead.id); reloadShared(); }} />
@@ -1777,6 +1792,75 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
 // ── Chart + Analytics + Campaigns ───────────────────────────────────────────
 // Internal notes: the handover an operations team actually runs on — what one
 // coordinator needs to tell the next. Never reaches the patient.
+// Ameliyat sonucu. Risk & Uyum skorunun ve ileride sigortacıya gidecek
+// underwriting verisinin TEK giriş noktası.
+//
+// Kasıtlı bir sürtünme var: sonuç hiçbir yerde otomatik doldurulmuyor, hatta
+// "iyileşti" varsayılan bile değil. Boş bırakılan bir hasta skorda "sonucu
+// kayıtlı değil" olarak görünür. Varsayılanı "iyileşti" yapmak ekranı daha
+// dolu gösterirdi ve ürettiğimiz veriyi değersiz kılardı — hiç kimsenin
+// bakmadığı bir alanın varsayılanı, veri değildir.
+const OUTCOME_OPTIONS = ["recovering","recovered","complication","revision_needed","lost_contact"];
+
+function Outcome({ lead, onChanged }){
+  const [operatedAt,setOperatedAt] = useState(lead.operated_at? String(lead.operated_at).slice(0,10) : "");
+  const [status,setStatus] = useState(lead.outcome_status || "");
+  const [note,setNote] = useState(lead.outcome_note || "");
+  const [busy,setBusy] = useState(false);
+
+  // Hasta değişince form o hastanın verisine sıfırlanmalı; yoksa bir önceki
+  // hastanın sonucu yeni hastanın formunda duruyor ve yanlış kayda yazılıyor.
+  useEffect(()=>{
+    setOperatedAt(lead.operated_at? String(lead.operated_at).slice(0,10) : "");
+    setStatus(lead.outcome_status || "");
+    setNote(lead.outcome_note || "");
+  },[lead.id, lead.operated_at, lead.outcome_status, lead.outcome_note]);
+
+  const dirty = operatedAt !== (lead.operated_at? String(lead.operated_at).slice(0,10) : "")
+    || status !== (lead.outcome_status||"") || note !== (lead.outcome_note||"");
+
+  const save = async ()=>{
+    setBusy(true);
+    try{
+      await api("/conversations/"+lead.id+"/outcome",{method:"PUT",body:JSON.stringify({
+        operated_at: operatedAt || null,
+        outcome_status: status || null,
+        outcome_note: note.trim() || null,
+      })});
+      showToast(T("out.saved")); await onChanged();
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(false); }
+  };
+
+  const pending = operatedAt && !status;
+  return html`<div class="notes">
+    <div class="section-title" style=${{marginTop:"20px",marginBottom:"4px",fontSize:"13px"}}>
+      ${T("out.title")}
+      ${pending? html`<span class="badge awaiting" style="margin-left:7px">${T("out.pending")}</span>`:null}
+    </div>
+    <div style="font-size:11.5px;color:var(--ink-3);line-height:1.45;margin-bottom:9px">${T("out.hint")}</div>
+
+    <div class="pf-row" style=${{alignItems:"center"}}>
+      <span class="k">${T("out.operatedAt")}</span>
+      <input type="date" value=${operatedAt} disabled=${busy}
+        onInput=${(e)=>setOperatedAt(e.target.value)} style="max-width:150px;font-size:12.5px"/>
+    </div>
+    <div class="pf-row" style=${{alignItems:"center"}}>
+      <span class="k">${T("out.status")}</span>
+      <select value=${status} disabled=${busy} onChange=${(e)=>setStatus(e.target.value)} style="max-width:150px;font-size:12.5px">
+        <option value="">${T("out.none")}</option>
+        ${OUTCOME_OPTIONS.map((o)=> html`<option key=${o} value=${o}>${T("out.st."+o)}</option>`)}
+      </select>
+    </div>
+    <textarea class="note-input" placeholder=${T("out.notePlaceholder")} value=${note} disabled=${busy}
+      style="margin-top:8px" onInput=${(e)=>setNote(e.target.value)}></textarea>
+    <button class="btn" style=${{marginTop:"8px",width:"100%"}} disabled=${busy||!dirty} onClick=${save}>
+      ${busy? html`<${Spinner}/>` : T("out.save")}
+    </button>
+    ${lead.outcome_recorded_at? html`<div class="note-meta" style="margin-top:7px">${T("out.recordedAt")} ${fmtTime(lead.outcome_recorded_at)}</div>`:null}
+  </div>`;
+}
+
 function Notes({ leadId, notes, onAdded }){
   const [text,setText] = useState("");
   const [busy,setBusy] = useState(false);

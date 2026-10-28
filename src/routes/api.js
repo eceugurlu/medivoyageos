@@ -18,6 +18,7 @@ import {
   getComplianceSnapshot,
   upsertComplianceRecord,
   setLeadOutcome,
+  markOperatedIfUnset,
   getStats,
   listConversations,
   getHandoverQueue,
@@ -841,7 +842,11 @@ apiRouter.delete('/consultants/:coordinatorId', h(async (req, res) => {
 apiRouter.post('/conversations/:leadId/discharge', h(async (req, res) => {
   const n = await schedulePostOp(req.params.leadId);
   await upsertLogistics(req.params.leadId, {});
-  res.json({ ok: true, tasks_scheduled: n });
+  // Ameliyat tarihini burada kuruyoruz; sonucu DEĞİL. Böylece hasta Risk &
+  // Uyum ekranında "ameliyat edildi, sonucu henüz kayıtlı değil" olarak
+  // görünür — yani eksik, sessizce kaybolmuş değil.
+  const operatedAt = await markOperatedIfUnset(req.params.leadId);
+  res.json({ ok: true, tasks_scheduled: n, operated_at: operatedAt });
 }));
 apiRouter.get('/postop', h(async (_req, res) => res.json(await getPostOpOverview())));
 apiRouter.get('/reviews', h(async (_req, res) => res.json(await getReviewStats())));

@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Outcome Passport — MediVoyage</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M16 5l9 3.5v7c0 5.2-3.6 9.3-9 10.5-5.4-1.2-9-5.3-9-10.5v-7z' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Public+Sans:wght@400;500;600;700&family=Azeret+Mono:wght@400;500&display=swap">
+<style>
+  /* Aynı "klinik defteri" sistemi: widget.html ve itinerary.html ile aynı
+     aile. Bu sayfayı personel değil HASTA (ve ülkesindeki hekimi) açıyor. */
+  :root{
+    --ground:#eaedef; --paper:#ffffff; --paper-2:#f4f6f8;
+    --ink:#0c1316; --ink-2:#4b555b; --ink-3:#5f666b;
+    --rule:#dde3e6; --rule-2:#c3ccd1;
+    --accent:#0e5750; --accent-wash:#e4efed; --accent-line:#9dc3bc;
+    --alert:#9a2b23; --alert-wash:#fbeceb; --alert-line:#e0b4b0;
+    --brass:#8c6415; --brass-wash:#f7f0dd;
+    --display:"Fraunces",Georgia,"Times New Roman",serif;
+    --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --r:14px; --r-sm:8px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--ground);color:var(--ink);
+    font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-size:15px;line-height:1.55;
+  }
+  .wrap{max-width:780px;margin:0 auto;padding:24px 18px 64px}
+  .sheet{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+  .head{padding:22px 24px 18px;border-bottom:1px solid var(--rule)}
+  h1{font-family:var(--display);font-weight:600;font-size:25px;letter-spacing:-.015em;margin:0 0 4px}
+  .who{color:var(--ink-2);font-size:14px}
+  .ref{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;color:var(--ink-3);margin-top:10px}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+  select,button{
+    font:inherit;font-size:13px;padding:8px 12px;border:1px solid var(--rule-2);
+    border-radius:var(--r-sm);background:var(--paper);color:var(--ink);cursor:pointer;min-height:38px;
+  }
+  .sec{padding:18px 24px;border-bottom:1px solid var(--rule)}
+  .sec:last-child{border-bottom:0}
+  .sec h2{
+    font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink-3);margin:0 0 12px;
+  }
+  .row{display:flex;gap:14px;padding:7px 0;border-bottom:1px solid var(--paper-2)}
+  .row:last-child{border-bottom:0}
+  .k{flex:0 0 42%;color:var(--ink-2);font-size:13.5px}
+  .v{flex:1;font-weight:500;overflow-wrap:anywhere}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{
+    text-align:start;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--ink-3);padding:0 8px 7px 0;border-bottom:1px solid var(--rule);
+  }
+  td{padding:9px 8px 9px 0;border-bottom:1px solid var(--paper-2);vertical-align:top}
+  td.lot{font-family:var(--mono);font-size:12.5px}
+  .free{white-space:pre-wrap;background:var(--paper-2);border:1px solid var(--rule);border-radius:var(--r-sm);padding:12px 14px}
+  .warn{background:var(--alert-wash);border-color:var(--alert-line);box-shadow:inset 3px 0 0 var(--alert)}
+  .note{font-size:12.5px;color:var(--ink-3);line-height:1.5;margin-top:9px}
+  .langnote{
+    background:var(--brass-wash);border:1px solid #e0cf9e;border-radius:var(--r-sm);
+    padding:10px 13px;font-size:12.5px;color:#6b4d10;margin-top:10px;line-height:1.5;
+  }
+  .foot{padding:18px 24px;color:var(--ink-3);font-size:12.5px;line-height:1.55;background:var(--paper-2)}
+  .state{padding:40px 24px;text-align:center;color:var(--ink-2)}
+  .state b{display:block;font-family:var(--display);font-size:20px;color:var(--ink);margin-bottom:8px}
+  html[dir="rtl"] .k{text-align:right}
+  @media (max-width:560px){ .row{flex-direction:column;gap:2px} .k{flex:none} }
+  @media print{
+    body{background:#fff} .wrap{padding:0;max-width:none}
+    .sheet{border:0;border-radius:0} .bar{display:none} .foot{background:#fff}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <select id="lang" aria-label="Language"></select>
+    <button id="print" type="button"></button>
+  </div>
+  <div class="sheet" id="sheet"><div class="state" id="state">…</div></div>
+</div>
+<script>
+// Etiketler çevrilir, KLİNİK İÇERİĞİ ÇEVRİLMEZ. Bir yabancı hekimin
+// ihtiyacı olan şey hangi alanın "implant lot numarası" olduğunu anlamak;
+// lot numarasının kendisi dil-bağımsız. Serbest metinleri makineyle
+// çevirip tıbbi kayıt gibi sunmak ise tehlikeli olurdu — o yüzden klinik
+// ne yazdıysa o dilde kalıyor ve sayfa bunu açıkça söylüyor.
+const L = {
+  en:{name:"English",title:"Outcome Passport",sub:"Record of treatment received abroad",
+    forDoctor:"For the treating physician",ref:"Reference",issued:"Issued",
+    proc:"Procedure",procDate:"Date",anes:"Anaesthesia",surgeon:"Surgeon",clinic:"Clinic",patient:"Patient",country:"Country",
+    implants:"Implants & materials",meds:"Medications",aftercare:"Aftercare instructions",warn:"Seek medical help immediately if",
+    emergency:"Emergency contact",tType:"Type",tBrand:"Brand",tModel:"Model",tLot:"Lot / serial",tSide:"Side",tNote:"Note",
+    mName:"Medication",mDose:"Dose",mDuration:"Duration",none:"None recorded",print:"Print",
+    langNote:"The clinical text below is shown exactly as the clinic wrote it, in {lang}. It is not machine-translated: a translated medical record could be wrong in ways neither you nor your doctor could detect.",
+    disclaimer:"This record was issued by the clinic named above. It is not an independent certification. Show it to any doctor who treats you after your return. Keep the reference code: it identifies this exact record.",
+    notFound:"This passport is not available",
+    notFoundSub:"The link may be wrong, or the clinic may have withdrawn this record. Contact the clinic directly."},
+  tr:{name:"Türkçe",title:"Sonuç Pasaportu",sub:"Yurt dışında alınan tedavinin kaydı",
+    forDoctor:"Tedavi eden hekim için",ref:"Referans",issued:"Düzenlenme",
+    proc:"İşlem",procDate:"Tarih",anes:"Anestezi",surgeon:"Cerrah",clinic:"Klinik",patient:"Hasta",country:"Ülke",
+    implants:"İmplant ve malzemeler",meds:"İlaçlar",aftercare:"Ameliyat sonrası talimatlar",warn:"Şu durumlarda derhal doktora başvurun",
+    emergency:"Acil iletişim",tType:"Tür",tBrand:"Marka",tModel:"Model",tLot:"Lot / seri",tSide:"Taraf",tNote:"Not",
+    mName:"İlaç",mDose:"Doz",mDuration:"Süre",none:"Kayıt yok",print:"Yazdır",
+    langNote:"Aşağıdaki klinik metin, kliniğin yazdığı haliyle ve {lang} dilinde gösteriliyor. Makineyle çevrilmedi: çevrilmiş bir tıbbi kayıt, ne sizin ne doktorunuzun fark edebileceği şekilde yanlış olabilir.",
+    disclaimer:"Bu kayıt yukarıda adı geçen klinik tarafından düzenlenmiştir. Bağımsız bir sertifikasyon değildir. Döndükten sonra sizi tedavi eden her doktora gösterin. Referans kodunu saklayın: bu kaydı tekil olarak tanımlar.",
+    notFound:"Bu pasaport görüntülenemiyor",
+    notFoundSub:"Bağlantı yanlış olabilir ya da klinik bu kaydı geri çekmiş olabilir. Doğrudan klinikle iletişime geçin."},
+  de:{name:"Deutsch",title:"Behandlungspass",sub:"Nachweis der im Ausland erhaltenen Behandlung",
+    forDoctor:"Für die behandelnde Ärztin / den behandelnden Arzt",ref:"Referenz",issued:"Ausgestellt",
+    proc:"Eingriff",procDate:"Datum",anes:"Anästhesie",surgeon:"Operateur/in",clinic:"Klinik",patient:"Patient/in",country:"Land",
+    implants:"Implantate & Materialien",meds:"Medikamente",aftercare:"Nachsorgehinweise",warn:"Sofort ärztliche Hilfe suchen bei",
+    emergency:"Notfallkontakt",tType:"Art",tBrand:"Hersteller",tModel:"Modell",tLot:"Charge / Serie",tSide:"Seite",tNote:"Hinweis",
+    mName:"Medikament",mDose:"Dosis",mDuration:"Dauer",none:"Nichts erfasst",print:"Drucken",
+    langNote:"Der klinische Text unten wird genau so angezeigt, wie die Klinik ihn verfasst hat, auf {lang}. Er ist nicht maschinell übersetzt: eine übersetzte Krankenakte könnte Fehler enthalten, die weder Sie noch Ihre Ärztin bemerken würden.",
+    disclaimer:"Dieser Nachweis wurde von der oben genannten Klinik ausgestellt. Er ist keine unabhängige Zertifizierung. Zeigen Sie ihn jeder Ärztin und jedem Arzt, die Sie nach Ihrer Rückkehr behandeln. Bewahren Sie den Referenzcode auf: er identifiziert genau diesen Nachweis.",
+    notFound:"Dieser Pass ist nicht verfügbar",
+    notFoundSub:"Der Link ist möglicherweise falsch, oder die Klinik hat diesen Nachweis zurückgezogen. Wenden Sie sich direkt an die Klinik."},
+  ar:{name:"العربية",title:"جواز النتائج الطبية",sub:"سجل العلاج الذي تلقيته في الخارج",
+    forDoctor:"إلى الطبيب المعالج",ref:"المرجع",issued:"تاريخ الإصدار",
+    proc:"الإجراء",procDate:"التاريخ",anes:"التخدير",surgeon:"الجراح",clinic:"العيادة",patient:"المريض",country:"البلد",
+    implants:"الزرعات والمواد",meds:"الأدوية",aftercare:"تعليمات ما بعد العملية",warn:"اطلب المساعدة الطبية فوراً في حال",
+    emergency:"جهة الاتصال في الطوارئ",tType:"النوع",tBrand:"العلامة",tModel:"الطراز",tLot:"رقم التشغيلة",tSide:"الجهة",tNote:"ملاحظة",
+    mName:"الدواء",mDose:"الجرعة",mDuration:"المدة",none:"لا يوجد",print:"طباعة",
+    langNote:"النص الطبي أدناه معروض كما كتبته العيادة تماماً، بلغة {lang}. لم تتم ترجمته آلياً: السجل الطبي المترجم قد يحتوي على أخطاء لا تستطيع أنت ولا طبيبك اكتشافها.",
+    disclaimer:"أصدرت هذا السجل العيادة المذكورة أعلاه. وهو ليس شهادة مستقلة. اعرضه على أي طبيب يعالجك بعد عودتك. احتفظ برمز المرجع: فهو يحدد هذا السجل بعينه.",
+    notFound:"هذا الجواز غير متاح",
+    notFoundSub:"قد يكون الرابط خاطئاً أو أن العيادة سحبت هذا السجل. يرجى التواصل مع العيادة مباشرة."},
+  ru:{name:"Русский",title:"Паспорт лечения",sub:"Запись о лечении, полученном за рубежом",
+    forDoctor:"Для лечащего врача",ref:"Номер",issued:"Выдан",
+    proc:"Процедура",procDate:"Дата",anes:"Анестезия",surgeon:"Хирург",clinic:"Клиника",patient:"Пациент",country:"Страна",
+    implants:"Импланты и материалы",meds:"Лекарства",aftercare:"Указания после операции",warn:"Немедленно обратитесь к врачу при",
+    emergency:"Экстренный контакт",tType:"Тип",tBrand:"Производитель",tModel:"Модель",tLot:"Партия / серия",tSide:"Сторона",tNote:"Примечание",
+    mName:"Препарат",mDose:"Доза",mDuration:"Длительность",none:"Нет записей",print:"Печать",
+    langNote:"Клинический текст ниже приведён ровно так, как его написала клиника, на языке: {lang}. Он не переведён машинно: переведённая медицинская запись может содержать ошибки, которые не заметите ни вы, ни ваш врач.",
+    disclaimer:"Эта запись выдана указанной выше клиникой. Это не независимая сертификация. Покажите её любому врачу, который будет вас лечить после возвращения. Сохраните номер: он однозначно идентифицирует эту запись.",
+    notFound:"Паспорт недоступен",
+    notFoundSub:"Возможно, ссылка неверна или клиника отозвала эту запись. Свяжитесь с клиникой напрямую."},
+  fr:{name:"Français",title:"Passeport de traitement",sub:"Relevé du traitement reçu à l'étranger",
+    forDoctor:"Pour le médecin traitant",ref:"Référence",issued:"Délivré le",
+    proc:"Intervention",procDate:"Date",anes:"Anesthésie",surgeon:"Chirurgien",clinic:"Clinique",patient:"Patient",country:"Pays",
+    implants:"Implants et matériaux",meds:"Médicaments",aftercare:"Consignes postopératoires",warn:"Consultez immédiatement en cas de",
+    emergency:"Contact d'urgence",tType:"Type",tBrand:"Marque",tModel:"Modèle",tLot:"Lot / série",tSide:"Côté",tNote:"Note",
+    mName:"Médicament",mDose:"Dose",mDuration:"Durée",none:"Rien d'enregistré",print:"Imprimer",
+    langNote:"Le texte clinique ci-dessous est affiché exactement tel que la clinique l'a rédigé, en {lang}. Il n'est pas traduit automatiquement : un dossier médical traduit pourrait comporter des erreurs que ni vous ni votre médecin ne pourriez détecter.",
+    disclaimer:"Ce relevé a été délivré par la clinique nommée ci-dessus. Il ne s'agit pas d'une certification indépendante. Présentez-le à tout médecin qui vous soignera après votre retour. Conservez le code de référence : il identifie précisément ce relevé.",
+    notFound:"Ce passeport n'est pas disponible",
+    notFoundSub:"Le lien est peut-être erroné, ou la clinique a retiré ce relevé. Contactez directement la clinique."},
+  it:{name:"Italiano",title:"Passaporto del trattamento",sub:"Registro del trattamento ricevuto all'estero",
+    forDoctor:"Per il medico curante",ref:"Riferimento",issued:"Emesso",
+    proc:"Intervento",procDate:"Data",anes:"Anestesia",surgeon:"Chirurgo",clinic:"Clinica",patient:"Paziente",country:"Paese",
+    implants:"Impianti e materiali",meds:"Farmaci",aftercare:"Istruzioni post-operatorie",warn:"Rivolgersi subito a un medico in caso di",
+    emergency:"Contatto di emergenza",tType:"Tipo",tBrand:"Marca",tModel:"Modello",tLot:"Lotto / serie",tSide:"Lato",tNote:"Nota",
+    mName:"Farmaco",mDose:"Dose",mDuration:"Durata",none:"Nessun dato",print:"Stampa",
+    langNote:"Il testo clinico qui sotto è mostrato esattamente come l'ha scritto la clinica, in {lang}. Non è tradotto automaticamente: una cartella clinica tradotta potrebbe contenere errori che né lei né il suo medico potrebbero rilevare.",
+    disclaimer:"Questo documento è stato emesso dalla clinica sopra indicata. Non è una certificazione indipendente. Lo mostri a qualsiasi medico la curi dopo il rientro. Conservi il codice di riferimento: identifica esattamente questo documento.",
+    notFound:"Questo passaporto non è disponibile",
+    notFoundSub:"Il link potrebbe essere errato, oppure la clinica ha ritirato questo documento. Contatti direttamente la clinica."},
+};
+const RTL = new Set(["ar"]);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const qs = new URLSearchParams(location.search);
+const token = qs.get("token") || "";
+let data = null;
+let lang = "en";
+
+const sel = document.getElementById("lang");
+for (const [code, d] of Object.entries(L)) {
+  const o = document.createElement("option");
+  o.value = code; o.textContent = d.name; sel.appendChild(o);
+}
+sel.addEventListener("change", () => { lang = sel.value; try { localStorage.setItem("mv-passport-lang", lang); } catch {} render(); });
+document.getElementById("print").addEventListener("click", () => window.print());
+
+// dir="auto": Arapça sayfada Latin harfli bir değer (ilaç adı, klinik adı)
+// ters sıralanıyordu — bidi algoritması paragrafın yönünü uyguluyor. "auto"
+// yönü ilk güçlü karakterden alır, yani her hücre kendi dilinde okunur.
+function rows(pairs) {
+  return pairs.filter(([, v]) => v).map(([k, v]) =>
+    `<div class="row"><span class="k">${esc(k)}</span><span class="v" dir="auto">${esc(v)}</span></div>`).join("");
+}
+function table(items, cols, t) {
+  if (!items || !items.length) return `<div class="note">${esc(t.none)}</div>`;
+  const keys = cols.filter((c) => items.some((i) => i[c.key]));
+  return `<table><thead><tr>${keys.map((c) => `<th>${esc(c.label)}</th>`).join("")}</tr></thead><tbody>` +
+    items.map((i) => `<tr>${keys.map((c) =>
+      `<td class="${c.key === "lot" ? "lot" : ""}" dir="auto">${esc(i[c.key] || "—")}</td>`).join("")}</tr>`).join("") +
+    `</tbody></table>`;
+}
+
+function render() {
+  const t = L[lang] || L.en;
+  document.documentElement.lang = lang;
+  document.documentElement.dir = RTL.has(lang) ? "rtl" : "ltr";
+  sel.value = lang;
+  document.getElementById("print").textContent = t.print;
+  document.title = `${t.title} — MediVoyage`;
+  const sheet = document.getElementById("sheet");
+
+  if (!data) {
+    sheet.innerHTML = `<div class="state"><b>${esc(t.notFound)}</b>${esc(t.notFoundSub)}</div>`;
+    return;
+  }
+  const d = data;
+  // Serbest metinlerin dili: klinik işaretlediyse onu, yoksa hastanınkini
+  // varsayıyoruz. Hangi dilde olduğunu söylemek, çevirmemekten daha dürüst:
+  // okuyan hekim ne okuduğunu bilsin.
+  const contentLang = (d.content_language || d.patient_language || "tr").toLowerCase().slice(0, 2);
+  const contentLangName = (L[contentLang] || {}).name || contentLang.toUpperCase();
+  const hasFree = d.aftercare || d.warning_signs;
+
+  sheet.innerHTML = `
+    <div class="head">
+      <h1>${esc(t.title)}</h1>
+      <div class="who">${esc(t.sub)} · ${esc(t.forDoctor)}</div>
+      <div class="ref">${esc(t.ref)} ${esc(d.reference)}${d.issued_at ? ` · ${esc(t.issued)} ${esc(String(d.issued_at).slice(0, 10))}` : ""}</div>
+    </div>
+
+    <div class="sec">
+      <h2>${esc(t.proc)}</h2>
+      ${rows([
+        [t.proc, d.procedure_name], [t.procDate, d.procedure_date], [t.anes, d.anesthesia],
+        [t.surgeon, d.doctor_name && d.doctor_specialty ? `${d.doctor_name} · ${d.doctor_specialty}` : d.doctor_name],
+        [t.clinic, d.clinic_name], [t.patient, d.patient_name], [t.country, d.patient_country],
+      ])}
+    </div>
+
+    <div class="sec">
+      <h2>${esc(t.implants)}</h2>
+      ${table(d.implants, [
+        { key: "type", label: t.tType }, { key: "brand", label: t.tBrand }, { key: "model", label: t.tModel },
+        { key: "lot", label: t.tLot }, { key: "side", label: t.tSide }, { key: "note", label: t.tNote },
+      ], t)}
+    </div>
+
+    <div class="sec">
+      <h2>${esc(t.meds)}</h2>
+      ${table(d.medications, [
+        { key: "name", label: t.mName }, { key: "dose", label: t.mDose }, { key: "duration", label: t.mDuration },
+      ], t)}
+    </div>
+
+    ${/* Not, açıkladığı metinlerin ÜSTÜNDE durmalı: "aşağıdaki metin"
+          diyen bir uyarının metinlerden sonra gelmesi kendi ifadesini
+          yalanlıyordu. */ ""}
+    ${hasFree && contentLang !== lang ? `<div class="sec" style="padding-bottom:0;border-bottom:0">
+      <div class="langnote" style="margin-top:0">${esc(t.langNote.replace("{lang}", contentLangName))}</div></div>` : ""}
+
+    ${d.warning_signs ? `<div class="sec"><h2>${esc(t.warn)}</h2>
+      <div class="free warn" dir="auto">${esc(d.warning_signs)}</div></div>` : ""}
+
+    ${d.aftercare ? `<div class="sec"><h2>${esc(t.aftercare)}</h2>
+      <div class="free" dir="auto">${esc(d.aftercare)}</div></div>` : ""}
+
+
+    ${/* Telefon numarası HER ZAMAN LTR ve yalıtılmış. Arapça sayfada
+          "+90 212 000 00 00" → "00 00 000 212 90+" diye ters dönüyordu;
+          acil durumda yanlış çevrilecek bir numara kabul edilemez.
+          dir="auto" burada yetmez: metin Arapça başlarsa yön RTL olur ve
+          numara yine bozulur. */ ""}
+    ${d.emergency_contact ? `<div class="sec"><h2>${esc(t.emergency)}</h2>
+      <div class="v" dir="ltr" style="unicode-bidi:isolate;text-align:start">${esc(d.emergency_contact)}</div></div>` : ""}
+
+    <div class="foot">${esc(t.disclaimer)}</div>`;
+}
+
+(async () => {
+  try { const saved = localStorage.getItem("mv-passport-lang"); if (saved && L[saved]) lang = saved; } catch {}
+  if (!token) { render(); return; }
+  try {
+    const res = await fetch(`/api/public/passport/${encodeURIComponent(token)}`);
+    if (res.ok) {
+      data = await res.json();
+      // Kaydedilmiş tercih yoksa hastanın kendi dilini aç.
+      let saved = null; try { saved = localStorage.getItem("mv-passport-lang"); } catch {}
+      if (!saved) {
+        const pl = (data.patient_language || "").toLowerCase().slice(0, 2);
+        if (L[pl]) lang = pl;
+      }
+    }
+  } catch { /* data null kalır → "bulunamadı" ekranı */ }
+  render();
+})();
+</script>
+</body>
+</html>

@@ -16,7 +16,8 @@
     "check:compliance": "node scripts/test-compliance.mjs",
     "check:compliance-db": "node scripts/test-compliance-db.mjs",
     "check:capi": "node scripts/test-capi.mjs",
-    "check:capi-db": "node scripts/test-capi-db.mjs"
+    "check:capi-db": "node scripts/test-capi-db.mjs",
+    "check:passport": "node scripts/test-passport.mjs"
   },
   "keywords": [],
   "author": "",

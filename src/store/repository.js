@@ -3434,3 +3434,135 @@ export async function getConversionEventStats({ branchId } = {}) {
     recent: recent.rows,
   };
 }
+
+// ── Sonuç Pasaportu ────────────────────────────────────────────────────────
+
+// Serbest metin JSONB dizilerine gidiyor. Panelden geldiği için kötü niyetli
+// değil ama BİÇİMSİZ olabilir; şemayı burada zorluyoruz ki hasta sayfası
+// beklemediği bir şekille karşılaşıp boş render etmesin.
+function cleanPassportList(value, allowedKeys, maxRows = 20) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, maxRows).map((row) => {
+    const out = {};
+    if (!row || typeof row !== 'object') return out;
+    for (const k of allowedKeys) {
+      const v = row[k];
+      if (v == null || v === '') continue;
+      out[k] = String(v).slice(0, 200);
+    }
+    return out;
+  }).filter((r) => Object.keys(r).length > 0);
+}
+
+const IMPLANT_KEYS = ['type', 'brand', 'model', 'lot', 'side', 'note'];
+const MEDICATION_KEYS = ['name', 'dose', 'duration'];
+
+export async function getPassportForLead(leadId) {
+  const q = await pool.query(
+    `SELECT p.id, p.view_token, p.procedure_name,
+            to_char(p.procedure_date, 'YYYY-MM-DD') AS procedure_date,
+            p.anesthesia, p.implants, p.medications, p.aftercare, p.warning_signs,
+            p.emergency_contact, p.content_language, p.issued_at, p.revoked_at, p.updated_at
+       FROM passports p WHERE p.lead_id = $1`,
+    [leadId],
+  );
+  return q.rows[0] || null;
+}
+
+export async function upsertPassport(leadId, fields = {}) {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `INSERT INTO passports (clinic_id, lead_id, procedure_name, procedure_date, anesthesia,
+                            implants, medications, aftercare, warning_signs,
+                            emergency_contact, content_language)
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11)
+     ON CONFLICT (lead_id) DO UPDATE SET
+       procedure_name = EXCLUDED.procedure_name,
+       procedure_date = EXCLUDED.procedure_date,
+       anesthesia     = EXCLUDED.anesthesia,
+       implants       = EXCLUDED.implants,
+       medications    = EXCLUDED.medications,
+       aftercare      = EXCLUDED.aftercare,
+       warning_signs  = EXCLUDED.warning_signs,
+       emergency_contact = EXCLUDED.emergency_contact,
+       content_language  = EXCLUDED.content_language,
+       updated_at     = now()
+     RETURNING id`,
+    [clinicId, leadId,
+      fields.procedure_name || null,
+      isoDateOrNull(fields.procedure_date),
+      fields.anesthesia || null,
+      JSON.stringify(cleanPassportList(fields.implants, IMPLANT_KEYS)),
+      JSON.stringify(cleanPassportList(fields.medications, MEDICATION_KEYS)),
+      fields.aftercare || null,
+      fields.warning_signs || null,
+      fields.emergency_contact || null,
+      fields.content_language || null],
+  );
+  if (!q.rows[0]) return null;
+  return getPassportForLead(leadId);
+}
+
+// Yayınlamanın ön koşulu var: işlem adı ve tarihi olmayan bir pasaport,
+// yabancı bir hekim için okunacak bir şey taşımıyor demektir. Boş bir kaydı
+// "yayınlandı" diye hastanın eline vermek, hiç vermemekten kötü.
+export async function issuePassport(leadId) {
+  const q = await pool.query(
+    `UPDATE passports
+        SET issued_at = COALESCE(issued_at, now()), revoked_at = NULL, updated_at = now()
+      WHERE lead_id = $1
+        AND procedure_name IS NOT NULL AND procedure_name <> ''
+        AND procedure_date IS NOT NULL
+      RETURNING id`,
+    [leadId],
+  );
+  if (!q.rows[0]) {
+    const exists = await pool.query(`SELECT 1 FROM passports WHERE lead_id = $1`, [leadId]);
+    throw new Error(exists.rows[0]
+      ? 'passport needs a procedure name and date before it can be issued'
+      : 'passport not found');
+  }
+  return getPassportForLead(leadId);
+}
+
+export async function revokePassport(leadId) {
+  const q = await pool.query(
+    `UPDATE passports SET revoked_at = now(), updated_at = now()
+      WHERE lead_id = $1 AND issued_at IS NOT NULL AND revoked_at IS NULL
+      RETURNING id`,
+    [leadId],
+  );
+  if (!q.rows[0]) throw new Error('no live passport to revoke');
+  return getPassportForLead(leadId);
+}
+
+/**
+ * Hastanın (ve yabancı hekiminin) gördüğü kayıt. Yayınlanmamış veya geri
+ * alınmış pasaport BULUNAMAZ — "taslak" diye bir kamu durumu yok.
+ *
+ * leads.outcome_status buraya bilerek DAHİL EDİLMEDİ: o alan klinik içi bir
+ * değerlendirme ve panelde serbestçe değiştiriliyor. Hastanın elindeki
+ * belgeye koymak, kliniğin iç notunu resmi bir teşhis gibi gösterirdi.
+ * Pasaport NE YAPILDIĞINI söyler; nasıl gittiğinin yorumunu değil.
+ */
+export async function getPassportByToken(token) {
+  const q = await pool.query(
+    `SELECT p.procedure_name,
+            to_char(p.procedure_date, 'YYYY-MM-DD') AS procedure_date,
+            p.anesthesia, p.implants, p.medications, p.aftercare, p.warning_signs,
+            p.emergency_contact, p.content_language, p.issued_at,
+            -- Doğrulama referansı: token'ın ilk 8 hanesi. Belgede basılı
+            -- kod ile linkteki kayıt aynı mı, hekim gözle karşılaştırabilir.
+            upper(left(p.view_token, 8)) AS reference,
+            l.name AS patient_name, l.country AS patient_country, l.language AS patient_language,
+            d.name AS doctor_name, d.specialty AS doctor_specialty,
+            c.name AS clinic_name
+       FROM passports p
+       JOIN leads l   ON l.id = p.lead_id
+       JOIN clinics c ON c.id = p.clinic_id
+       LEFT JOIN doctors d ON d.id = l.doctor_id
+      WHERE p.view_token = $1 AND p.issued_at IS NOT NULL AND p.revoked_at IS NULL`,
+    [token],
+  );
+  return q.rows[0] || null;
+}

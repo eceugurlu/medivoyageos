@@ -472,3 +472,27 @@ CREATE INDEX IF NOT EXISTS idx_conversion_events_pending
   ON conversion_events (occurred_at) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_conversion_events_lead
   ON conversion_events (lead_id, created_at DESC) WHERE lead_id IS NOT NULL;
+
+-- ── Sonuç Pasaportu (see 030_outcome_passport.sql) ─────────────────────────
+CREATE TABLE IF NOT EXISTS passports (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id         UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  lead_id           UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE UNIQUE,
+  view_token        TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'),
+  procedure_name    TEXT,
+  procedure_date    DATE,
+  anesthesia        TEXT,
+  implants          JSONB NOT NULL DEFAULT '[]'::jsonb,  -- [{type,brand,model,lot,side,note}]
+  medications       JSONB NOT NULL DEFAULT '[]'::jsonb,  -- [{name,dose,duration}]
+  aftercare         TEXT,
+  warning_signs     TEXT,
+  emergency_contact TEXT,
+  content_language  TEXT,
+  issued_at         TIMESTAMPTZ,   -- NULL = taslak, token 404 döner
+  revoked_at        TIMESTAMPTZ,   -- dolu = link ölü
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_passports_lead ON passports (lead_id);
+CREATE INDEX IF NOT EXISTS idx_passports_live ON passports (view_token)
+  WHERE issued_at IS NOT NULL AND revoked_at IS NULL;

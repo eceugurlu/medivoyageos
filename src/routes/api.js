@@ -20,6 +20,7 @@ import {
   setLeadOutcome,
   markOperatedIfUnset,
   getConversionEventStats,
+  getPassportForLead, upsertPassport, issuePassport, revokePassport, getPassportByToken,
   getStats,
   listConversations,
   getHandoverQueue,
@@ -210,6 +211,20 @@ publicRouter.get('/quote/:token', (req, res) => {
 // Patient-facing itinerary — same unauthenticated-by-token pattern as the
 // quote link above. JSON, not HTML: public/itinerary.html renders it, same
 // division of labor as the widget.
+// Sonuç Pasaportu — hastanın (ve ülkesindeki hekiminin) gördüğü kayıt.
+// Yayınlanmamış veya geri alınmış pasaport 404 döner: "taslak" diye bir
+// kamu durumu yok (bkz. getPassportByToken).
+publicRouter.get('/passport/:token', (req, res) => {
+  (async () => {
+    const p = await getPassportByToken(req.params.token);
+    if (!p) return res.status(404).json({ error: 'Not found' });
+    res.json(p);
+  })().catch((err) => {
+    console.error('[public] passport error:', err.message);
+    res.status(500).json({ error: 'Something went wrong.' });
+  });
+});
+
 publicRouter.get('/itinerary/:token', (req, res) => {
   (async () => {
     const it = await getLogisticsByToken(req.params.token);
@@ -772,6 +787,38 @@ apiRouter.get('/campaigns/performance', h(async (req, res) => {
 // services/compliance.js içinde ve "veri yok"u 0 puana çevirmiyor.
 // Meta Conversions API kuyruğunun durumu. Asıl değeri "kaç gitti" değil,
 // "kaç gitmedi ve NEDEN" — atfetmenin nerede koptuğunu söyleyen tek liste.
+// Pasaport yönetimi (panel tarafı).
+apiRouter.get('/conversations/:leadId/passport', h(async (req, res) => {
+  res.json(await getPassportForLead(req.params.leadId));
+}));
+
+apiRouter.put('/conversations/:leadId/passport', h(async (req, res) => {
+  const row = await upsertPassport(req.params.leadId, req.body || {});
+  if (!row) return res.status(404).json({ error: 'Lead not found' });
+  res.json(row);
+}));
+
+// Yayınlama ve geri alma AYRI uçlar, taslak kaydetmeden ayrı: hastanın
+// eline geçen belgeyi canlıya almak kasıtlı bir karar olmalı, bir metin
+// alanını düzenlemenin yan etkisi değil.
+apiRouter.post('/conversations/:leadId/passport/issue', h(async (req, res) => {
+  try {
+    res.json(await issuePassport(req.params.leadId));
+  } catch (err) {
+    if (/passport/.test(err.message)) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+}));
+
+apiRouter.post('/conversations/:leadId/passport/revoke', h(async (req, res) => {
+  try {
+    res.json(await revokePassport(req.params.leadId));
+  } catch (err) {
+    if (/passport/.test(err.message)) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+}));
+
 apiRouter.get('/capi', h(async (req, res) => {
   res.json(await getConversionEventStats({ branchId: normalizeBranchId(req.query.branch_id) }));
 }));

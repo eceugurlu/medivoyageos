@@ -516,3 +516,20 @@ CREATE TABLE IF NOT EXISTS benchmark_probes (
 CREATE INDEX IF NOT EXISTS idx_benchmark_probes_clinic ON benchmark_probes (clinic_id, sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_benchmark_probes_open ON benchmark_probes (sent_at)
   WHERE first_reply_at IS NULL;
+
+-- ── Ücretsiz Uyum Kontrolü (see 032_compliance_checks.sql) ────────────────
+-- Kamuya açık öz değerlendirme. Her şey BEYANDIR; paneldeki Risk & Uyum
+-- skoru ise kliniğin kendi verisinden ÖLÇÜLÜR. İkisi karıştırılmamalı.
+CREATE TABLE IF NOT EXISTS compliance_checks (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_name TEXT, email TEXT, city TEXT,
+  answers     JSONB NOT NULL,
+  score       INTEGER,        -- NULL olabilir: hiç cevap yoksa skor da yok
+  coverage    NUMERIC(4,3),
+  gap_count   INTEGER NOT NULL DEFAULT 0,
+  source      TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_compliance_checks_created ON compliance_checks (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_compliance_checks_lead ON compliance_checks (created_at DESC)
+  WHERE email IS NOT NULL;

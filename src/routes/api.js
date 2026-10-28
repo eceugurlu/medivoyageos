@@ -21,6 +21,7 @@ import {
   markOperatedIfUnset,
   getConversionEventStats,
   getBenchmarkStats, addBenchmarkProbe, setBenchmarkReply, deleteBenchmarkProbe,
+  saveComplianceCheck, getComplianceCheckStats, listComplianceCheckLeads,
   getPassportForLead, upsertPassport, issuePassport, revokePassport, getPassportByToken,
   getStats,
   listConversations,
@@ -212,6 +213,19 @@ publicRouter.get('/quote/:token', (req, res) => {
 // Patient-facing itinerary — same unauthenticated-by-token pattern as the
 // quote link above. JSON, not HTML: public/itinerary.html renders it, same
 // division of labor as the widget.
+// Ücretsiz Uyum Kontrolü. Kimlik doğrulaması YOK — herkes kullanabilsin
+// diye. O yüzden hız sınırı var ve her alan sunucu tarafında kırpılıyor.
+// Sonucu görmek için e-posta İSTENMİYOR: kliniğin işine yarayan şeyi rehin
+// almak, daha çok kayıt toplar ama güveni bitirir.
+publicRouter.post('/compliance-check', rateLimit({ max: 12 }), (req, res) => {
+  (async () => {
+    res.json(await saveComplianceCheck(req.body || {}));
+  })().catch((err) => {
+    console.error('[public] compliance-check error:', err.message);
+    res.status(500).json({ error: 'Something went wrong.' });
+  });
+});
+
 // Sonuç Pasaportu — hastanın (ve ülkesindeki hekiminin) gördüğü kayıt.
 // Yayınlanmamış veya geri alınmış pasaport 404 döner: "taslak" diye bir
 // kamu durumu yok (bkz. getPassportByToken).
@@ -822,6 +836,16 @@ apiRouter.post('/conversations/:leadId/passport/revoke', h(async (req, res) => {
 
 // Rakip cevap süresi araştırması. Ürün verisi değil, saha ölçümü:
 // kurucunun kliniklere attığı mesajların kaç dakikada cevaplandığı.
+// Uyum kontrolü kayıtları. Paneldeki değeri "kaç klinik denedi" —
+// başvuru ve yatırımcı görüşmesinde traction kanıtı.
+apiRouter.get('/compliance-checks', h(async (_req, res) => {
+  res.json(await getComplianceCheckStats());
+}));
+
+apiRouter.get('/compliance-checks/leads', h(async (_req, res) => {
+  res.json(await listComplianceCheckLeads());
+}));
+
 apiRouter.get('/benchmark', h(async (_req, res) => {
   res.json(await getBenchmarkStats());
 }));

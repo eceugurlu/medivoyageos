@@ -868,6 +868,14 @@ const I18N = {
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
     "nav.compliance":"Risk & Compliance",
+    "sc.title":"Free compliance check","sc.sub":"The public self-check page, for clinics that are not customers yet. Every run is a clinic that cared enough to answer nine questions about its own compliance.",
+    "sc.total":"Checks run","sc.last7":"in the last 7 days",
+    "sc.leads":"Left an e-mail","sc.leadsFoot":"Asked for the detailed report.",
+    "sc.avgScore":"Average score","sc.avgScoreFoot":"Declared, not measured.",
+    "sc.avgCoverage":"Average coverage","sc.avgCoverageFoot":"How much of the questionnaire they filled in.",
+    "sc.link":"Public link","sc.copy":"Copy","sc.open":"Open","sc.copied":"Link copied.",
+    "sc.none":"No one has run the check yet. Share the link above.",
+    "sc.anon":"(no name given)","sc.hasEmail":"lead","sc.gaps":"gaps",
     "nav.benchmark":"Response Benchmark",
     "bm.title":"Competitor response benchmark","bm.sub":"Our own field measurement: how long clinics take to answer a patient message. No published sector average exists, so this record creates one — and puts it next to what our own system measures. Clinic names are never stored.",
     "bm.sectorMedian":"Sector median","bm.iqr":"middle half","bm.needMore":"not enough probes yet",
@@ -1184,6 +1192,14 @@ const I18N = {
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
     "nav.compliance":"Risk & Uyum",
+    "sc.title":"Ücretsiz Uyum Kontrolü","sc.sub":"Henüz müşteri olmayan klinikler için kamuya açık öz değerlendirme sayfası. Her kullanım, kendi uyum durumu hakkında dokuz soruyu cevaplayacak kadar ilgilenen bir klinik demek.",
+    "sc.total":"Yapılan kontrol","sc.last7":"son 7 günde",
+    "sc.leads":"E-posta bırakan","sc.leadsFoot":"Detaylı rapor istedi.",
+    "sc.avgScore":"Ortalama skor","sc.avgScoreFoot":"Beyan, ölçüm değil.",
+    "sc.avgCoverage":"Ortalama kapsam","sc.avgCoverageFoot":"Anketin ne kadarını doldurdukları.",
+    "sc.link":"Kamuya açık link","sc.copy":"Kopyala","sc.open":"Aç","sc.copied":"Link kopyalandı.",
+    "sc.none":"Henüz kimse kontrolü yapmadı. Yukarıdaki linki paylaş.",
+    "sc.anon":"(isim verilmedi)","sc.hasEmail":"aday","sc.gaps":"açık",
     "nav.benchmark":"Rakip Kıyaslama",
     "bm.title":"Rakip cevap süresi araştırması","bm.sub":"Kendi saha ölçümümüz: klinikler bir hasta mesajına kaç dakikada cevap veriyor. Sektörde yayınlanmış bir ortalama yok, bu kayıt onu üretiyor — ve kendi sistemimizin ölçtüğü sürenin yanına koyuyor. Klinik isimleri saklanmıyor.",
     "bm.sectorMedian":"Sektör medyanı","bm.iqr":"orta yarı","bm.needMore":"henüz yeterli ölçüm yok",
@@ -2498,6 +2514,60 @@ const COMP_MIN_CLINICAL = 20;
 // Gönderilenler zaten Meta'nın işine yarıyor; gönderilemeyenler atfetme
 // zincirinin nerede koptuğunu söyleyen tek kanıt. "ctwa_clid yok" sayısı
 // yüksekse sorun bizde değil, reklamların tıklama kimliği taşımamasında.
+// Ücretsiz Uyum Kontrolü kayıtları.
+//
+// Paneldeki değeri "kaç klinik denedi": başvuruda ve yatırımcı görüşmesinde
+// ödeyen müşteri olmadan gösterilebilecek tek gerçek ilgi kanıtı. E-posta
+// ADRESLERİ burada gösterilmiyor — özet uç onları zaten döndürmüyor, yalnızca
+// bırakılıp bırakılmadığını söylüyor.
+function SelfCheckStats(){
+  const [d,setD]=useState(null);
+  const [err,setErr]=useState(null);
+  useEffect(()=>{ api("/compliance-checks").then(setD).catch(e=>setErr(e.message)); },[]);
+  if(err) return html`<div class="err">${err}</div>`;
+  if(!d) return loadingBox();
+  const url = `${location.origin}/panel/uyum.html`;
+  return html`<div style="margin-top:26px">
+    <div class="section-title">${T("sc.title")}</div>
+    <div class="sub" style="margin:-4px 0 14px">${T("sc.sub")}</div>
+
+    <div class="kpis" style="margin-bottom:14px">
+      <div class="glass kpi"><span class="label">${T("sc.total")}</span>
+        <span class="val ${d.total?"cyan":""}">${d.total}</span>
+        <span class="foot">${d.last_7d} ${T("sc.last7")}</span></div>
+      <div class="glass kpi"><span class="label">${T("sc.leads")}</span>
+        <span class="val ${d.with_email?"mint":""}">${d.with_email}</span>
+        <span class="foot">${T("sc.leadsFoot")}</span></div>
+      <div class="glass kpi"><span class="label">${T("sc.avgScore")}</span>
+        <span class="val">${d.avg_score==null? "–" : d.avg_score}</span>
+        <span class="foot">${T("sc.avgScoreFoot")}</span></div>
+      <div class="glass kpi"><span class="label">${T("sc.avgCoverage")}</span>
+        <span class="val">${d.avg_coverage==null? "–" : "%"+Math.round(d.avg_coverage*100)}</span>
+        <span class="foot">${T("sc.avgCoverageFoot")}</span></div>
+    </div>
+
+    <div class="glass" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:12.5px;color:var(--ink-2)">${T("sc.link")}</span>
+      <span style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;overflow-wrap:anywhere;flex:1;min-width:160px">${url}</span>
+      <button class="btn" style="font-size:12px" onClick=${()=>{ navigator.clipboard.writeText(url); showToast(T("sc.copied")); }}>${T("sc.copy")}</button>
+      <button class="btn" style="font-size:12px" onClick=${()=>window.open(url,"_blank")}>${T("sc.open")}</button>
+    </div>
+
+    ${d.recent.length===0
+      ? emptyBox(T("sc.none"))
+      : html`<div class="glass" style="padding:4px 0">
+        ${d.recent.map((r)=> html`<div key=${r.id} class="rowgrid" style="display:grid;grid-template-columns:1.4fr .8fr .6fr .7fr .8fr;gap:8px;padding:11px 18px;font-size:13px;border-bottom:1px solid var(--rule);align-items:center">
+          <span style="font-weight:600">${r.clinic_name||T("sc.anon")}</span>
+          <span style="color:var(--ink-2)">${r.city||"–"}</span>
+          <span>${r.score==null? "–" : r.score}</span>
+          <span style="color:var(--ink-3)">%${Math.round((r.coverage||0)*100)}</span>
+          <span>${r.left_email? html`<span class="badge human">${T("sc.hasEmail")}</span>`
+            : html`<span class="badge">${r.gap_count} ${T("sc.gaps")}</span>`}</span>
+        </div>`)}
+      </div>`}
+  </div>`;
+}
+
 function CapiStatus(){
   const [d,setD]=useState(null);
   const [err,setErr]=useState(null);
@@ -2834,6 +2904,8 @@ function Compliance(){
         ${COMP_KINDS.map(k=> html`<${DocRow} key=${k} kind=${k} rec=${recByKind.get(k)} onSave=${save} busy=${busy}/>`)}
       </div>
     </div>
+
+    <${SelfCheckStats} />
   </div>`;
 }
 

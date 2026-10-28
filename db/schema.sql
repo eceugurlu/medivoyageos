@@ -496,3 +496,23 @@ CREATE TABLE IF NOT EXISTS passports (
 CREATE INDEX IF NOT EXISTS idx_passports_lead ON passports (lead_id);
 CREATE INDEX IF NOT EXISTS idx_passports_live ON passports (view_token)
   WHERE issued_at IS NOT NULL AND revoked_at IS NULL;
+
+-- ── Rakip cevap süresi araştırması (see 031_benchmark_probes.sql) ──────────
+-- Ürün verisi değil, saha ölçümü. Klinik İSMİ tutulmaz: label anonim etiket.
+CREATE TABLE IF NOT EXISTS benchmark_probes (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id      UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  label          TEXT NOT NULL,
+  channel        TEXT NOT NULL CHECK (channel IN ('whatsapp','instagram','web_form','phone','email')),
+  city           TEXT, treatment TEXT, language TEXT,
+  sent_at        TIMESTAMPTZ NOT NULL,
+  first_reply_at TIMESTAMPTZ,   -- NULL + 48sa geçti = "cevap vermedi" (sorguda)
+  note           TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT benchmark_probes_reply_after_send
+    CHECK (first_reply_at IS NULL OR first_reply_at >= sent_at)
+);
+CREATE INDEX IF NOT EXISTS idx_benchmark_probes_clinic ON benchmark_probes (clinic_id, sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_benchmark_probes_open ON benchmark_probes (sent_at)
+  WHERE first_reply_at IS NULL;

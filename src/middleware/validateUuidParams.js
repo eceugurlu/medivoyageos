@@ -19,7 +19,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // hex, not UUIDs) — those routes are public-by-token and validate by lookup.
 export const UUID_PARAMS = [
   'appointmentId', 'branchId', 'coordinatorId', 'costId', 'deviceId', 'doctorId',
-  'leadId', 'messageId', 'noteId', 'partnerId', 'paymentId', 'quoteId',
+  'leadId', 'messageId', 'noteId', 'partnerId', 'paymentId', 'probeId', 'quoteId',
 ];
 
 export function guardUuidParams(router, names = UUID_PARAMS) {

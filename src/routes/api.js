@@ -20,6 +20,7 @@ import {
   setLeadOutcome,
   markOperatedIfUnset,
   getConversionEventStats,
+  getBenchmarkStats, addBenchmarkProbe, setBenchmarkReply, deleteBenchmarkProbe,
   getPassportForLead, upsertPassport, issuePassport, revokePassport, getPassportByToken,
   getStats,
   listConversations,
@@ -815,6 +816,43 @@ apiRouter.post('/conversations/:leadId/passport/revoke', h(async (req, res) => {
     res.json(await revokePassport(req.params.leadId));
   } catch (err) {
     if (/passport/.test(err.message)) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+}));
+
+// Rakip cevap süresi araştırması. Ürün verisi değil, saha ölçümü:
+// kurucunun kliniklere attığı mesajların kaç dakikada cevaplandığı.
+apiRouter.get('/benchmark', h(async (_req, res) => {
+  res.json(await getBenchmarkStats());
+}));
+
+apiRouter.post('/benchmark', h(async (req, res) => {
+  try {
+    res.status(201).json(await addBenchmarkProbe(req.body || {}));
+  } catch (err) {
+    // Girdi hataları (bilinmeyen kanal, eksik tarih) istemci hatasıdır.
+    if (/channel|label|sent_at|first_reply_at/.test(err.message)) {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
+  }
+}));
+
+apiRouter.put('/benchmark/:probeId', h(async (req, res) => {
+  try {
+    res.json(await setBenchmarkReply(req.params.probeId, (req.body || {}).first_reply_at));
+  } catch (err) {
+    if (/not found/.test(err.message)) return res.status(404).json({ error: err.message });
+    if (/first_reply_at/.test(err.message)) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+}));
+
+apiRouter.delete('/benchmark/:probeId', h(async (req, res) => {
+  try {
+    res.json(await deleteBenchmarkProbe(req.params.probeId));
+  } catch (err) {
+    if (/not found/.test(err.message)) return res.status(404).json({ error: err.message });
     throw err;
   }
 }));

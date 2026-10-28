@@ -9,6 +9,7 @@ import {
 } from '../services/compliance.js';
 import { isCapiConfigured } from '../services/metaCapi.js';
 import { summarizeProbes, CHANNELS } from '../services/benchmark.js';
+import { selfAssess, ALL_QUESTION_IDS } from '../services/complianceSelfCheck.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -3640,4 +3641,77 @@ export async function getBenchmarkStats() {
     }),
     probes,
   };
+}
+
+// ── Ücretsiz Uyum Kontrolü (kamuya açık) ───────────────────────────────────
+
+// Kamuya açık bir uca gelen her alanın boyu sınırlanır: tek bir istekle
+// megabaytlık metin yazdırmak, kimlik doğrulaması olmayan bir uçta en ucuz
+// kötüye kullanımdır.
+const trimTo = (v, n) => (v == null || v === '' ? null : String(v).trim().slice(0, n) || null);
+// Tam bir e-posta doğrulaması değil, olamaz da: amacı yazım hatası ve
+// çöp girdiyi elemek. Gerçek doğrulama ancak gönderilen postayla olur.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+export async function saveComplianceCheck(input = {}) {
+  const answers = input.answers && typeof input.answers === 'object' && !Array.isArray(input.answers)
+    ? input.answers : {};
+  // Yalnızca tanıdığımız soru anahtarları saklanır; gelen diğer her şey atılır.
+  const clean = {};
+  for (const id of ALL_QUESTION_IDS) {
+    if (answers[id] != null) clean[id] = trimTo(answers[id], 40);
+    const until = answers[`${id}_valid_until`];
+    if (until != null) clean[`${id}_valid_until`] = trimTo(until, 10);
+  }
+
+  const result = selfAssess(clean, { now: new Date() });
+  const email = trimTo(input.email, 200);
+  const q = await pool.query(
+    `INSERT INTO compliance_checks (clinic_name, email, city, answers, score, coverage, gap_count, source)
+     VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8)
+     RETURNING id, created_at`,
+    [trimTo(input.clinic_name, 160),
+      email && EMAIL_RE.test(email) ? email.toLowerCase() : null,
+      trimTo(input.city, 80),
+      JSON.stringify(clean),
+      result.score, result.coverage, result.gaps.length,
+      trimTo(input.source, 80)],
+  );
+  return { ...result, id: q.rows[0].id, saved_at: q.rows[0].created_at };
+}
+
+export async function getComplianceCheckStats() {
+  const [totals, recent] = await Promise.all([
+    pool.query(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE email IS NOT NULL)::int AS with_email,
+              count(*) FILTER (WHERE created_at > now() - interval '7 days')::int AS last_7d,
+              avg(score) FILTER (WHERE score IS NOT NULL) AS avg_score,
+              avg(coverage) FILTER (WHERE coverage > 0) AS avg_coverage
+         FROM compliance_checks`,
+    ),
+    pool.query(
+      `SELECT id, clinic_name, city, email IS NOT NULL AS left_email, score, coverage, gap_count, created_at
+         FROM compliance_checks ORDER BY created_at DESC LIMIT 15`,
+    ),
+  ]);
+  const t = totals.rows[0];
+  return {
+    total: t.total,
+    with_email: t.with_email,
+    last_7d: t.last_7d,
+    avg_score: t.avg_score == null ? null : Math.round(Number(t.avg_score)),
+    avg_coverage: t.avg_coverage == null ? null : Math.round(Number(t.avg_coverage) * 100) / 100,
+    recent: recent.rows,
+  };
+}
+
+// E-posta bırakanlar: satış listesi. Ayrı bir uç, çünkü yukarıdaki istatistik
+// paneldeki özet kutusu için ve kişisel veri taşımıyor.
+export async function listComplianceCheckLeads() {
+  const q = await pool.query(
+    `SELECT id, clinic_name, city, email, score, coverage, gap_count, answers, created_at
+       FROM compliance_checks WHERE email IS NOT NULL ORDER BY created_at DESC LIMIT 200`,
+  );
+  return q.rows;
 }

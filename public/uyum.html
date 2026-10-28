@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ücretsiz Uyum Kontrolü — Sağlık Turizmi Yönetmeliği</title>
+<meta name="description" content="Kliniğiniz 2025 Sağlık Turizmi Yönetmeliği'ne hazır mı? 9 soruda öğrenin. Akreditasyon son tarihine kalan gün sayısı ve kapatmanız gereken açıklar." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M16 5l9 3.5v7c0 5.2-3.6 9.3-9 10.5-5.4-1.2-9-5.3-9-10.5v-7z' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Public+Sans:wght@400;500;600;700&family=Azeret+Mono:wght@400;500&display=swap">
+<style>
+  /* widget.html / itinerary.html / passport.html ile aynı "klinik defteri"
+     ailesi: bu sayfayı da personel değil, dışarıdan bir klinik sahibi açıyor. */
+  :root{
+    --ground:#eaedef; --paper:#ffffff; --paper-2:#f4f6f8;
+    --ink:#0c1316; --ink-2:#4b555b; --ink-3:#5f666b;
+    --rule:#dde3e6; --rule-2:#c3ccd1;
+    --accent:#0e5750; --accent-2:#126b60; --accent-wash:#e4efed; --accent-line:#9dc3bc;
+    --alert:#9a2b23; --alert-wash:#fbeceb; --alert-line:#e0b4b0;
+    --brass:#8c6415; --brass-wash:#f7f0dd; --brass-line:#e0cf9e;
+    --pos:#1d6b4f; --pos-wash:#e6f1ec;
+    --display:"Fraunces",Georgia,"Times New Roman",serif;
+    --body:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --r:14px; --r-sm:8px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--ground);color:var(--ink);
+    font-family:var(--body);font-size:15.5px;line-height:1.6;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:26px 18px 70px}
+  .sheet{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+
+  .head{padding:26px 26px 22px;border-bottom:1px solid var(--rule)}
+  .eyebrow{
+    font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.15em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:9px;
+  }
+  h1{
+    font-family:var(--display);font-weight:600;font-size:clamp(25px,5vw,33px);
+    letter-spacing:-.02em;line-height:1.15;margin:0 0 10px;text-wrap:balance;
+  }
+  .lede{color:var(--ink-2);font-size:15px;margin:0;max-width:60ch}
+
+  .countdown{
+    display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+    margin-top:18px;padding:13px 16px;border-radius:var(--r-sm);
+    background:var(--alert-wash);border:1px solid var(--alert-line);
+  }
+  .countdown .n{
+    font-family:var(--display);font-weight:600;font-size:30px;line-height:1;
+    color:var(--alert);font-variant-numeric:tabular-nums;
+  }
+  .countdown .t{font-size:13.5px;color:var(--ink);line-height:1.45}
+
+  .q{padding:18px 26px;border-bottom:1px solid var(--rule)}
+  .q:last-of-type{border-bottom:0}
+  .q legend, .q .qlabel{
+    font-weight:600;font-size:15px;display:block;margin-bottom:4px;padding:0;
+  }
+  .q .hint{color:var(--ink-3);font-size:13px;line-height:1.5;margin:0 0 11px}
+  fieldset{border:0;margin:0;padding:0}
+  .opts{display:flex;flex-wrap:wrap;gap:8px}
+  .opt{
+    display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+    padding:8px 13px;min-height:40px;border-radius:var(--r-sm);
+    border:1px solid var(--rule-2);background:var(--paper);font-size:13.5px;
+  }
+  .opt:hover{border-color:var(--accent-line)}
+  .opt input{accent-color:var(--accent);margin:0}
+  .opt:has(input:checked){background:var(--accent-wash);border-color:var(--accent);color:var(--accent-2);font-weight:600}
+  .opt:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+
+  .until{margin-top:10px;display:none;align-items:center;gap:9px;flex-wrap:wrap}
+  .until.on{display:flex}
+  .until label{font-size:13px;color:var(--ink-2)}
+  input[type=date],input[type=text],input[type=email]{
+    font:inherit;font-size:14px;padding:9px 11px;min-height:40px;
+    border:1px solid var(--rule-2);border-radius:var(--r-sm);
+    background:var(--paper);color:var(--ink);max-width:100%;
+  }
+  input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+  .foot{padding:20px 26px;background:var(--paper-2);border-top:1px solid var(--rule)}
+  .idrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  .idrow > *{min-width:0}
+  button.go{
+    font:inherit;font-weight:600;font-size:15px;width:100%;padding:14px;min-height:50px;
+    border:1px solid var(--accent);border-radius:var(--r-sm);
+    background:var(--accent);color:#fbfaf7;cursor:pointer;
+  }
+  button.go:hover{background:var(--accent-2)}
+  button.go:disabled{opacity:.55;cursor:default}
+  button.go:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .privacy{color:var(--ink-3);font-size:12.5px;margin:11px 0 0;line-height:1.5}
+
+  /* ── sonuç ── */
+  .scorebar{display:flex;flex-wrap:wrap;gap:1px;background:var(--rule);border-bottom:1px solid var(--rule)}
+  .cell{flex:1 1 170px;background:var(--paper);padding:17px 20px}
+  .cell .lbl{
+    font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--ink-3);
+  }
+  .cell .val{
+    font-family:var(--display);font-weight:600;font-size:33px;line-height:1.1;
+    letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums;
+  }
+  .cell .val.good{color:var(--pos)} .cell .val.bad{color:var(--alert)}
+  .cell .note{color:var(--ink-3);font-size:12px;margin-top:6px;line-height:1.45}
+
+  .declared{
+    margin:0;padding:13px 26px;background:var(--brass-wash);
+    border-bottom:1px solid var(--brass-line);color:#6b4d10;font-size:13.5px;line-height:1.55;
+  }
+  .items{padding:6px 0}
+  .row{
+    display:flex;gap:13px;align-items:flex-start;
+    padding:13px 26px;border-bottom:1px solid var(--paper-2);
+  }
+  .row:last-child{border-bottom:0}
+  .dot{flex:none;width:9px;height:9px;border-radius:50%;margin-top:7px}
+  .dot.ok{background:var(--pos)} .dot.warn{background:var(--brass)}
+  .dot.fail{background:var(--alert)} .dot.unknown{background:var(--rule-2)}
+  .row .name{font-weight:600;font-size:14.5px}
+  /* display:block şart: .name ve .why aynı span'in içinde ve ikisi de satır
+     içi kalınca "yetki belgesiGeçerli (beyan)" diye yapışıyordu. */
+  .row .name{display:block}
+  .row .why{display:block;color:var(--ink-2);font-size:13px;line-height:1.5;margin-top:2px}
+  .row .side{margin-left:auto;flex:none;font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap}
+  .row .side.urgent{color:var(--alert)}
+
+  .cta{padding:22px 26px;background:var(--accent-wash);border-top:1px solid var(--accent-line)}
+  .cta h2{font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 7px;text-wrap:balance}
+  .cta p{color:var(--ink-2);font-size:14px;margin:0 0 14px;max-width:58ch}
+  .cta .emailrow{display:flex;gap:9px;flex-wrap:wrap}
+  .cta .emailrow input{flex:1 1 220px}
+  .cta button{
+    font:inherit;font-weight:600;font-size:14px;padding:11px 20px;min-height:44px;flex:none;
+    border:1px solid var(--accent);border-radius:var(--r-sm);
+    background:var(--accent);color:#fbfaf7;cursor:pointer;
+  }
+  .cta button:disabled{opacity:.55;cursor:default}
+  .ok-msg{color:var(--pos);font-weight:600;font-size:14px;margin:12px 0 0}
+  .err{color:var(--alert);font-size:14px;margin:12px 0 0}
+
+  .legal{color:var(--ink-3);font-size:12.5px;line-height:1.55;margin:18px 2px 0}
+  .legal a{color:var(--accent-2)}
+  [hidden]{display:none!important}
+  @media (max-width:560px){ .idrow{grid-template-columns:1fr} }
+  @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="sheet" id="formSheet">
+    <div class="head">
+      <div class="eyebrow">Ücretsiz · 2 dakika · kayıt gerekmez</div>
+      <h1>Kliniğiniz yönetmeliğe hazır mı?</h1>
+      <p class="lede">26 Nisan 2025 tarihli Uluslararası Sağlık Turizmi Yönetmeliği belge, kayıt ve takip yükümlülükleri getirdi. 9 soruya cevap verin; nerede durduğunuzu ve neyi kapatmanız gerektiğini görün.</p>
+      <div class="countdown">
+        <span class="n" id="cdDays">–</span>
+        <span class="t"><b>gün kaldı</b> — akreditasyon için son tarih 31 Aralık 2026.</span>
+      </div>
+    </div>
+
+    <form id="form">
+      <div id="questions"></div>
+
+      <div class="foot">
+        <div class="idrow">
+          <input type="text" id="clinicName" placeholder="Klinik adı (isteğe bağlı)" maxlength="160" autocomplete="organization">
+          <input type="text" id="city" placeholder="Şehir (isteğe bağlı)" maxlength="80" autocomplete="address-level2">
+        </div>
+        <button class="go" type="submit" id="submitBtn">Sonucumu göster</button>
+        <p class="privacy">Sonucu görmek için e-posta istemiyoruz. Cevaplarınız, ülke genelinde uyum durumunu ölçmek için isimsiz olarak saklanır.</p>
+        <p class="err" id="formErr" hidden></p>
+      </div>
+    </form>
+  </div>
+
+  <div class="sheet" id="resultSheet" hidden>
+    <div class="head">
+      <div class="eyebrow">Sonucunuz</div>
+      <h1 id="resultTitle">Uyum durumunuz</h1>
+      <p class="lede" id="resultLede"></p>
+    </div>
+
+    <div class="scorebar">
+      <div class="cell">
+        <div class="lbl">Skor</div>
+        <div class="val" id="rScore">–</div>
+        <div class="note" id="rScoreNote"></div>
+      </div>
+      <div class="cell">
+        <div class="lbl">Kapsam</div>
+        <div class="val" id="rCoverage">–</div>
+        <div class="note" id="rCoverageNote"></div>
+      </div>
+      <div class="cell">
+        <div class="lbl">Akreditasyona kalan</div>
+        <div class="val bad" id="rDays">–</div>
+        <div class="note">Son tarih 31.12.2026</div>
+      </div>
+      <div class="cell">
+        <div class="lbl">Kapatılacak açık</div>
+        <div class="val" id="rGaps">–</div>
+        <div class="note" id="rGapsNote"></div>
+      </div>
+    </div>
+
+    <p class="declared"><b>Bu sonuç beyanınıza dayanıyor, ölçüme değil.</b> Denetimde sorulan şey ne söylediğiniz değil, neyi kanıtlayabildiğiniz olacak. Aşağıdaki maddelerin her biri için kayıt tutuluyor olması gerekir.</p>
+
+    <div class="items" id="rItems"></div>
+
+    <div class="cta">
+      <h2>Bu maddeleri ölçülmüş hâle getirin</h2>
+      <p>MediVoyage, buradaki her maddeyi kliniğin kendi verisinden ölçer: çağrı kayıtları, açık rıza oranı, ameliyat sonrası takip uyumu ve hasta sonuçları. Detaylı raporu ve nasıl kapatacağınızı e-posta ile gönderelim.</p>
+      <div class="emailrow">
+        <input type="email" id="email" placeholder="E-posta adresiniz" maxlength="200" autocomplete="email">
+        <button type="button" id="sendBtn">Detaylı raporu gönder</button>
+      </div>
+      <p class="ok-msg" id="emailOk" hidden>Teşekkürler — raporu bu adrese göndereceğiz.</p>
+      <p class="err" id="emailErr" hidden></p>
+    </div>
+  </div>
+
+  <p class="legal">Bu araç bilgilendirme amaçlıdır ve hukuki görüş yerine geçmez. Yükümlülüklerinizin tam listesi için 26.04.2025 tarihli ve 32882 sayılı Resmî Gazete'de yayımlanan yönetmeliğe bakın. Komplikasyon sigortası yükümlülüğünün kapsamını kendi sigortacınıza doğrulatın.</p>
+</div>
+
+<script>
+// Sorular istemcide tanımlı ama PUAN SUNUCUDA hesaplanıyor
+// (services/complianceSelfCheck.js). Aynı mantığı iki yerde tutmak, zamanla
+// ikisinin ayrışması ve sayfanın sunucunun söylemediği bir skoru göstermesi
+// demek olurdu.
+var DOC_OPTS = [
+  { v: "valid", t: "Var, geçerli" },
+  { v: "in_progress", t: "Başvuru sürecinde" },
+  { v: "missing", t: "Yok" },
+];
+var PRACTICE_OPTS = [
+  { v: "always", t: "Her zaman" },
+  { v: "mostly", t: "Çoğu zaman" },
+  { v: "sometimes", t: "Bazen" },
+  { v: "never", t: "Hayır" },
+];
+var QUESTIONS = [
+  { id: "health_tourism_authorization", kind: "doc", q: "Sağlık turizmi yetki belgeniz var mı?",
+    hint: "Sağlık Bakanlığı'ndan alınan uluslararası sağlık turizmi yetki belgesi." },
+  { id: "accreditation", kind: "doc", q: "Akreditasyon belgeniz var mı?", until: true,
+    hint: "Yönetmelik akreditasyon için 31 Aralık 2026'yı son tarih olarak belirledi." },
+  { id: "complication_insurance", kind: "doc", q: "Komplikasyon sigortanız var mı?", until: true,
+    hint: "Yurt dışından gelen hastaların cerrahi ve girişimsel işlemleri için zorunlu hâle geldi." },
+  { id: "kvkk_registry", kind: "doc", q: "KVKK / VERBİS kaydınız tamamlandı mı?",
+    hint: "Hasta verisi işleyen her klinik için gerekli." },
+  { id: "multilingual_24_7", kind: "practice", q: "Hastalara 7/24 ve en az iki dilde ulaşılabiliyor mu?",
+    hint: "Yönetmelik İngilizce dahil çok dilli ve kesintisiz iletişim şartı getiriyor." },
+  { id: "contact_logs", kind: "practice", q: "Hasta iletişim kayıtlarınız tutuluyor mu?",
+    hint: "Zaman, kiminle görüşüldüğü ve nasıl sonuçlandığı kayıtlı olmalı — denetimde istenen üç alan." },
+  { id: "consent_records", kind: "practice", q: "Her hasta için açık rıza kaydı tutuluyor mu?",
+    hint: "Sözlü onay yeterli değil; kaydı gösterilebilir olmalı." },
+  { id: "postop_followup", kind: "practice", q: "Ameliyat sonrası takipleriniz zamanında tamamlanıyor mu?",
+    hint: "Hasta ülkesine döndükten sonraki kontroller de buna dahil." },
+  { id: "outcome_records", kind: "practice", q: "Ameliyat sonuçlarını (iyileşme, komplikasyon) kayıt altına alıyor musunuz?",
+    hint: "Hasta bazında sonuç kaydı. Bugün çoğu klinikte hiç tutulmuyor." },
+];
+
+var esc = function (s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+};
+var $ = function (id) { return document.getElementById(id); };
+
+// Akreditasyon geri sayımı sayfada hesaplanır ki sunucuya gitmeden görünsün;
+// sonuç ekranındaki rakam sunucudan gelir ve ikisi aynı tarihten türer.
+(function () {
+  var target = Date.UTC(2026, 11, 31);
+  var today = new Date();
+  var days = Math.round((target - Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+  $("cdDays").textContent = days > 0 ? days : 0;
+  if (days <= 0) {
+    $("cdDays").nextElementSibling.innerHTML = "<b>Son tarih geçti</b> — akreditasyon için 31 Aralık 2026 tarihi doldu.";
+  }
+})();
+
+(function renderQuestions() {
+  var html = QUESTIONS.map(function (q, i) {
+    var opts = (q.kind === "doc" ? DOC_OPTS : PRACTICE_OPTS).map(function (o) {
+      return '<label class="opt"><input type="radio" name="' + esc(q.id) + '" value="' + esc(o.v) + '">' + esc(o.t) + "</label>";
+    }).join("");
+    var until = q.until
+      ? '<div class="until" id="until-' + esc(q.id) + '">' +
+        '<label for="d-' + esc(q.id) + '">Geçerlilik bitiş tarihi</label>' +
+        '<input type="date" id="d-' + esc(q.id) + '" name="' + esc(q.id) + '_valid_until"></div>'
+      : "";
+    return '<fieldset class="q"><legend>' + (i + 1) + ". " + esc(q.q) + "</legend>" +
+      '<p class="hint">' + esc(q.hint) + "</p>" +
+      '<div class="opts">' + opts + "</div>" + until + "</fieldset>";
+  }).join("");
+  $("questions").innerHTML = html;
+
+  // Tarih alanı yalnızca "var, geçerli" denince anlamlı.
+  QUESTIONS.filter(function (q) { return q.until; }).forEach(function (q) {
+    document.getElementsByName(q.id).forEach(function (el) {
+      el.addEventListener("change", function () {
+        $("until-" + q.id).classList.toggle("on", el.checked && el.value === "valid");
+      });
+    });
+  });
+})();
+
+function collect() {
+  var answers = {};
+  var fd = new FormData($("form"));
+  QUESTIONS.forEach(function (q) {
+    var v = fd.get(q.id);
+    if (v) answers[q.id] = v;
+    if (q.until && answers[q.id] === "valid") {
+      var d = fd.get(q.id + "_valid_until");
+      if (d) answers[q.id + "_valid_until"] = d;
+    }
+  });
+  return answers;
+}
+
+function renderResult(r) {
+  var answered = r.answered;
+  $("resultLede").textContent = answered === 0
+    ? "Hiçbir soruyu cevaplamadınız, bu yüzden bir skor hesaplanamadı. Geri dönüp birkaç soruyu işaretleyin."
+    : answered + " soruyu cevapladınız. Aşağıdaki her madde için denetimde kayıt istenecek.";
+
+  $("rScore").textContent = r.score == null ? "–" : r.score;
+  $("rScore").className = "val" + (r.score == null ? "" : r.score >= 85 ? " good" : r.score < 60 ? " bad" : "");
+  $("rScoreNote").textContent = r.score == null
+    ? "Cevap yok — bu sıfır puan değil."
+    : "Yalnızca cevapladığınız maddelerin ağırlıklı ortalaması.";
+
+  var cov = Math.round(r.coverage * 100);
+  $("rCoverage").textContent = "%" + cov;
+  $("rCoverage").className = "val" + (cov >= 80 ? "" : " bad");
+  $("rCoverageNote").textContent = cov >= 100
+    ? "Tüm maddeler cevaplandı."
+    : "Skor yalnızca bu kadarını görüyor. Kapsamı düşük bir yüksek skor, yüksek skor değildir.";
+
+  var d = r.deadlines && r.deadlines.accreditation_days;
+  $("rDays").textContent = d == null ? "–" : (d > 0 ? d : "Geçti");
+
+  $("rGaps").textContent = r.gaps.length;
+  $("rGaps").className = "val" + (r.gaps.length === 0 ? " good" : " bad");
+  $("rGapsNote").textContent = r.gaps.length === 0
+    ? "Beyanınıza göre açık yok."
+    : "Başarısız ya da cevaplanmamış zorunlu maddeler.";
+
+  $("rItems").innerHTML = r.items.map(function (it) {
+    var side = it.deadline_days != null
+      ? (it.deadline_days > 0 ? it.deadline_days + " GÜN" : "SÜRE DOLDU")
+      : (it.in_force_since ? "ZORUNLU" : "");
+    var urgent = it.deadline_days != null && it.deadline_days <= 90;
+    return '<div class="row"><span class="dot ' + esc(it.status) + '"></span>' +
+      '<span><span class="name">' + esc(it.label) + "</span>" +
+      '<span class="why">' + esc(it.evidence) + "</span></span>" +
+      (side ? '<span class="side' + (urgent ? " urgent" : "") + '">' + esc(side) + "</span>" : "") +
+      "</div>";
+  }).join("");
+
+  $("formSheet").hidden = true;
+  $("resultSheet").hidden = false;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+$("form").addEventListener("submit", function (e) {
+  e.preventDefault();
+  var btn = $("submitBtn");
+  var err = $("formErr");
+  err.hidden = true;
+  btn.disabled = true;
+  btn.textContent = "Hesaplanıyor…";
+  fetch("/api/public/compliance-check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      answers: collect(),
+      clinic_name: $("clinicName").value || null,
+      city: $("city").value || null,
+      source: new URLSearchParams(location.search).get("utm_source") || null,
+    }),
+  }).then(function (res) {
+    if (!res.ok) throw new Error(res.status === 429
+      ? "Çok fazla deneme. Birkaç dakika sonra tekrar deneyin."
+      : "Sonuç hesaplanamadı. Lütfen tekrar deneyin.");
+    return res.json();
+  }).then(function (r) {
+    renderResult(r);
+  }).catch(function (e2) {
+    err.textContent = e2.message;
+    err.hidden = false;
+  }).finally(function () {
+    btn.disabled = false;
+    btn.textContent = "Sonucumu göster";
+  });
+});
+
+$("sendBtn").addEventListener("click", function () {
+  var email = $("email").value.trim();
+  var ok = $("emailOk");
+  var err = $("emailErr");
+  ok.hidden = true; err.hidden = true;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    err.textContent = "Geçerli bir e-posta adresi girin.";
+    err.hidden = false;
+    return;
+  }
+  var btn = $("sendBtn");
+  btn.disabled = true;
+  // Aynı uca ikinci kez yazıyoruz: ilk kayıt isimsizdi, bu kez e-postayla.
+  // Ayrı bir "güncelle" ucu açmamak bilinçli — kimlik doğrulaması olmayan
+  // bir uçta başkasının kaydını düzenleyebilmek istemiyoruz.
+  fetch("/api/public/compliance-check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      answers: collect(),
+      clinic_name: $("clinicName").value || null,
+      city: $("city").value || null,
+      email: email,
+      source: "report-request",
+    }),
+  }).then(function (res) {
+    if (!res.ok) throw new Error("Gönderilemedi. Lütfen tekrar deneyin.");
+    ok.hidden = false;
+    $("email").value = "";
+  }).catch(function (e2) {
+    err.textContent = e2.message;
+    err.hidden = false;
+  }).finally(function () { btn.disabled = false; });
+});
+</script>
+</body>
+</html>

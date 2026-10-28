@@ -10,7 +10,8 @@
     "check:weekly-report": "node scripts/test-weekly-report.mjs",
     "check:ai-cost": "node scripts/test-ai-cost.mjs",
     "check:voice": "node scripts/test-voice-helpers.mjs && node scripts/simulate-call.mjs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run check:fx && npm run check:monitoring && npm run check:weekly-report && npm run check:ai-cost && npm run check:voice",
+    "check:fx": "node scripts/test-fx.mjs"
   },
   "keywords": [],
   "author": "",

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { dbEnabled } from '../db/pool.js';
 import { requireEntityToken } from '../middleware/requireEntityToken.js';
+import { guardUuidParams } from '../middleware/validateUuidParams.js';
 import {
   getDoctorByToken, getDoctorLeads, getDoctorLeadDetail, getDoctorMessageMedia, submitDoctorReview,
 } from '../store/repository.js';
@@ -17,6 +18,8 @@ doctorRouter.use((req, res, next) => {
 });
 
 const requireDoctor = requireEntityToken({ lookup: getDoctorByToken, reqKey: 'doctor', entityLabel: 'doctor' });
+
+guardUuidParams(doctorRouter, ['leadId', 'messageId']);
 
 doctorRouter.get('/leads', requireDoctor, (req, res) => {
   getDoctorLeads(req.doctor.id)

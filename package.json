@@ -10,11 +10,13 @@
     "check:weekly-report": "node scripts/test-weekly-report.mjs",
     "check:ai-cost": "node scripts/test-ai-cost.mjs",
     "check:voice": "node scripts/test-voice-helpers.mjs && node scripts/simulate-call.mjs",
-    "test": "npm run check:fx && npm run check:compliance && npm run check:monitoring && npm run check:weekly-report && npm run check:ai-cost && npm run check:voice",
+    "test": "npm run check:fx && npm run check:compliance && npm run check:capi && npm run check:monitoring && npm run check:weekly-report && npm run check:ai-cost && npm run check:voice",
     "check:fx": "node scripts/test-fx.mjs",
     "check:attribution": "node scripts/test-attribution.mjs",
     "check:compliance": "node scripts/test-compliance.mjs",
-    "check:compliance-db": "node scripts/test-compliance-db.mjs"
+    "check:compliance-db": "node scripts/test-compliance-db.mjs",
+    "check:capi": "node scripts/test-capi.mjs",
+    "check:capi-db": "node scripts/test-capi-db.mjs"
   },
   "keywords": [],
   "author": "",

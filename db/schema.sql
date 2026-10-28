@@ -444,3 +444,31 @@ CREATE INDEX IF NOT EXISTS idx_leads_operated ON leads (operated_at DESC)
   WHERE operated_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_outcome ON leads (outcome_status)
   WHERE outcome_status IS NOT NULL;
+
+-- ── Meta Conversions API kuyruğu (see 029_conversion_events.sql) ───────────
+CREATE TABLE IF NOT EXISTS conversion_events (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id   UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  lead_id     UUID REFERENCES leads(id) ON DELETE SET NULL,
+  event_name  TEXT NOT NULL,
+  dedup_key   TEXT NOT NULL,          -- olayı tetikleyen satırın kimliği
+  channel     TEXT,
+  value       NUMERIC(12,2),
+  currency    TEXT,
+  status      TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending','sent','failed','skipped')),
+  skip_reason TEXT,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  last_error  TEXT,
+  payload     JSONB,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  sent_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_conversion_events_dedup
+  ON conversion_events (clinic_id, dedup_key);
+CREATE INDEX IF NOT EXISTS idx_conversion_events_pending
+  ON conversion_events (occurred_at) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_conversion_events_lead
+  ON conversion_events (lead_id, created_at DESC) WHERE lead_id IS NOT NULL;

@@ -1,7 +1,13 @@
 {
   "rewrites": [
-    { "source": "/api/cron/(.*)", "destination": "/api/cron/$1" },
-    { "source": "/(.*)", "destination": "/api/index" }
+    {
+      "source": "/api/cron/(.*)",
+      "destination": "/api/cron/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
   ],
   "functions": {
     "api/index.js": {
@@ -10,10 +16,29 @@
     }
   },
   "crons": [
-    { "path": "/api/cron/postop", "schedule": "0 7 * * *" },
-    { "path": "/api/cron/risk", "schedule": "30 7 * * *" },
-    { "path": "/api/cron/hotleads", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/handoversla", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/weeklyreport", "schedule": "0 7 * * 1" }
+    {
+      "path": "/api/cron/postop",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/risk",
+      "schedule": "30 7 * * *"
+    },
+    {
+      "path": "/api/cron/hotleads",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/handoversla",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/weeklyreport",
+      "schedule": "0 7 * * 1"
+    },
+    {
+      "path": "/api/cron/capi",
+      "schedule": "*/5 * * * *"
+    }
   ]
 }

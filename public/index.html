@@ -862,6 +862,16 @@ const I18N = {
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
     "nav.compliance":"Risk & Compliance",
+    "capi.title":"Meta Conversions API","capi.off":"not connected",
+    "capi.sub":"Conversions reported back to Meta. Once Meta learns which click became an operation, it optimises the ad toward that audience — the same budget buys more patients.",
+    "capi.offSub":"Not connected yet, so nothing is being reported. Events are still queued, not discarded: add META_CAPI_DATASET_ID and an access token and the backlog goes out on the next run.",
+    "capi.none":"No conversion events yet. The first one is queued when a lead from an ad arrives or a payment is confirmed.",
+    "capi.sent":"Reported","capi.sentFoot":"Accepted by Meta.","capi.reported":"reported",
+    "capi.pending":"Queued","capi.pendingFoot":"Goes out on the next run (every 5 min).","capi.pendingHeld":"Held until the API is connected — not lost.",
+    "capi.skipped":"Not reportable","capi.skippedFoot":"Could not be matched to a Meta click. See the reasons below.",
+    "capi.failed":"Rejected","capi.failedFoot":"Meta refused the payload. The exact body is stored.",
+    "capi.whySkipped":"Why they could not be reported",
+    "capi.st.sent":"sent","capi.st.pending":"queued","capi.st.skipped":"skipped","capi.st.failed":"rejected",
     "out.title":"Operation outcome","out.pending":"outcome missing",
     "out.hint":"Feeds the Risk & Compliance score, and the only clinic-level outcome record this sector has. Nothing here is ever filled in automatically — a default nobody looked at is not data.",
     "out.operatedAt":"Operation date","out.status":"Outcome","out.none":"not recorded",
@@ -1130,6 +1140,16 @@ const I18N = {
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
     "nav.compliance":"Risk & Uyum",
+    "capi.title":"Meta Conversions API","capi.off":"bağlı değil",
+    "capi.sub":"Meta'ya geri bildirilen dönüşümler. Meta hangi tıklamanın ameliyata döndüğünü öğrenince reklamı o kitleye optimize eder — aynı bütçe daha çok hasta getirir.",
+    "capi.offSub":"Henüz bağlı değil, yani hiçbir şey bildirilmiyor. Olaylar yine de kuyrukta bekliyor, atılmıyor: META_CAPI_DATASET_ID ve erişim anahtarını girin, biriken her şey bir sonraki turda gider.",
+    "capi.none":"Henüz dönüşüm olayı yok. İlki, reklamdan bir hasta geldiğinde ya da bir ödeme onaylandığında kuyruğa girer.",
+    "capi.sent":"Bildirildi","capi.sentFoot":"Meta kabul etti.","capi.reported":"bildirildi",
+    "capi.pending":"Kuyrukta","capi.pendingFoot":"Bir sonraki turda gider (5 dakikada bir).","capi.pendingHeld":"API bağlanana kadar bekliyor — kaybolmadı.",
+    "capi.skipped":"Bildirilemez","capi.skippedFoot":"Bir Meta tıklamasıyla eşleştirilemedi. Nedenler aşağıda.",
+    "capi.failed":"Reddedildi","capi.failedFoot":"Meta payload'ı kabul etmedi. Gövdenin tamamı saklı.",
+    "capi.whySkipped":"Neden bildirilemediler",
+    "capi.st.sent":"gitti","capi.st.pending":"kuyrukta","capi.st.skipped":"atlandı","capi.st.failed":"reddedildi",
     "out.title":"Ameliyat sonucu","out.pending":"sonuç eksik",
     "out.hint":"Risk & Uyum skorunu ve bu sektörde var olan tek klinik bazlı sonuç kaydını besler. Buradaki hiçbir alan otomatik doldurulmaz — kimsenin bakmadığı bir varsayılan, veri değildir.",
     "out.operatedAt":"Ameliyat tarihi","out.status":"Sonuç","out.none":"kayıtlı değil",
@@ -2236,6 +2256,7 @@ function Analytics({ analytics, profitability }){
       ${analytics.channel_attribution===false? html`<div class="sub" style="margin:14px 0 0;font-size:12.5px">${T("analytics.attributionNote")}</div>`:null}
     </div>
     <${CampaignPerformance} />
+    <${CapiStatus} />
     ${analytics.revenue===0 && !analytics.payments_pending? html`<div class="sub" style="margin:16px 0 0;font-size:12.5px">${T("analytics.noPaymentsNote")}</div>`
       : analytics.payments_pending? html`<div class="sub" style="margin:16px 0 0;font-size:12.5px">€${analytics.payments_pending.toLocaleString()} ${T("analytics.pendingNote")} ${analytics.payments_pending_count} ${T("analytics.pendingNote2")}</div>`
       : null}
@@ -2252,6 +2273,63 @@ const VIP_THIN_SAMPLE = 5; // below this, a ratio is noise dressed as a number
 // sunucunun bilerek saklandığı sayı görünür. İkisi ayrışırsa doktor bazlı
 // tablo yanlış olur, o yüzden burada da adı geçiyor.
 const COMP_MIN_CLINICAL = 20;
+
+// Meta Conversions API durumu.
+//
+// Ekranın asıl sayısı "kaç olay gitti" değil, "kaç gitmedi ve NEDEN".
+// Gönderilenler zaten Meta'nın işine yarıyor; gönderilemeyenler atfetme
+// zincirinin nerede koptuğunu söyleyen tek kanıt. "ctwa_clid yok" sayısı
+// yüksekse sorun bizde değil, reklamların tıklama kimliği taşımamasında.
+function CapiStatus(){
+  const [d,setD]=useState(null);
+  const [err,setErr]=useState(null);
+  useEffect(()=>{ api("/capi").then(setD).catch(e=>setErr(e.message)); },[]);
+  if(err) return html`<div class="err">${err}</div>`;
+  if(!d) return loadingBox();
+
+  const total = d.pending + d.sent + d.failed + d.skipped;
+  return html`<div style="margin-top:26px">
+    <div class="section-title">${T("capi.title")}
+      ${d.configured? null : html`<span class="badge hot" style="margin-left:8px">${T("capi.off")}</span>`}
+    </div>
+    <div class="sub" style="margin:-4px 0 14px">${d.configured? T("capi.sub") : T("capi.offSub")}</div>
+
+    ${total===0
+      ? emptyBox(T("capi.none"))
+      : html`<div class="kpis" style="margin-bottom:14px">
+          <div class="glass kpi"><span class="label">${T("capi.sent")}</span>
+            <span class="val ${d.sent?"mint":""}">${d.sent}</span>
+            <span class="foot">${d.sent_purchase_value? "€"+Number(d.sent_purchase_value).toLocaleString(undefined,{maximumFractionDigits:0})+" "+T("capi.reported") : T("capi.sentFoot")}</span></div>
+          <div class="glass kpi"><span class="label">${T("capi.pending")}</span>
+            <span class="val">${d.pending}</span>
+            <span class="foot">${d.configured? T("capi.pendingFoot") : T("capi.pendingHeld")}</span></div>
+          <div class="glass kpi"><span class="label">${T("capi.skipped")}</span>
+            <span class="val ${d.skipped?"alert":""}">${d.skipped}</span>
+            <span class="foot">${T("capi.skippedFoot")}</span></div>
+          <div class="glass kpi"><span class="label">${T("capi.failed")}</span>
+            <span class="val ${d.failed?"alert":""}">${d.failed}</span>
+            <span class="foot">${T("capi.failedFoot")}</span></div>
+        </div>`}
+
+    ${d.skip_reasons.length? html`<div class="glass" style="padding:12px 18px;margin-bottom:12px">
+      <div style="font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${T("capi.whySkipped")}</div>
+      ${d.skip_reasons.map((r,i)=> html`<div key=${i} style="display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:4px 0">
+        <span style="color:var(--ink-2)">${r.skip_reason}</span>
+        <span style="font-weight:700;font-variant-numeric:tabular-nums">${r.n}</span>
+      </div>`)}
+    </div>`:null}
+
+    ${d.recent.length? html`<div class="glass" style="padding:4px 0">
+      ${d.recent.map((r,i)=> html`<div key=${i} class="rowgrid" style="display:grid;grid-template-columns:1.2fr 1.4fr .8fr .8fr 2fr;gap:8px;padding:11px 18px;font-size:13px;border-bottom:1px solid var(--rule);align-items:center">
+        <span style="font-weight:600">${r.event_name}</span>
+        <span style="color:var(--ink-2)">${r.lead_name||"–"}</span>
+        <span>${r.value!=null? (r.currency||"")+" "+Number(r.value).toLocaleString(undefined,{maximumFractionDigits:0}) : "–"}</span>
+        <span><span class="badge ${r.status==="sent"?"human":r.status==="pending"?"":"hot"}">${T("capi.st."+r.status)}</span></span>
+        <span style="color:var(--ink-3);font-size:12px;overflow-wrap:anywhere">${r.skip_reason||r.last_error||""}</span>
+      </div>`)}
+    </div>`:null}
+  </div>`;
+}
 
 function CampaignPerformance(){
   const [d,setD]=useState(null);

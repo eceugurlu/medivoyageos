@@ -5,7 +5,7 @@ import { zohoEnabled } from './services/zoho.js';
 import { notifyEnabled, systemAlertEnabled, weeklyReportEnabled } from './services/notify.js';
 import { seedCampaignsIfEmpty, seedCoordinatorsIfEmpty, seedDevicesIfEmpty, seedBranchesIfEmpty } from './store/repository.js';
 import { seedProfileIfEmpty } from './services/profile.js';
-import { processPostOp, processNoShowRisk, processHotLeadFollowup, processHandoverSla, processWeeklyReport } from './services/scheduler.js';
+import { processPostOp, processNoShowRisk, processHotLeadFollowup, processHandoverSla, processWeeklyReport, processConversionEvents } from './services/scheduler.js';
 import { recordFailure } from './services/healthMonitor.js';
 
 // Local-dev entry only. Runs the app as one long-lived process: app.listen()
@@ -84,5 +84,11 @@ app.listen(config.port, () => {
     // scheduler.js::_processWeeklyReport for why this is safe to tick every minute.
     setTimeout(() => processWeeklyReport().catch((err) => console.error('[weekly-report] scheduler error:', err.message)), 17000);
     setInterval(() => processWeeklyReport().catch((err) => console.error('[weekly-report] scheduler error:', err.message)), 60000);
+
+    // Meta CAPI kuyruğu. Dönüşümü Meta'ya GEÇ bildirmek atfetme penceresini
+    // kaçırma riski taşır; erken bildirmenin zararı yok. Yapılandırma yoksa
+    // iş hiçbir şey yapmaz ve satırlar kuyrukta bekler (bkz. scheduler.js).
+    setTimeout(() => processConversionEvents().catch((err) => console.error('[capi] scheduler error:', err.message)), 20000);
+    setInterval(() => processConversionEvents().catch((err) => console.error('[capi] scheduler error:', err.message)), 60000);
   }
 });

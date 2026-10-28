@@ -23,7 +23,12 @@ import {
   getHandoversNeedingFirstReminder, markSlaFirstReminderSent,
   getHandoversNeedingEscalation, markSlaEscalated,
   claimWeeklyReportSlot, getWeeklyReportStats,
+  claimPendingConversionEvents, markConversionEventResult, expireExhaustedConversionEvents,
 } from '../store/repository.js';
+import {
+  buildMessagingEvent, sendEvents, isCapiConfigured, isPermanentFailure,
+  CAPI_BATCH_SIZE, CAPI_MAX_ATTEMPTS,
+} from './metaCapi.js';
 
 // Guards against the same job overlapping itself specifically (belt-and-
 // braces on top of the per-row claim above) — if one run is still going
@@ -198,6 +203,82 @@ function getUtcOffsetMs(date, timeZone) {
 // than only indirectly through whether the scheduler job fires on the
 // right day, which would be a much slower and less precise way to catch a
 // boundary bug.
+// Meta Conversions API kuyruğunu boşaltır.
+//
+// Yapılandırma yoksa HİÇBİR ŞEY YAPMAZ — satırları 'skipped' işaretlemez,
+// 'pending' bırakır. Klinik anahtarlarını bir hafta sonra girdiğinde o
+// haftanın dönüşümleri hâlâ kuyruktadır ve gider. "Anahtar yoktu" diye
+// gerçekten olmuş bir ameliyatı çöpe atmak, atfetme zincirini tam da
+// değerli olduğu yerden koparırdı.
+async function _processConversionEvents() {
+  if (!isCapiConfigured()) return { sent: 0, skipped: 0, failed: 0, held: 'capi-not-configured' };
+
+  await expireExhaustedConversionEvents(CAPI_MAX_ATTEMPTS);
+  const claimed = await claimPendingConversionEvents(CAPI_BATCH_SIZE, CAPI_MAX_ATTEMPTS);
+  if (!claimed.length) return { sent: 0, skipped: 0, failed: 0 };
+
+  // Önce kurulabilenleri ayır. Kurulamayan (ctwa_clid yok, kanal Meta'ya ait
+  // değil…) bir deneme hakkı harcamaz: ağa hiç çıkmadı, tekrar denemek de
+  // bir şey değiştirmez. NEDENİYLE 'skipped' olur ve panelde görünür.
+  const buildable = [];
+  let skipped = 0;
+  for (const row of claimed) {
+    const built = buildMessagingEvent({
+      eventName: row.event_name,
+      eventTime: row.occurred_at,
+      lead: row.lead,
+      value: row.value,
+      currency: row.currency,
+    });
+    if (!built.ok) {
+      await markConversionEventResult(row.id, { status: 'skipped', skipReason: built.reason });
+      skipped++;
+      continue;
+    }
+    buildable.push({ row, event: built.event, channel: built.channel });
+  }
+  if (!buildable.length) return { sent: 0, skipped, failed: 0 };
+
+  const settle = async (items, res) => {
+    for (const it of items) {
+      await markConversionEventResult(it.row.id, {
+        status: res.ok ? 'sent' : (isPermanentFailure(res.status) ? 'failed' : 'pending'),
+        error: res.ok ? null : `${res.error}: ${res.body}`.slice(0, 400),
+        payload: it.event,
+        channel: it.channel,
+      });
+    }
+  };
+
+  const batch = await sendEvents(buildable.map((b) => b.event));
+  if (batch.ok) {
+    await settle(buildable, batch);
+    return { sent: buildable.length, skipped, failed: 0 };
+  }
+
+  // Geçici hata (5xx, zaman aşımı): hepsi 'pending' kalır, bir sonraki tur
+  // yeniden dener. Deneme sayacı zaten artmıştı.
+  if (!isPermanentFailure(batch.status)) {
+    await settle(buildable, batch);
+    console.error(`[capi] geçici hata, ${buildable.length} olay kuyrukta kaldı: ${batch.error}`);
+    return { sent: 0, skipped, failed: 0, retrying: buildable.length };
+  }
+
+  // Kalıcı hata (4xx): Meta gruba tek cevap döner ve hangi olayın bozuk
+  // olduğunu söylemez. Grubun tamamını çöpe atmak, bir bozuk satır yüzünden
+  // 19 geçerli dönüşümü kaybettirirdi — o yüzden tek tek gönderip suçluyu
+  // izole ediyoruz. Yalnızca hata durumunda, yani maliyeti sınırlı.
+  console.error(`[capi] grup reddedildi (${batch.status}), tek tek deneniyor: ${batch.body}`);
+  let sent = 0; let failed = 0;
+  for (const it of buildable) {
+    const one = await sendEvents([it.event]);
+    await settle([it], one);
+    if (one.ok) sent++; else failed++;
+  }
+  return { sent, skipped, failed, isolated: true };
+}
+export const processConversionEvents = guarded('capi', _processConversionEvents);
+
 export function getClinicWeekWindow(now = new Date()) {
   const offsetMs = getUtcOffsetMs(now, REPORT_TIMEZONE);
   const localNow = new Date(now.getTime() + offsetMs); // UTC getters on this now read as local wall-clock

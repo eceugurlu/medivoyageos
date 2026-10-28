@@ -80,6 +80,26 @@ export const config = {
   // both when Instagram is connected to that Page, which is the normal setup.
   meta: {
     pageAccessToken: process.env.META_PAGE_ACCESS_TOKEN || null,
+
+    // Conversions API (Business Messaging). Ödeme/lead olaylarını Meta'ya geri
+    // besler ki reklam optimizasyonu gerçek sonuca göre çalışsın.
+    // Hiçbiri ayarlı değilse olaylar yine de KUYRUĞA yazılır ('pending' kalır)
+    // — böylece anahtarlar sonradan girildiğinde geçmiş kaybolmamış olur.
+    capi: {
+      // /{WHATSAPP_BUSINESS_ACCOUNT_ID}/dataset çağrısından gelir (Meta dokümanı).
+      // Pixel ID ile aynı şey olduğu VARSAYILMAMALI.
+      datasetId: process.env.META_CAPI_DATASET_ID || null,
+      accessToken: process.env.META_CAPI_ACCESS_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN || null,
+      whatsappBusinessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || null,
+      pageId: process.env.META_PAGE_ID || null,
+      instagramBusinessAccountId: process.env.META_IG_BUSINESS_ACCOUNT_ID || null,
+      // Meta'nın Business Messaging referansının yayınlandığı sürüm.
+      // WhatsApp gönderimindeki GRAPH_API_VERSION'dan ayrı: o sürümü
+      // yükseltmek bu entegrasyonu sessizce bozmasın.
+      graphVersion: process.env.META_CAPI_GRAPH_VERSION || 'v26.0',
+      // Events Manager > Test Events. Doluyken olaylar canlı veriye karışmaz.
+      testEventCode: process.env.META_CAPI_TEST_EVENT_CODE || null,
+    },
   },
 
   // One-click international deposit/payment links. Leave blank to run in

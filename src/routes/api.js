@@ -23,6 +23,7 @@ import {
   getBenchmarkStats, addBenchmarkProbe, setBenchmarkReply, deleteBenchmarkProbe,
   saveComplianceCheck, getComplianceCheckStats, listComplianceCheckLeads,
   listDesignPartnerGoals, setDesignPartnerGoal, getDesignPartnerKpiReport,
+  submitPmfResponse, getPmfSurveyStats,
   getPassportForLead, upsertPassport, issuePassport, revokePassport, getPassportByToken,
   getStats,
   listConversations,
@@ -888,6 +889,22 @@ apiRouter.get('/capi', h(async (req, res) => {
 
 // Tasarım Ortağı KPI Paneli. Ölçüm hiçbir yerde saklanmaz, her istekte
 // gerçek veriden yeniden hesaplanır.
+// Sean Ellis PMF sorusu. Koordinatör kimliği isteğe bağlı.
+apiRouter.get('/pmf-survey', h(async (_req, res) => {
+  res.json(await getPmfSurveyStats());
+}));
+
+apiRouter.post('/pmf-survey', h(async (req, res) => {
+  try {
+    res.status(201).json(await submitPmfResponse(req.body || {}));
+  } catch (err) {
+    if (/Unknown answer|coordinator not found/.test(err.message)) {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
+  }
+}));
+
 apiRouter.get('/design-partner-kpis', h(async (_req, res) => {
   res.json(await getDesignPartnerKpiReport());
 }));

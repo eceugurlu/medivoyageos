@@ -11,6 +11,7 @@ import { isCapiConfigured } from '../services/metaCapi.js';
 import { summarizeProbes, CHANNELS } from '../services/benchmark.js';
 import { selfAssess, ALL_QUESTION_IDS } from '../services/complianceSelfCheck.js';
 import { buildKpiReport, METRIC_IDS } from '../services/designPartnerKpis.js';
+import { summarizePmf, ANSWERS as PMF_ANSWERS } from '../services/pmfSurvey.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -3775,4 +3776,39 @@ export async function getCurrentKpiMeasurements() {
 export async function getDesignPartnerKpiReport() {
   const [goals, measurements] = await Promise.all([listDesignPartnerGoals(), getCurrentKpiMeasurements()]);
   return { metrics: buildKpiReport(goals, measurements), measured_at: new Date().toISOString() };
+}
+
+// ── Sean Ellis PMF Sorusu ───────────────────────────────────────────────
+// Hesabın tamamı services/pmfSurvey.js içinde. Koordinatör kimliği isteğe
+// bağlı (bkz. migration 034): zorunlu tutmak dürüst cevabı bozardı.
+
+export async function submitPmfResponse({ coordinatorId, answer, reason } = {}) {
+  if (!PMF_ANSWERS.includes(answer)) throw new Error(`Unknown answer: ${answer}`);
+  const clinicId = await getDefaultClinicId();
+  let coordId = null;
+  if (coordinatorId) {
+    const c = await pool.query(`SELECT id FROM coordinators WHERE id = $1 AND clinic_id = $2`, [coordinatorId, clinicId]);
+    if (!c.rows[0]) throw new Error('coordinator not found');
+    coordId = c.rows[0].id;
+  }
+  const q = await pool.query(
+    `INSERT INTO pmf_survey_responses (clinic_id, coordinator_id, answer, reason)
+     VALUES ($1,$2,$3,$4) RETURNING id, created_at`,
+    [clinicId, coordId, answer, reason ? String(reason).slice(0, 500) : null],
+  );
+  return q.rows[0];
+}
+
+export async function getPmfSurveyStats() {
+  const clinicId = await getDefaultClinicId();
+  const [rows, recent] = await Promise.all([
+    pool.query(`SELECT answer FROM pmf_survey_responses WHERE clinic_id = $1`, [clinicId]),
+    pool.query(
+      `SELECT r.id, c.name AS coordinator_name, r.answer, r.reason, r.created_at
+         FROM pmf_survey_responses r LEFT JOIN coordinators c ON c.id = r.coordinator_id
+        WHERE r.clinic_id = $1 ORDER BY r.created_at DESC LIMIT 20`,
+      [clinicId],
+    ),
+  ]);
+  return { ...summarizePmf(rows.rows), recent: recent.rows };
 }

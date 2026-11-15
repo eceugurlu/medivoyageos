@@ -868,6 +868,13 @@ const I18N = {
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
     "nav.compliance":"Risk & Compliance",
+    "pmf.title":"Product/market fit (Sean Ellis question)","pmf.sub":"\"How would you feel if you could no longer use this product?\" The standard PMF test — the 40% threshold below is the methodology's own, not ours.",
+    "pmf.question":"How would you feel if you could no longer use MediVoyage?",
+    "pmf.very":"Very disappointed","pmf.somewhat":"Somewhat disappointed","pmf.not":"Not disappointed",
+    "pmf.anonymous":"Answer anonymously","pmf.reasonPlaceholder":"What do you mainly use it for? (optional)",
+    "pmf.submit":"Submit","pmf.thanks":"Thank you — your answer was recorded.",
+    "pmf.veryShare":"\"Very disappointed\"","pmf.threshold":"{n}%+ is a strong PMF signal.","pmf.needMore":"not enough responses yet",
+    "pmf.total":"Total responses","pmf.totalFoot":"Across all coordinators.",
     "dp.title":"Design partner progress","dp.sub":"The baseline you measured before MediVoyage, the target you agreed to, and what the real data says right now. No goal set is not zero progress — it's unmeasured.",
     "dp.setGoals":"Set goals","dp.collapse":"Done",
     "dp.baseline":"Baseline","dp.target":"Target","dp.current":"Now","dp.save":"Save","dp.saved":"Goal saved.",
@@ -1196,6 +1203,13 @@ const I18N = {
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
     "nav.compliance":"Risk & Uyum",
+    "pmf.title":"Ürün/pazar uyumu (Sean Ellis sorusu)","pmf.sub":"\"Bu ürünü artık kullanamasanız ne hissederdiniz?\" Standart PMF testi — aşağıdaki %40 eşiği bizim seçimimiz değil, metodolojinin kendisi.",
+    "pmf.question":"MediVoyage'ı artık kullanamasanız ne hissederdiniz?",
+    "pmf.very":"Çok hayal kırıklığına uğrarım","pmf.somewhat":"Biraz hayal kırıklığına uğrarım","pmf.not":"Hayal kırıklığına uğramam",
+    "pmf.anonymous":"Anonim cevapla","pmf.reasonPlaceholder":"Esas olarak ne için kullanıyorsunuz? (isteğe bağlı)",
+    "pmf.submit":"Gönder","pmf.thanks":"Teşekkürler — cevabınız kaydedildi.",
+    "pmf.veryShare":"\"Çok hayal kırıklığına uğrarım\"","pmf.threshold":"%{n}+ güçlü bir PMF sinyalidir.","pmf.needMore":"henüz yeterli cevap yok",
+    "pmf.total":"Toplam cevap","pmf.totalFoot":"Tüm koordinatörlerden.",
     "dp.title":"Tasarım ortağı ilerlemesi","dp.sub":"MediVoyage öncesi ölçtüğünüz başlangıç değeri, kabul ettiğiniz hedef, ve şu an gerçek verinin söylediği. Hedef girilmemiş olması %0 ilerleme değildir — ölçülmemiş demektir.",
     "dp.setGoals":"Hedef belirle","dp.collapse":"Bitti",
     "dp.baseline":"Başlangıç","dp.target":"Hedef","dp.current":"Şu an","dp.save":"Kaydet","dp.saved":"Hedef kaydedildi.",
@@ -3660,6 +3674,71 @@ function ConsultantAdmin({ branches, onChanged }){
   </div>`;
 }
 
+// Sean Ellis PMF Sorusu.
+//
+// "Bu ürünü artık kullanamasanız ne hissederdiniz?" Eşik (%40 "çok hayal
+// kırıklığına uğrarım") bizim seçimimiz değil, metodolojinin kendisinden
+// (pmfSurvey.js). Koordinatör seçmek İSTEĞE BAĞLI: zorunlu tutmak küçük
+// bir ekipte anonimliği (ve dolayısıyla dürüst cevabı) bozardı.
+const PMF_OPTIONS = [
+  ["very_disappointed","pmf.very"],
+  ["somewhat_disappointed","pmf.somewhat"],
+  ["not_disappointed","pmf.not"],
+];
+
+function PmfSurveyWidget({ data: coordinators }){
+  const [stats,setStats]=useState(null);
+  const [coordId,setCoordId]=useState("");
+  const [answer,setAnswer]=useState("");
+  const [reason,setReason]=useState("");
+  const [busy,setBusy]=useState(false);
+  const load=()=> api("/pmf-survey").then(setStats).catch(()=>{});
+  useEffect(()=>{ load(); },[]);
+
+  const submit=async()=>{
+    setBusy(true);
+    try{
+      await api("/pmf-survey",{method:"POST",body:JSON.stringify({
+        coordinatorId: coordId||null, answer, reason: reason.trim()||null,
+      })});
+      setAnswer(""); setReason(""); showToast(T("pmf.thanks")); await load();
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(false); }
+  };
+
+  return html`<div class="glass" style="padding:16px 18px;margin-bottom:16px">
+    <div class="section-title" style="margin-top:0">${T("pmf.title")}</div>
+    <div class="sub" style="margin:-4px 0 12px">${T("pmf.sub")}</div>
+
+    ${stats? html`<div class="kpis" style="margin-bottom:14px">
+      <div class="glass kpi"><span class="label">${T("pmf.veryShare")}</span>
+        <span class="val ${stats.signal===true?"mint":stats.signal===false?"alert":""}">${stats.shares.very_disappointed==null? "–" : "%"+stats.shares.very_disappointed}</span>
+        <span class="foot">${stats.enough? T("pmf.threshold").replace("{n}",stats.threshold_pct) : `${T("pmf.needMore")} (${stats.total}/${stats.min_responses})`}</span></div>
+      <div class="glass kpi"><span class="label">${T("pmf.total")}</span>
+        <span class="val">${stats.total}</span>
+        <span class="foot">${T("pmf.totalFoot")}</span></div>
+    </div>`:null}
+
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:520px">
+      <div style="font-weight:600;font-size:13.5px">${T("pmf.question")}</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${PMF_OPTIONS.map(([v,label])=> html`<label key=${v} style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="radio" name="pmf-answer" value=${v} checked=${answer===v} onChange=${()=>setAnswer(v)}/>
+          ${T(label)}
+        </label>`)}
+      </div>
+      <select value=${coordId} disabled=${busy} onChange=${(e)=>setCoordId(e.target.value)} style="font-size:12.5px;max-width:220px">
+        <option value="">${T("pmf.anonymous")}</option>
+        ${(coordinators?.coordinators||[]).map((c)=> html`<option key=${c.id||c.name} value=${c.id}>${c.name}</option>`)}
+      </select>
+      <input value=${reason} disabled=${busy} placeholder=${T("pmf.reasonPlaceholder")} onInput=${(e)=>setReason(e.target.value)} style="font-size:12.5px"/>
+      <button class="btn" style="align-self:flex-start" disabled=${busy||!answer} onClick=${submit}>
+        ${busy? html`<${Spinner}/>` : T("pmf.submit")}
+      </button>
+    </div>
+  </div>`;
+}
+
 function Consultants({ data, branches, reloadShared }){
   if(!data) return html`<div class="empty"><${Spinner}/> ${T("load.generic")}</div>`;
   const grid="display:grid;grid-template-columns:1.4fr 1fr repeat(5,.7fr);gap:8px";
@@ -3680,6 +3759,7 @@ function Consultants({ data, branches, reloadShared }){
         <span style="font-weight:600">${c.conversion==null?"–":c.conversion+"%"}</span>
       </div>`)}
     </div>
+    <${PmfSurveyWidget} data=${data}/>
     <${ConsultantAdmin} branches=${branches} onChanged=${reloadShared}/>
   </div>`;
 }

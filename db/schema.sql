@@ -545,3 +545,14 @@ CREATE TABLE IF NOT EXISTS design_partner_goals (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_design_partner_goals_clinic_metric
   ON design_partner_goals (clinic_id, metric);
+
+-- ── Sean Ellis PMF Sorusu (see 034_pmf_survey.sql) ─────────────────────────
+CREATE TABLE IF NOT EXISTS pmf_survey_responses (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id      UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  coordinator_id UUID REFERENCES coordinators(id) ON DELETE SET NULL,
+  answer         TEXT NOT NULL CHECK (answer IN ('very_disappointed','somewhat_disappointed','not_disappointed')),
+  reason         TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pmf_survey_clinic ON pmf_survey_responses (clinic_id, created_at DESC);

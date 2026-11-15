@@ -24,6 +24,7 @@ import {
   saveComplianceCheck, getComplianceCheckStats, listComplianceCheckLeads,
   listDesignPartnerGoals, setDesignPartnerGoal, getDesignPartnerKpiReport,
   submitPmfResponse, getPmfSurveyStats,
+  getSetupChecklist, setSetupStepDone,
   getPassportForLead, upsertPassport, issuePassport, revokePassport, getPassportByToken,
   getStats,
   listConversations,
@@ -890,6 +891,23 @@ apiRouter.get('/capi', h(async (req, res) => {
 // Tasarım Ortağı KPI Paneli. Ölçüm hiçbir yerde saklanmaz, her istekte
 // gerçek veriden yeniden hesaplanır.
 // Sean Ellis PMF sorusu. Koordinatör kimliği isteğe bağlı.
+// 1 Günde Kurulum Kontrol Listesi. Otomatik adımlar her istekte gerçek
+// veriden yeniden hesaplanır; elle işaretlenenler DB'de saklanır.
+apiRouter.get('/setup-checklist', h(async (_req, res) => {
+  res.json(await getSetupChecklist());
+}));
+
+apiRouter.put('/setup-checklist/:itemKey', h(async (req, res) => {
+  try {
+    res.json(await setSetupStepDone(req.params.itemKey, req.body || {}));
+  } catch (err) {
+    if (/measured automatically|Unknown checklist item/.test(err.message)) {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
+  }
+}));
+
 apiRouter.get('/pmf-survey', h(async (_req, res) => {
   res.json(await getPmfSurveyStats());
 }));

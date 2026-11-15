@@ -12,6 +12,8 @@ import { summarizeProbes, CHANNELS } from '../services/benchmark.js';
 import { selfAssess, ALL_QUESTION_IDS } from '../services/complianceSelfCheck.js';
 import { buildKpiReport, METRIC_IDS } from '../services/designPartnerKpis.js';
 import { summarizePmf, ANSWERS as PMF_ANSWERS } from '../services/pmfSurvey.js';
+import { buildChecklist, AUTO_KEYS, MANUAL_KEYS } from '../services/setupChecklist.js';
+import { sendEnabled } from '../config.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -3811,4 +3813,59 @@ export async function getPmfSurveyStats() {
     ),
   ]);
   return { ...summarizePmf(rows.rows), recent: recent.rows };
+}
+
+// ── 1 Günde Kurulum Kontrol Listesi ─────────────────────────────────────
+// Otomatik adımlar gerçek veriden hesaplanır, HİÇ SATIRA yazılmaz — bkz.
+// setupChecklist.js'in başındaki not. Yalnızca elle işaretlenen adımlar
+// (test_conversation, team_trained, escalation_tested) bu tabloya yazılır.
+
+export async function getSetupAutoSignals() {
+  const clinicId = await getDefaultClinicId();
+  const [profile, branches, coordinators] = await Promise.all([
+    getProfile(),
+    pool.query(`SELECT count(*)::int n FROM branches WHERE clinic_id = $1 AND active`, [clinicId]),
+    pool.query(`SELECT count(*)::int n FROM coordinators WHERE clinic_id = $1 AND active`, [clinicId]),
+  ]);
+  return {
+    clinic_profile: Boolean(profile && profile.name && Array.isArray(profile.languages) && profile.languages.length > 0),
+    whatsapp_connected: sendEnabled,
+    first_branch: branches.rows[0].n > 0,
+    first_coordinator: coordinators.rows[0].n > 0,
+    payment_provider: Boolean(config.stripe.secretKey || config.iyzico.apiKey),
+  };
+}
+
+export async function listSetupManualState() {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `SELECT item_key, done, done_at, note FROM setup_checklist_items WHERE clinic_id = $1`,
+    [clinicId],
+  );
+  return Object.fromEntries(q.rows.map((r) => [r.item_key, r]));
+}
+
+export async function setSetupStepDone(itemKey, { done, note } = {}) {
+  if (!MANUAL_KEYS.includes(itemKey)) {
+    throw new Error(AUTO_KEYS.includes(itemKey)
+      ? `"${itemKey}" is measured automatically and cannot be marked by hand`
+      : `Unknown checklist item: ${itemKey}`);
+  }
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `INSERT INTO setup_checklist_items (clinic_id, item_key, done, done_at, note)
+     VALUES ($1,$2,$3, CASE WHEN $3 THEN now() ELSE NULL END, $4)
+     ON CONFLICT (clinic_id, item_key) DO UPDATE SET
+       done = EXCLUDED.done,
+       done_at = CASE WHEN EXCLUDED.done THEN COALESCE(setup_checklist_items.done_at, now()) ELSE NULL END,
+       note = EXCLUDED.note, updated_at = now()
+     RETURNING item_key, done, done_at, note`,
+    [clinicId, itemKey, Boolean(done), note ? String(note).slice(0, 300) : null],
+  );
+  return q.rows[0];
+}
+
+export async function getSetupChecklist() {
+  const [auto, manual] = await Promise.all([getSetupAutoSignals(), listSetupManualState()]);
+  return buildChecklist(auto, manual);
 }

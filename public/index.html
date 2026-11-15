@@ -868,6 +868,9 @@ const I18N = {
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
     "nav.compliance":"Risk & Compliance",
+    "setup.title":"1-day setup checklist","setup.sub":"What \"you can start tomorrow\" actually requires. Automatic items are measured from real data and can\'t be checked by hand — ticking them would change nothing.",
+    "setup.auto":"auto","setup.autoHint":"Measured automatically — checking this does nothing.",
+    "setup.cat.kurulum":"Setup","setup.cat.ekip":"Team","setup.cat.dogrulama":"Verification",
     "demo.title":"Share the demo environment","demo.sub":"Read-only, fake data — safe to hand to a judge or a prospect. Nothing here touches the real database.",
     "demo.copy":"Copy","demo.open":"Open","demo.copied":"Link copied.","demo.qrAlt":"QR code to the demo environment",
     "pmf.title":"Product/market fit (Sean Ellis question)","pmf.sub":"\"How would you feel if you could no longer use this product?\" The standard PMF test — the 40% threshold below is the methodology's own, not ours.",
@@ -1205,6 +1208,9 @@ const I18N = {
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
     "nav.compliance":"Risk & Uyum",
+    "setup.title":"1 günde kurulum kontrol listesi","setup.sub":"\"Yarın başlarsınız\" demenin gerçekte ne gerektirdiği. Otomatik maddeler gerçek veriden ölçülür ve elle işaretlenemez — işaretlemek hiçbir şeyi değiştirmez.",
+    "setup.auto":"otomatik","setup.autoHint":"Otomatik ölçülür — bunu işaretlemek hiçbir şey yapmaz.",
+    "setup.cat.kurulum":"Kurulum","setup.cat.ekip":"Ekip","setup.cat.dogrulama":"Doğrulama",
     "demo.title":"Demo ortamını paylaş","demo.sub":"Salt okunur, sahte veri — bir jüriye ya da aday bir kliniğe güvenle verilebilir. Hiçbir şey gerçek veritabanına dokunmaz.",
     "demo.copy":"Kopyala","demo.open":"Aç","demo.copied":"Link kopyalandı.","demo.qrAlt":"Demo ortamına giden QR kod",
     "pmf.title":"Ürün/pazar uyumu (Sean Ellis sorusu)","pmf.sub":"\"Bu ürünü artık kullanamasanız ne hissederdiniz?\" Standart PMF testi — aşağıdaki %40 eşiği bizim seçimimiz değil, metodolojinin kendisi.",
@@ -1509,6 +1515,60 @@ function riskReasonText(r){
 // dış servis bağımlılığı: görsel yüklenemezse (offline, engellenmiş ağ)
 // linkin kendisi her zaman metin olarak kalır ve kopyalanabilir — QR
 // sadece bir kolaylık, tek erişim yolu değil.
+// 1 Günde Kurulum Kontrol Listesi.
+//
+// Otomatik adımlar gerçek veriden hesaplanıyor ve ASLA bir "işaretle"
+// tuşu taşımıyor — onu tıklamak hiçbir şeyi değiştirmez, gerçek veri
+// değişmeden "tamam" demek yalan olurdu. Yalnızca manuel adımların
+// yanında onay kutusu var.
+const SETUP_CATEGORY_LABEL = { kurulum:"setup.cat.kurulum", ekip:"setup.cat.ekip", doğrulama:"setup.cat.dogrulama" };
+
+function SetupChecklistCard(){
+  const [data,setData]=useState(null);
+  const [busy,setBusy]=useState("");
+  const load=()=> api("/setup-checklist").then(setData).catch(()=>{});
+  useEffect(()=>{ load(); },[]);
+  if(!data) return null;
+
+  const toggle=async(item)=>{
+    if(item.auto) return; // otomatik adımda tıklanacak hiçbir şey yok
+    setBusy(item.key);
+    try{
+      await api("/setup-checklist/"+item.key,{method:"PUT",body:JSON.stringify({done:!item.done})});
+      await load();
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(""); }
+  };
+
+  const byCategory = {};
+  data.items.forEach((i)=>{ (byCategory[i.category]=byCategory[i.category]||[]).push(i); });
+
+  return html`<div class="glass" style="padding:16px 18px;margin-bottom:22px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div class="section-title" style="margin-top:0">${T("setup.title")}</div>
+      <span class="badge ${data.complete?"human":""}">${data.done}/${data.total}</span>
+    </div>
+    <div class="sub" style="margin:-4px 0 12px">${T("setup.sub")}</div>
+    <div class="bar" style="height:6px;border-radius:3px;background:var(--rule);overflow:hidden;margin-bottom:14px">
+      <div style="height:100%;width:${data.progress}%;border-radius:3px;background:${data.complete?"var(--pos)":"var(--accent)"}"></div>
+    </div>
+    ${Object.entries(byCategory).map(([cat,items])=> html`<div key=${cat} style="margin-bottom:12px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px">${T(SETUP_CATEGORY_LABEL[cat]||cat)}</div>
+      ${items.map((item)=> html`<div key=${item.key} style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--paper-2)">
+        <input type="checkbox" checked=${item.done} disabled=${item.auto||busy===item.key}
+          title=${item.auto? T("setup.autoHint") : ""} onChange=${()=>toggle(item)}
+          style="margin-top:2px;flex:none;accent-color:var(--accent);cursor:${item.auto?"default":"pointer"}"/>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:${item.done?"400":"600"};${item.done?"color:var(--ink-2);text-decoration:line-through":""}">
+            ${item.label} ${item.auto? html`<span class="badge" style="margin-left:5px">${T("setup.auto")}</span>`:null}
+          </div>
+          <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px;line-height:1.4">${item.hint}</div>
+        </div>
+      </div>`)}
+    </div>`)}
+  </div>`;
+}
+
 function DemoShareCard(){
   const url = `${location.origin}/panel/demo.html`;
   const qr = `https://api.qrserver.com/v1/create-qr-code/?size=132x132&margin=4&data=${encodeURIComponent(url)}`;
@@ -1560,6 +1620,7 @@ function CommandCenter({ stats, analytics, handovers, risks, roi, onOpenLead }){
           <${MiniBarChart} data=${analytics.trend} />
         </div>` : null}
 
+      <${SetupChecklistCard} />
       <${DemoShareCard} />
       ${roi? html`
         <div style="margin-bottom:22px">

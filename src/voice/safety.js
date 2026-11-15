@@ -25,6 +25,11 @@ const COMPLICATION_PATTERNS = {
   ru: [/кровотечение/i, /не могу дышать/i, /трудно дышать/i, /инфекция/i, /\bгно[йя]\b/i, /высокая температура/i, /аллергическая реакция/i, /боль в груди/i, /обморок/i, /сильная боль/i],
   fr: [/saignement/i, /je ne peux pas respirer/i, /difficulté[s]? à respirer/i, /infection/i, /\bpus\b/i, /forte fièvre/i, /réaction allergique/i, /douleur (?:thoracique|dans la poitrine)/i, /évanoui/i, /douleur (?:sévère|intense)/i],
   it: [/sanguinamento/i, /non riesco a respirare/i, /difficoltà a respirare/i, /infezione/i, /\bpus\b/i, /febbre alta/i, /reazione allergica/i, /dolore al petto/i, /svenut[oa]/i, /dolore (?:forte|intenso)/i],
+  // Azerice (az) ve Kürtçe-Sorani (ku) — Azerbaycan ve Irak (Kürdistan
+  // Bölgesi) doğrulanmış ilk-5 kaynak ülke. Diğer dillerle aynı dürüstlük:
+  // ilk geçiş, ana dil konuşanı tarafından incelenmedi (üstteki nota bakın).
+  az: [/qanaxma/i, /nəfəs ala bilmirəm/i, /nəfəs almaqda çətinlik/i, /infeksiya/i, /\birin\b/i, /yüksək hərarət/i, /allergik reaksiya/i, /sinə ağrısı/i, /huşunu itir/i, /şiddətli ağrı/i],
+  ku: [/خوێن ڕشتنەوە/, /ناتوانم هەناسە بدەم/, /گرفت لە هەناسەدان/, /تووشبوون/, /پیو/, /تای بەرز/, /کنوشت[ی]?ی هەستیاری/, /ئازاری سنگ/, /لاڵبوونەوە/, /ئازاری توند/],
 };
 
 const CRISIS_PATTERNS = {
@@ -35,6 +40,8 @@ const CRISIS_PATTERNS = {
   ru: [/хочу умереть/i, /покончить с собой/i, /суицид/i, /не хочу жить/i],
   fr: [/envie de mourir/i, /me suicider/i, /suicide/i, /ne veux plus vivre/i],
   it: [/voglio morire/i, /uccidermi/i, /suicid(?:io|arsi)/i, /non voglio più vivere/i],
+  az: [/ölmək istəyirəm/i, /özümü öldür/i, /intihar/i, /yaşamaq istəmirəm/i],
+  ku: [/دەمەوێت بمرم/, /خۆم بکوژم/, /خۆکوشتن/, /نامەوێت بژیم/],
 };
 
 // Pre-scripted, non-LLM lines — spoken verbatim the instant the net fires.
@@ -48,6 +55,8 @@ const COMPLICATION_SCRIPT = {
   ru: 'Мне очень жаль это слышать. Пожалуйста, немедленно обратитесь за неотложной помощью или позвоните по местному номеру экстренной службы. Наша медицинская команда также получает уведомление, чтобы срочно связаться с вами.',
   fr: "Je suis désolé d'entendre cela. Veuillez consulter immédiatement les urgences ou appeler votre numéro d'urgence local. Notre équipe médicale est également alertée pour vous contacter en urgence.",
   it: 'Mi dispiace molto. La prego di rivolgersi immediatamente al pronto soccorso o di chiamare il numero di emergenza locale. Anche il nostro team medico viene avvisato per contattarla con urgenza.',
+  az: 'Bunu eşitdiyimə çox üzüldüm. Zəhmət olmasa dərhal təcili yardıma müraciət edin və ya yerli təcili yardım nömrəsinə zəng edin. Tibbi komandamız da sizinlə təcili əlaqə saxlamaq üçün xəbərdar edilir.',
+  ku: 'زۆر دڵگرانم بۆ ئەمە. تکایە دەستبەجێ پەیوەندی بە یارمەتی خێرا بکە یان ژمارەی یارمەتی خێرای ناوچەکەت بگرە، تیمی پزیشکیمان ئاگادار دەکرێنەوە تا پەلە پەیوەندیت پێوە بکەن.',
 };
 
 const CRISIS_SCRIPT = {
@@ -58,6 +67,8 @@ const CRISIS_SCRIPT = {
   ru: 'Я вас слышу, и я действительно рад, что вы мне это сказали. Пожалуйста, обратитесь прямо сейчас на кризисную линию или к тому, кому вы доверяете — вам не нужно проходить через это одному. Наша команда также получает уведомление, чтобы связаться с вами.',
   fr: "Je vous entends, et je suis vraiment content que vous me le disiez. Contactez dès maintenant une ligne d'écoute ou une personne de confiance — vous n'avez pas à traverser cela seul. Notre équipe est également alertée pour vous contacter.",
   it: 'La sento, e sono davvero contento che me l\'abbia detto. La prego di contattare subito una linea di ascolto per le crisi o una persona di cui si fida — non deve affrontare questo da solo. Anche il nostro team viene avvisato per contattarla.',
+  az: 'Sizi eşidirəm və bunu mənə dediyinizə həqiqətən sevindim. Zəhmət olmasa indi bir böhran xəttinə və ya etibar etdiyiniz birinə müraciət edin — bunu tək başınıza yaşamaq zorunda deyilsiniz. Komandamız da sizinlə əlaqə saxlamaq üçün xəbərdar edilir.',
+  ku: 'گوێم لێت دەبێت، و زۆر دڵخۆشم کە ئەمەت پێ ڕاگەیاندم. تکایە ئێستا پەیوەندی بە هێڵی کرایسس یان کەسێک کە متمانەی پێیە بکە — پێویست ناکات ئەمە بە تەنها بەسەرببەیت. تیمەکەشمان ئاگادار دەکرێنەوە تا پەیوەندیت پێوە بکەن.',
 };
 
 const FALLBACK_LANG = 'en';

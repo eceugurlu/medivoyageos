@@ -19,6 +19,10 @@ export const DEFAULT_VOICE_ID_BY_LANGUAGE = {
   ru: null,
   fr: null,
   it: null,
+  // Azerice ve Kürtçe (Sorani) — Azerbaycan ve Irak doğrulanmış ilk-5
+  // kaynak ülke (bkz. src/voice/safety.js'in başındaki not).
+  az: null,
+  ku: null,
 };
 
 export function resolveVoiceId(lang, profile) {

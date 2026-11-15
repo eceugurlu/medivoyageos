@@ -47,6 +47,14 @@ console.log('▶ safety.js — scanForSafetySignal()');
     ['fr', 'je veux me suicider', 'crisis'],
     ['it', 'Ho un sanguinamento forte', 'complication'],
     ['it', 'voglio morire', 'crisis'],
+    // Azerice ve Kürtçe (Sorani) — Azerbaycan ve Irak (Kürdistan Bölgesi),
+    // doğrulanmış ilk-5 kaynak ülke (bkz. src/voice/safety.js'in başı).
+    ['az', 'Əməliyyat yerindən çox qanaxma var', 'complication'],
+    ['az', 'ölmək istəyirəm, həyatım bitdi', 'crisis'],
+    ['az', 'Saç əkimi nə qədər tutur?', null],
+    ['ku', 'لە شوێنی ئۆپەراسیۆن خوێن ڕشتنەوە هەیە', 'complication'],
+    ['ku', 'دەمەوێت بمرم', 'crisis'],
+    ['ku', 'چەندە تێدەچێت بۆ چاندنی قژ؟', null],
   ];
   for (const [lang, text, expectedType] of cases) {
     const result = scanForSafetySignal(text, lang);
@@ -59,7 +67,7 @@ console.log('▶ safety.js — scanForSafetySignal()');
   check('unrecognized lang code falls back to English patterns', fallback?.type === 'complication');
 
   // Every language has both a complication and a crisis script, and getSafetyScript never returns undefined.
-  for (const lang of ['en', 'tr', 'ar', 'de', 'ru', 'fr', 'it']) {
+  for (const lang of ['en', 'tr', 'ar', 'de', 'ru', 'fr', 'it', 'az', 'ku']) {
     check(`[${lang}] has a complication script`, typeof getSafetyScript('complication', lang) === 'string' && getSafetyScript('complication', lang).length > 0);
     check(`[${lang}] has a crisis script`, typeof getSafetyScript('crisis', lang) === 'string' && getSafetyScript('crisis', lang).length > 0);
   }

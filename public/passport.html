@@ -159,8 +159,28 @@ const L = {
     disclaimer:"Questo documento è stato emesso dalla clinica sopra indicata. Non è una certificazione indipendente. Lo mostri a qualsiasi medico la curi dopo il rientro. Conservi il codice di riferimento: identifica esattamente questo documento.",
     notFound:"Questo passaporto non è disponibile",
     notFoundSub:"Il link potrebbe essere errato, oppure la clinica ha ritirato questo documento. Contatti direttamente la clinica."},
+  az:{name:"Azərbaycanca",title:"Müalicə Pasportu",sub:"Xaricdə alınan müalicənin qeydi",
+    forDoctor:"Müalicə edən həkim üçün",ref:"İstinad",issued:"Verilmə tarixi",
+    proc:"Əməliyyat",procDate:"Tarix",anes:"Anesteziya",surgeon:"Cərrah",clinic:"Klinika",patient:"Xəstə",country:"Ölkə",
+    implants:"İmplantlar və materiallar",meds:"Dərmanlar",aftercare:"Əməliyyatdan sonrakı təlimatlar",warn:"Dərhal həkimə müraciət edin əgər",
+    emergency:"Təcili əlaqə",tType:"Növ",tBrand:"Marka",tModel:"Model",tLot:"Lot / seriya",tSide:"Tərəf",tNote:"Qeyd",
+    mName:"Dərman",mDose:"Doza",mDuration:"Müddət",none:"Qeyd yoxdur",print:"Çap et",
+    langNote:"Aşağıdakı klinik mətn kliniğin yazdığı kimi, {lang} dilində göstərilir. Maşın tərcüməsi EDİLMƏYİB: tərcümə edilmiş tibbi qeyd nə sizin, nə də həkiminizin görə biləcəyi xətalar daşıya bilər.",
+    disclaimer:"Bu qeyd yuxarıda adı çəkilən klinika tərəfindən verilmişdir. Müstəqil sertifikatlaşdırma deyil. Qayıtdıqdan sonra sizi müalicə edən hər həkimə göstərin. İstinad kodunu saxlayın: bu, məhz bu qeydi müəyyənləşdirir.",
+    notFound:"Bu pasport mövcud deyil",
+    notFoundSub:"Keçid səhv ola bilər və ya klinika bu qeydi geri çəkmiş ola bilər. Birbaşa klinika ilə əlaqə saxlayın."},
+  ku:{name:"کوردی",title:"پاسپۆرتی چارەسەرکردن",sub:"تۆماری چارەسەری وەرگیراو لە دەرەوەی وڵات",
+    forDoctor:"بۆ پزیشکی چارەسەرکەر",ref:"ژمارەی سەرچاوە",issued:"بەرواری دەرچوون",
+    proc:"پرۆسیجەر",procDate:"بەروار",anes:"بێهۆشکردن",surgeon:"نەشتەرگەر",clinic:"کلینیک",patient:"نەخۆش",country:"وڵات",
+    implants:"ئیمپلانت و ماددەکان",meds:"دەرمانەکان",aftercare:"ڕێنماییەکانی دوای ئۆپەراسیۆن",warn:"دەستبەجێ پەیوەندی بە پزیشک بکە ئەگەر",
+    emergency:"پەیوەندی کاتی فریاکەوتن",tType:"جۆر",tBrand:"براند",tModel:"مۆدێل",tLot:"لۆت / سیریاڵ",tSide:"لایەن",tNote:"تێبینی",
+    mName:"دەرمان",mDose:"دۆز",mDuration:"ماوە",none:"هیچ تۆمارێک نییە",print:"چاپکردن",
+    langNote:"دەقی کلینیکی خوارەوە وەک چۆن کلینیکەکە نووسیویەتی پیشان دەدرێت، بە زمانی {lang}. بە ئامێر وەرگێڕدراو نییە: تۆمارێکی پزیشکی وەرگێڕدراو لەوانەیە هەڵەی تێدابێت کە نە تۆ و نە پزیشکەکەت پێی هەست بکەن.",
+    disclaimer:"ئەم تۆمارە لەلایەن کلینیکی ناوبراوی سەرەوە دەرچووە. ئەمە ڕاستاندنێکی سەربەخۆ نییە. ئەمە نیشانی هەر پزیشکێک بدە کە دوای گەڕانەوەت چارەسەرت دەکات. کۆدی سەرچاوە هەڵبگرە: ئەمە ڕوونی دەکاتەوە کام تۆمارە.",
+    notFound:"ئەم پاسپۆرتە بەردەست نییە",
+    notFoundSub:"لەوانەیە بەستەرەکە هەڵە بێت یان کلینیکەکە ئەم تۆمارەی گەڕاندووەتەوە. ڕاستەوخۆ پەیوەندی بە کلینیکەکە بکە."},
 };
-const RTL = new Set(["ar"]);
+const RTL = new Set(["ar","ku"]);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const qs = new URLSearchParams(location.search);
 const token = qs.get("token") || "";

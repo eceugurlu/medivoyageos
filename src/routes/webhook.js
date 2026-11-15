@@ -12,6 +12,7 @@ import { assignCoordinatorByLanguage } from '../store/repository.js';
 import { zohoEnabled, syncLeadToCrm } from '../services/zoho.js';
 import { notifyHandover } from '../services/notify.js';
 import { recordFailure, recordSuccess } from '../services/healthMonitor.js';
+import { applyLanguageGuard } from '../services/langCheck.js';
 
 export const webhookRouter = Router();
 
@@ -350,6 +351,34 @@ async function processConversationTurn({ channel, identity, profileName, userTex
     if (meta.handover?.needed) {
       console.log(`[HANDOVER] ${meta.handover.reason} — patient ${profileName || identity}`);
     }
+  }
+
+  // Dil Doğrulama Kontrolü — gönderilmeden ÖNCE son bir tripwire. Model
+  // kendi algıladığı dili (meta.detected_language) döndürüyor; cevap o
+  // dilde değilse, hastaya yanlış dilde bir mesaj gitmesindense cevabı
+  // mevcut çok dilli FALLBACK_REPLY ile değiştirip insana devrediyoruz —
+  // modele ikinci bir çağrı YAPMIYORUZ (gecikme/maliyet eklemeden). Karar
+  // mantığının tamamı applyLanguageGuard() içinde, saf fonksiyon — Express
+  // ya da DB olmadan test edilebiliyor (bkz. scripts/test-lang-check.mjs).
+  //
+  // Yalnızca YÜKSEK GÜVENLİ bir uyuşmazlıkta devreye girer: kısa ya da
+  // belirsiz bir cevap ('unknown') burada hiçbir şeyi tetiklemez — iyi
+  // çalışan bir konuşmayı gereksiz yere insana devretmek, sessiz kalmaktan
+  // kötüdür.
+  const guard = applyLanguageGuard({ reply, meta, fallbackReply: FALLBACK_REPLY });
+  reply = guard.reply;
+  meta = guard.meta;
+  if (guard.guarded) {
+    console.error(
+      `[lang-check] beklenen=${guard.result.expected} tespit=${guard.result.detected.lang} — ${identity} için cevap değiştirildi`,
+    );
+    recordFailure('ai-lang-mismatch', {
+      threshold: 3, cooldownMs: 15 * 60_000, severity: 'warning',
+      title: 'AI repeatedly replying in the wrong language',
+      detail: `expected ${guard.result.expected}, detected ${guard.result.detected.lang}`,
+    });
+  } else if (guard.result) {
+    recordSuccess('ai-lang-mismatch');
   }
 
   // Persist the assistant's reply (Postgres when DATABASE_URL is set, else

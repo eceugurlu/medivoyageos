@@ -556,3 +556,18 @@ CREATE TABLE IF NOT EXISTS pmf_survey_responses (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_pmf_survey_clinic ON pmf_survey_responses (clinic_id, created_at DESC);
+
+-- ── 1 Günde Kurulum Kontrol Listesi (see 035_setup_checklist.sql) ─────────
+-- Yalnızca ELLE işaretlenen adımlar burada; otomatik adımlar gerçek
+-- veriden hesaplanır, satırları hiç yazılmaz (bkz. services/setupChecklist.js).
+CREATE TABLE IF NOT EXISTS setup_checklist_items (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id  UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  item_key   TEXT NOT NULL,
+  done       BOOLEAN NOT NULL DEFAULT false,
+  done_at    TIMESTAMPTZ,
+  note       TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_setup_checklist_clinic_item
+  ON setup_checklist_items (clinic_id, item_key);

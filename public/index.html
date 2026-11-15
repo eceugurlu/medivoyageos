@@ -868,6 +868,8 @@ const I18N = {
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
     "nav.compliance":"Risk & Compliance",
+    "demo.title":"Share the demo environment","demo.sub":"Read-only, fake data — safe to hand to a judge or a prospect. Nothing here touches the real database.",
+    "demo.copy":"Copy","demo.open":"Open","demo.copied":"Link copied.","demo.qrAlt":"QR code to the demo environment",
     "pmf.title":"Product/market fit (Sean Ellis question)","pmf.sub":"\"How would you feel if you could no longer use this product?\" The standard PMF test — the 40% threshold below is the methodology's own, not ours.",
     "pmf.question":"How would you feel if you could no longer use MediVoyage?",
     "pmf.very":"Very disappointed","pmf.somewhat":"Somewhat disappointed","pmf.not":"Not disappointed",
@@ -1203,6 +1205,8 @@ const I18N = {
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
     "nav.compliance":"Risk & Uyum",
+    "demo.title":"Demo ortamını paylaş","demo.sub":"Salt okunur, sahte veri — bir jüriye ya da aday bir kliniğe güvenle verilebilir. Hiçbir şey gerçek veritabanına dokunmaz.",
+    "demo.copy":"Kopyala","demo.open":"Aç","demo.copied":"Link kopyalandı.","demo.qrAlt":"Demo ortamına giden QR kod",
     "pmf.title":"Ürün/pazar uyumu (Sean Ellis sorusu)","pmf.sub":"\"Bu ürünü artık kullanamasanız ne hissederdiniz?\" Standart PMF testi — aşağıdaki %40 eşiği bizim seçimimiz değil, metodolojinin kendisi.",
     "pmf.question":"MediVoyage'ı artık kullanamasanız ne hissederdiniz?",
     "pmf.very":"Çok hayal kırıklığına uğrarım","pmf.somewhat":"Biraz hayal kırıklığına uğrarım","pmf.not":"Hayal kırıklığına uğramam",
@@ -1495,6 +1499,36 @@ function riskReasonText(r){
 }
 
 // ── Command Center ──────────────────────────────────────────────────────────
+// Demo Ortamını Paylaş.
+//
+// public/demo.html'e giden bir link + QR kod. Sayfa tamamen statik ve
+// sahte veri taşır (gerçek API'ye hiç dokunmaz) — bu kart yalnızca ona
+// giden yolu kolaylaştırır.
+//
+// QR görseli api.qrserver.com'dan (anahtar gerektirmez, ücretsiz). Bu tek
+// dış servis bağımlılığı: görsel yüklenemezse (offline, engellenmiş ağ)
+// linkin kendisi her zaman metin olarak kalır ve kopyalanabilir — QR
+// sadece bir kolaylık, tek erişim yolu değil.
+function DemoShareCard(){
+  const url = `${location.origin}/panel/demo.html`;
+  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=132x132&margin=4&data=${encodeURIComponent(url)}`;
+  return html`<div class="glass" style="padding:16px 18px;margin-bottom:22px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+    <img src=${qr} width="88" height="88" alt=${T("demo.qrAlt")}
+      style="border-radius:var(--r-sm);border:1px solid var(--rule);flex:none;background:#fff"
+      onError=${(e)=>{ e.target.style.display="none"; }}/>
+    <div style="flex:1;min-width:220px">
+      <div style="font-weight:600;font-size:13.5px;margin-bottom:3px">${T("demo.title")}</div>
+      <div class="sub" style="margin:0 0 8px;font-size:12px">${T("demo.sub")}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--ink-2);overflow-wrap:anywhere">${url}</span>
+        <button class="btn" style="font-size:11.5px;padding:4px 9px"
+          onClick=${()=>{ navigator.clipboard.writeText(url); showToast(T("demo.copied")); }}>${T("demo.copy")}</button>
+        <button class="btn" style="font-size:11.5px;padding:4px 9px" onClick=${()=>window.open(url,"_blank")}>${T("demo.open")}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function CommandCenter({ stats, analytics, handovers, risks, roi, onOpenLead }){
   const s = stats||{};
   const n = (v)=> v==null? "–" : v;
@@ -1526,6 +1560,7 @@ function CommandCenter({ stats, analytics, handovers, risks, roi, onOpenLead }){
           <${MiniBarChart} data=${analytics.trend} />
         </div>` : null}
 
+      <${DemoShareCard} />
       ${roi? html`
         <div style="margin-bottom:22px">
           <div class="section-title" style="margin-top:0">${T("roi.title")}</div>

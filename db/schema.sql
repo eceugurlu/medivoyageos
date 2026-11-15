@@ -533,3 +533,15 @@ CREATE TABLE IF NOT EXISTS compliance_checks (
 CREATE INDEX IF NOT EXISTS idx_compliance_checks_created ON compliance_checks (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_compliance_checks_lead ON compliance_checks (created_at DESC)
   WHERE email IS NOT NULL;
+
+-- ── Tasarım Ortağı KPI Paneli (see 033_design_partner_kpis.sql) ───────────
+CREATE TABLE IF NOT EXISTS design_partner_goals (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id     UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  metric        TEXT NOT NULL CHECK (metric IN ('response_time_seconds', 'appointment_conversion_rate')),
+  baseline_value NUMERIC, target_value NUMERIC, baseline_date DATE, note TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_design_partner_goals_clinic_metric
+  ON design_partner_goals (clinic_id, metric);

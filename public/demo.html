@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MediVoyage OS — Demo Klinik</title>
+<meta name="robots" content="noindex" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M9 16a7 7 0 1 1 14 0 7 7 0 0 1-14 0z' fill='none' stroke='%23fff' stroke-width='2.4'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=Azeret+Mono:wght@400;500&display=swap">
+<style>
+  /*
+   * Panelin KENDİ tasarım token sistemiyle aynı (public/index.html'den
+   * birebir), ama bu sayfa o uygulamanın bir PARÇASI DEĞİL: hiçbir API'ye
+   * istek atmaz, veritabanına dokunmaz. Her sayı aşağıdaki <script> içinde
+   * gömülü, sabit, SAHTE veridir. Gerçek bir klinik hiçbir zaman buraya
+   * yazamaz, buradan hiçbir şey gerçek panele sızmaz — bu, jürinin veya
+   * aday bir kliniğin kendi başına gezebileceği güvenli bir vitrin.
+   */
+  :root{
+    --ground:#eaedef; --paper:#ffffff; --paper-2:#f4f6f8; --sunk:#e0e5e8;
+    --ink:#0c1316; --ink-2:#4b555b; --ink-3:#5f666b;
+    --rule:#b3b8bb; --rule-2:#8f969a;
+    --accent:#0e5750; --accent-2:#126b60; --accent-wash:#e4efed; --accent-line:#728e89;
+    --brass:#8c6415; --brass-wash:#f4ecdb;
+    --burgundy:#7a2238; --burgundy-wash:#f2e9eb;
+    --pos:#2e6b4d; --pos-wash:#e5efe9;
+    --alert:#a02e21; --alert-ink:#82251a; --alert-wash:#fbe8e5; --alert-line:#e6bdb5;
+    --display:"Lora",Georgia,"Times New Roman",serif;
+    --ui:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --r:14px; --r-sm:8px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0e1315; --paper:#161c1f; --paper-2:#1b2225; --sunk:#111618;
+      --ink:#e6eaec; --ink-2:#9aa4a9; --ink-3:#818b91;
+      --rule:#3a4348; --rule-2:#4c565c;
+      --accent:#3f9c8c; --accent-2:#5bb3a2; --accent-wash:#16302c; --accent-line:#3a6058;
+      --brass:#c9a35c; --brass-wash:#2c2819;
+      --burgundy:#d98a9e; --burgundy-wash:#2e1b22;
+      --pos:#5fb98a; --pos-wash:#17291f;
+      --alert:#e08478; --alert-ink:#f0a89d; --alert-wash:#2e1a17; --alert-line:#5c332c;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ui);font-size:14.5px;line-height:1.55}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 20px 70px}
+
+  .banner{
+    background:var(--burgundy);color:#fbf7f3;text-align:center;
+    padding:9px 14px;font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;
+  }
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 0 18px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand .mark{width:30px;height:30px;border-radius:var(--r-sm);background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-family:var(--display)}
+  .brand h1{font-family:var(--display);font-size:19px;font-weight:600;margin:0}
+  .demo-chip{
+    font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;
+    padding:4px 10px;border-radius:var(--r-sm);border:1px solid var(--burgundy);color:var(--burgundy);background:var(--burgundy-wash);
+  }
+
+  .section-title{font-family:var(--display);font-weight:600;font-size:17px;margin:34px 0 4px;text-wrap:balance}
+  .sub{color:var(--ink-2);font-size:13.5px;margin:0 0 16px;max-width:70ch}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:var(--r);margin-bottom:8px;overflow:hidden}
+  .kpi{background:var(--paper);padding:14px 17px}
+  .kpi .label{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+  .kpi .val{font-family:var(--display);font-weight:600;font-size:28px;margin-top:7px;font-variant-numeric:tabular-nums}
+  .kpi .val.mint{color:var(--pos)} .kpi .val.alert{color:var(--alert)} .kpi .val.cyan{color:var(--accent)}
+  .kpi .foot{color:var(--ink-3);font-size:11px;margin-top:5px;line-height:1.4}
+
+  .glass{background:var(--paper);border:1px solid var(--rule);border-radius:var(--r)}
+  .row{display:flex;gap:12px;align-items:flex-start;padding:13px 17px;border-bottom:1px solid var(--rule)}
+  .row:last-child{border-bottom:0}
+  .pill{font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:var(--r-sm);border:1px solid var(--rule-2);color:var(--ink-2);white-space:nowrap}
+  .pill.hot{color:var(--alert);border-color:var(--alert-line);background:var(--alert-wash)}
+  .pill.urgent{color:#fbf7f3;background:var(--alert);border-color:var(--alert)}
+  .pill.human{color:var(--pos);border-color:var(--pos);background:var(--pos-wash)}
+  .pill.vip{color:var(--burgundy);border-color:var(--burgundy);background:var(--burgundy-wash)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);padding:0 10px 8px 0;border-bottom:1px solid var(--rule)}
+  td{padding:10px 10px 10px 0;border-bottom:1px solid var(--paper-2);vertical-align:top}
+  .num{font-variant-numeric:tabular-nums}
+  .bar{height:5px;border-radius:3px;background:var(--rule);overflow:hidden;margin-top:6px}
+  .bar > span{display:block;height:100%;border-radius:3px;background:var(--accent)}
+
+  .readonly-note{
+    display:flex;align-items:center;gap:9px;padding:11px 15px;margin-bottom:6px;
+    background:var(--accent-wash);border:1px solid var(--accent-line);border-radius:var(--r-sm);
+    font-size:12.5px;color:var(--ink);line-height:1.5;
+  }
+  .disabled-btn{font:inherit;font-size:12px;padding:6px 11px;border:1px solid var(--rule-2);border-radius:var(--r-sm);background:var(--paper-2);color:var(--ink-3);cursor:not-allowed}
+
+  .scroller{overflow-x:auto}
+  footer.end{margin-top:36px;padding-top:18px;border-top:1px solid var(--rule-2);color:var(--ink-3);font-size:12.5px;line-height:1.55}
+  @media (max-width:560px){ .kpis{grid-template-columns:1fr 1fr} header.top{flex-direction:column;align-items:flex-start} }
+</style>
+</head>
+<body>
+<div class="banner">Demo Ortamı — Sahte Veri — Salt Okunur. Gerçek bir klinikte buradaki hiçbir satır yoktur.</div>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="mark">M</span><h1>MediVoyage OS</h1></div>
+    <span class="demo-chip">Demo Klinik · Este Örnek Kliniği</span>
+  </header>
+
+  <div class="readonly-note">
+    Bu bir gösterim ortamıdır. Hiçbir buton bir API çağrısı yapmaz, hiçbir sayı gerçek bir hastaya ait değildir — hepsi örnek. Gerçek panel gerçek klinik verisiyle aynı ekranları gösterir.
+  </div>
+
+  <div class="section-title">Komuta Merkezi</div>
+  <div class="sub">Kliniğe gelen talebin canlı görünümü — örnek bir hafta.</div>
+  <div class="kpis">
+    <div class="kpi"><div class="label">Bugünkü lead'ler</div><div class="val cyan">14</div><div class="foot">212 lead havuzda</div></div>
+    <div class="kpi"><div class="label">Sıcak lead'ler</div><div class="val mint">6</div><div class="foot">skor ≥ 70</div></div>
+    <div class="kpi"><div class="label">İnsan bekliyor</div><div class="val alert">2</div><div class="foot">devir kuyruğunda</div></div>
+    <div class="kpi"><div class="label">Ülkeler</div><div class="val">9</div><div class="foot">konumu bilinen lead</div></div>
+    <div class="kpi"><div class="label">AI özerkliği</div><div class="val cyan">94%</div><div class="foot">görüşme hâlâ insansız yürüyor</div></div>
+    <div class="kpi"><div class="label">AI cevap süresi</div><div class="val mint">2 sn</div><div class="foot">medyan, ilk mesajdan</div></div>
+  </div>
+
+  <div class="section-title">Dönüşüm hunisi — son 30 gün</div>
+  <div class="glass" id="funnelBox" style="padding:16px 18px"></div>
+
+  <div class="section-title">Gelen kutusu (örnek)</div>
+  <div class="sub">Çok kanallı, çok dilli — WhatsApp, Instagram, web widget.</div>
+  <div class="glass" id="inboxList"></div>
+
+  <div class="section-title">CAC &amp; ROAS — hangi reklam gerçekten hasta üretti</div>
+  <div class="sub">Harcama, tıklamaya değil, rezervasyona ve tahsil edilen gelire kadar izlendi.</div>
+  <div class="glass scroller">
+    <table id="campaignTable" style="padding:14px 18px"></table>
+  </div>
+
+  <div class="section-title">Klinik Risk &amp; Uyum Skoru</div>
+  <div class="sub">Yönetmeliğe karşı uyum ve ameliyat sonucu verisinin ölçülmüş hâli — beyan değil.</div>
+  <div class="kpis">
+    <div class="kpi"><div class="label">Skor</div><div class="val mint">88</div><div class="foot">yalnızca ölçülebilen maddelerin ortalaması</div></div>
+    <div class="kpi"><div class="label">Kapsam</div><div class="val">%82</div><div class="foot">anketin ölçülebilen kısmı</div></div>
+    <div class="kpi"><div class="label">Akreditasyona kalan</div><div class="val alert">47 gün</div><div class="foot">son tarih 31.12.2026</div></div>
+    <div class="kpi"><div class="label">Açık madde</div><div class="val">1</div><div class="foot">komplikasyon sigortası yenileniyor</div></div>
+  </div>
+
+  <div class="section-title">Ameliyat sonucu — doktor bazlı (örnek)</div>
+  <div class="glass scroller">
+    <table id="doctorTable" style="padding:14px 18px"></table>
+  </div>
+
+  <div class="section-title">Hasta Sonuç Pasaportu (örnek)</div>
+  <div class="sub">Hastanın ülkesine döndükten sonra yanında taşıdığı, 7 dilde etiketli kayıt.</div>
+  <div class="glass" style="padding:16px 18px">
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">
+      <span style="font-weight:600;font-size:14.5px">Rinoplasti + septum düzeltme</span>
+      <span class="pill">14.10.2026</span>
+      <span class="pill">Referans: 8323B295</span>
+    </div>
+    <div class="sub" style="margin:9px 0 0">İmplant lot numarası, ilaç listesi ve acil durum belirtileri; hastanın kendi dilinde değil, kliniğin yazdığı dilde, çeviri olmadan.
+      <button class="disabled-btn" style="margin-left:8px" disabled>Belgeyi görüntüle (demo'da kapalı)</button>
+    </div>
+  </div>
+
+  <footer class="end">
+    Bu sayfa, bir adayın kendi kliniğinin verisini riske atmadan MediVoyage'ı gezebilmesi için hazırlandı. Gerçek pilotta her sayı kendi hasta akışınızdan ölçülür — buradaki hiçbir rakam o ölçüme dahil değildir ve hiçbir yere gönderilmez.
+  </footer>
+</div>
+
+<script>
+// Her şey burada: sabit veri. fetch/XHR çağrısı YOK — bu sayfa
+// hiçbir API'ye, hiçbir veritabanına dokunmaz.
+var esc = function (s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+};
+
+var INBOX = [
+  { flag: "🇩🇪", name: "A. Schmidt", channel: "WhatsApp", score: 92, status: "vip", last: "Fiyat teklifini onayladım, ne zaman gelmeliyim?" },
+  { flag: "🇬🇧", name: "J. Carter", channel: "Instagram", score: 74, status: "hot", last: "Saç ekimi için ne kadar sürer, uçuşla uyumlu mu?" },
+  { flag: "🇷🇺", name: "О. Волкова", channel: "WhatsApp", score: 58, status: "", last: "Диастаз мышц живота — есть ли у вас опыт?" },
+  { flag: "🇸🇦", name: "عمر الحداد", channel: "WhatsApp", score: null, status: "urgent", last: "عندي نزيف بعد العملية، أحتاج مساعدة الآن" },
+  { flag: "🇫🇷", name: "S. Dubois", channel: "Web", score: 65, status: "", last: "Je voudrais un devis pour un implant dentaire." },
+  { flag: "🇮🇶", name: "ز. العبيدي", channel: "Instagram", score: 81, status: "hot", last: "هل يمكن الحصول على موعد الأسبوع القادم؟" },
+];
+document.getElementById("inboxList").innerHTML = INBOX.map(function (c) {
+  var pill = c.status === "urgent" ? '<span class="pill urgent">ACİL</span>'
+    : c.status === "vip" ? '<span class="pill vip">★ ' + c.score + '</span>'
+    : c.status === "hot" ? '<span class="pill hot">' + c.score + "</span>"
+    : c.score != null ? '<span class="pill">' + c.score + "</span>" : "";
+  return '<div class="row"><span style="font-size:17px">' + c.flag + '</span>' +
+    '<div style="flex:1;min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+    '<b style="font-size:13.5px">' + esc(c.name) + '</b><span class="pill">' + esc(c.channel) + "</span>" + pill + "</div>" +
+    '<div style="color:var(--ink-2);font-size:12.5px;margin-top:3px;overflow-wrap:anywhere">' + esc(c.last) + "</div></div></div>";
+}).join("");
+
+var CAMPAIGNS = [
+  { name: "IG — Saç Ekimi / UK", channel: "Instagram", spend: 4200, leads: 22, booked: 5, cac: 191, revenue: 9750, roas: 2.32 },
+  { name: "Google — Dental / DE", channel: "Google", spend: 3100, leads: 14, booked: 3, cac: 221, revenue: 7401, roas: 2.39 },
+  { name: "IG — Estetik / Geniş kitle", channel: "Instagram", spend: 2800, leads: 19, booked: 0, cac: 147, revenue: 0, roas: 0 },
+];
+document.getElementById("campaignTable").innerHTML =
+  "<thead><tr><th>Kampanya</th><th>Kanal</th><th>Harcama</th><th>Lead</th><th>Rezervasyon</th><th>Lead maliyeti</th><th>Gelir</th><th>ROAS</th></tr></thead><tbody>" +
+  CAMPAIGNS.map(function (c) {
+    var roasCell = c.roas === 0
+      ? '<span class="pill hot">0×</span>'
+      : '<b style="color:' + (c.roas >= 1 ? "var(--pos)" : "var(--alert)") + '">' + c.roas.toFixed(2) + "×</b>";
+    return "<tr><td><b>" + esc(c.name) + "</b></td><td>" + esc(c.channel) + "</td>" +
+      '<td class="num">€' + c.spend.toLocaleString() + '</td><td class="num">' + c.leads + '</td><td class="num">' + c.booked + "</td>" +
+      '<td class="num">€' + c.cac + '</td><td class="num">€' + c.revenue.toLocaleString() + "</td><td>" + roasCell + "</td></tr>";
+  }).join("") + "</tbody>";
+
+var DOCTORS = [
+  { name: "Dr. Elif Demir", specialty: "Plastik Cerrahi", operated: 34, recorded: 31, complications: 1 },
+  { name: "Dr. Mehmet Kaya", specialty: "Saç Ekimi", operated: 58, recorded: 52, complications: 0 },
+  { name: "Dr. Ayşe Yıldız", specialty: "Diş Hekimliği", operated: 21, recorded: 21, complications: 0 },
+];
+document.getElementById("doctorTable").innerHTML =
+  "<thead><tr><th>Doktor</th><th>Branş</th><th>Ameliyat</th><th>Kayıtlı sonuç</th><th>Komplikasyon</th><th>Kayıt oranı</th></tr></thead><tbody>" +
+  DOCTORS.map(function (d) {
+    var rate = Math.round((d.recorded / d.operated) * 100);
+    return "<tr><td><b>" + esc(d.name) + "</b></td><td>" + esc(d.specialty) + '</td><td class="num">' + d.operated +
+      '</td><td class="num">' + d.recorded + '</td><td class="num">' + d.complications + "</td><td>%" + rate +
+      '<div class="bar"><span style="width:' + rate + '%"></span></div></td></tr>';
+  }).join("") + "</tbody>";
+
+var FUNNEL = [["Lead'ler", 212, 100], ["Nitelikli", 86, 41], ["Devredilen", 52, 25], ["Rezervasyonlu", 34, 16]];
+document.getElementById("funnelBox").innerHTML = FUNNEL.map(function (f) {
+  return '<div style="display:flex;align-items:center;gap:12px;padding:7px 0">' +
+    '<span style="flex:0 0 110px;font-size:12.5px;color:var(--ink-2)">' + f[0] + "</span>" +
+    '<span class="bar" style="flex:1;margin-top:0"><span style="width:' + f[2] + '%"></span></span>' +
+    '<span class="num" style="flex:0 0 40px;text-align:right;font-weight:600">' + f[1] + "</span></div>";
+}).join("");
+</script>
+</body>
+</html>

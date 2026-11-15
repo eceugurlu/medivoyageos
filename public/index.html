@@ -868,6 +868,10 @@ const I18N = {
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
     "nav.compliance":"Risk & Compliance",
+    "dp.title":"Design partner progress","dp.sub":"The baseline you measured before MediVoyage, the target you agreed to, and what the real data says right now. No goal set is not zero progress — it's unmeasured.",
+    "dp.setGoals":"Set goals","dp.collapse":"Done",
+    "dp.baseline":"Baseline","dp.target":"Target","dp.current":"Now","dp.save":"Save","dp.saved":"Goal saved.",
+    "dp.st.reached":"target reached","dp.st.on_track":"on track","dp.st.behind":"behind","dp.st.no_data":"no data yet","dp.st.no_goal":"no goal set",
     "sc.title":"Free compliance check","sc.sub":"The public self-check page, for clinics that are not customers yet. Every run is a clinic that cared enough to answer nine questions about its own compliance.",
     "sc.total":"Checks run","sc.last7":"in the last 7 days",
     "sc.leads":"Left an e-mail","sc.leadsFoot":"Asked for the detailed report.",
@@ -1192,6 +1196,10 @@ const I18N = {
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
     "nav.compliance":"Risk & Uyum",
+    "dp.title":"Tasarım ortağı ilerlemesi","dp.sub":"MediVoyage öncesi ölçtüğünüz başlangıç değeri, kabul ettiğiniz hedef, ve şu an gerçek verinin söylediği. Hedef girilmemiş olması %0 ilerleme değildir — ölçülmemiş demektir.",
+    "dp.setGoals":"Hedef belirle","dp.collapse":"Bitti",
+    "dp.baseline":"Başlangıç","dp.target":"Hedef","dp.current":"Şu an","dp.save":"Kaydet","dp.saved":"Hedef kaydedildi.",
+    "dp.st.reached":"hedefe ulaşıldı","dp.st.on_track":"yolunda","dp.st.behind":"geride","dp.st.no_data":"henüz veri yok","dp.st.no_goal":"hedef girilmedi",
     "sc.title":"Ücretsiz Uyum Kontrolü","sc.sub":"Henüz müşteri olmayan klinikler için kamuya açık öz değerlendirme sayfası. Her kullanım, kendi uyum durumu hakkında dokuz soruyu cevaplayacak kadar ilgilenen bir klinik demek.",
     "sc.total":"Yapılan kontrol","sc.last7":"son 7 günde",
     "sc.leads":"E-posta bırakan","sc.leadsFoot":"Detaylı rapor istedi.",
@@ -1537,6 +1545,8 @@ function CommandCenter({ stats, analytics, handovers, risks, roi, onOpenLead }){
           <div class="sub" style="margin:10px 0 0;font-size:11.5px">${T("roi.assumption").replace("{min}", roi.minutes_per_reply_assumption)}</div>
         </div>` : null}
 
+      <${DesignPartnerKpiPanel} />
+
       ${(() => {
         const urgent = (handovers||[]).filter(h=>h.urgent);
         const normal = (handovers||[]).filter(h=>!h.urgent);
@@ -1585,6 +1595,96 @@ function CommandCenter({ stats, analytics, handovers, risks, roi, onOpenLead }){
         `;
       })()}
     </div>`;
+}
+
+// Tasarım Ortağı KPI Paneli.
+//
+// Pilot kliniğin kabul ettiği hedefi (başlangıç → hedef) ve o anın GERÇEK
+// ölçümünü yan yana koyar. Hedef girilmemiş bir metrik "ilerleme %0" değil,
+// "henüz hedef yok" olarak görünür — compliance ekranlarındaki aynı kural:
+// ölçülemeyen şey kötü değil, bilinmeyendir.
+const DP_METRIC_META = {
+  response_time_seconds: { fmt: "duration", goalUnit: "sn" },
+  appointment_conversion_rate: { fmt: "percent", goalUnit: "%" },
+};
+const dpFmtValue=(v,fmt)=>{
+  if(v==null) return "–";
+  if(fmt==="percent") return Math.round(v*1000)/10+"%";
+  if(v<60) return Math.round(v)+" sn";
+  if(v<3600) return Math.round(v/60)+" dk";
+  return Math.round(v/3600*10)/10+" sa";
+};
+const DP_STATUS_CLASS = { reached:"mint", on_track:"cyan", behind:"alert", no_data:"", no_goal:"" };
+
+function DesignPartnerGoalEditor({ metric, current, onSaved }){
+  const meta = DP_METRIC_META[metric.metric];
+  const [baseline,setBaseline]=useState(metric.baseline??"");
+  const [target,setTarget]=useState(metric.target??"");
+  const [busy,setBusy]=useState(false);
+  const dirty = String(baseline)!==String(metric.baseline??"") || String(target)!==String(metric.target??"");
+  const save=async()=>{
+    setBusy(true);
+    try{
+      await api("/design-partner-kpis/"+metric.metric,{method:"PUT",body:JSON.stringify({
+        baseline_value: baseline===""? null : Number(baseline),
+        target_value: target===""? null : Number(target),
+      })});
+      showToast(T("dp.saved")); await onSaved();
+    }catch(e){ showToast(e.message,"error"); }
+    finally{ setBusy(false); }
+  };
+  return html`<div style="display:flex;gap:6px;align-items:center;margin-top:8px">
+    <input value=${baseline} disabled=${busy} placeholder=${T("dp.baseline")+" ("+meta.goalUnit+")"}
+      onInput=${(e)=>setBaseline(e.target.value)} style="font-size:12px;width:120px"/>
+    <span style="color:var(--ink-3);font-size:12px">→</span>
+    <input value=${target} disabled=${busy} placeholder=${T("dp.target")+" ("+meta.goalUnit+")"}
+      onInput=${(e)=>setTarget(e.target.value)} style="font-size:12px;width:120px"/>
+    <button class="btn" style="font-size:11.5px;padding:5px 10px" disabled=${busy||!dirty} onClick=${save}>
+      ${busy? html`<${Spinner}/>` : T("dp.save")}
+    </button>
+  </div>`;
+}
+
+function DesignPartnerKpiPanel(){
+  const [d,setD]=useState(null);
+  const [err,setErr]=useState(null);
+  const [editing,setEditing]=useState(null);
+  const load=()=> api("/design-partner-kpis").then(setD).catch(e=>setErr(e.message));
+  useEffect(()=>{ load(); },[]);
+
+  if(err) return html`<div class="err">${err}</div>`;
+  if(!d) return loadingBox();
+
+  return html`<div style="margin-bottom:22px">
+    <div class="section-title" style="margin-top:0">${T("dp.title")}
+      <button class="btn" style="font-size:11px;padding:4px 9px;margin-left:8px" onClick=${()=>setEditing(editing?null:"x")}>
+        ${editing? T("dp.collapse") : T("dp.setGoals")}
+      </button>
+    </div>
+    <div class="sub" style="margin:-4px 0 12px">${T("dp.sub")}</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${d.metrics.map((m)=>{
+        const meta = DP_METRIC_META[m.metric];
+        const cls = DP_STATUS_CLASS[m.status] || "";
+        return html`<div key=${m.metric} class="glass" style="padding:14px 18px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <span style="font-weight:600;font-size:13.5px">${m.label}</span>
+            <span class="badge ${m.status==="reached"?"human":m.status==="behind"?"hot":""}">${T("dp.st."+m.status)}</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:14px;margin-top:8px;flex-wrap:wrap">
+            <span style="font-size:11.5px;color:var(--ink-3)">${T("dp.baseline")}: <b style="color:var(--ink)">${dpFmtValue(m.baseline,meta.fmt)}</b></span>
+            <span style="font-size:11.5px;color:var(--ink-3)">${T("dp.target")}: <b style="color:var(--ink)">${dpFmtValue(m.target,meta.fmt)}</b></span>
+            <span style="font-size:11.5px;color:var(--ink-3)">${T("dp.current")}: <b class=${cls} style="font-family:var(--display);font-size:15px">${dpFmtValue(m.current,meta.fmt)}</b></span>
+          </div>
+          ${m.progress!=null? html`<div style="margin-top:10px;height:6px;border-radius:3px;background:var(--rule);overflow:hidden">
+            <div style="height:100%;width:${Math.round(m.progress*100)}%;border-radius:3px;background:${m.status==="reached"?"var(--pos)":"var(--accent)"}"></div>
+          </div>`:null}
+          <div class="sub" style="margin:8px 0 0;font-size:12px">${m.note}</div>
+          ${editing? html`<${DesignPartnerGoalEditor} metric=${m} onSaved=${load}/>`:null}
+        </div>`;
+      })}
+    </div>
+  </div>`;
 }
 
 // ── Inbox ───────────────────────────────────────────────────────────────────

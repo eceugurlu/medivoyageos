@@ -10,6 +10,7 @@ import {
 import { isCapiConfigured } from '../services/metaCapi.js';
 import { summarizeProbes, CHANNELS } from '../services/benchmark.js';
 import { selfAssess, ALL_QUESTION_IDS } from '../services/complianceSelfCheck.js';
+import { buildKpiReport, METRIC_IDS } from '../services/designPartnerKpis.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -3714,4 +3715,64 @@ export async function listComplianceCheckLeads() {
        FROM compliance_checks WHERE email IS NOT NULL ORDER BY created_at DESC LIMIT 200`,
   );
   return q.rows;
+}
+
+// ── Tasarım Ortağı KPI Paneli ────────────────────────────────────────────
+// Hesabın tamamı services/designPartnerKpis.js içinde, saf fonksiyon.
+// Buranın tek işi: kliniğin kabul ettiği hedefi okumak/yazmak ve o anın
+// gerçek ölçümünü getirmek. Ölçüm hiçbir yerde SAKLANMAZ — her istekte
+// yeniden hesaplanır, tıpkı no-show risk skoru gibi.
+
+export async function listDesignPartnerGoals() {
+  const clinicId = await getDefaultClinicId();
+  const q = await pool.query(
+    `SELECT metric, baseline_value, target_value, to_char(baseline_date,'YYYY-MM-DD') AS baseline_date, note, updated_at
+       FROM design_partner_goals WHERE clinic_id = $1`,
+    [clinicId],
+  );
+  return q.rows;
+}
+
+export async function setDesignPartnerGoal(metric, fields = {}) {
+  if (!METRIC_IDS.includes(metric)) throw new Error(`Unknown metric: ${metric}`);
+  const clinicId = await getDefaultClinicId();
+  const baseline = fields.baseline_value === '' || fields.baseline_value == null ? null : Number(fields.baseline_value);
+  const target = fields.target_value === '' || fields.target_value == null ? null : Number(fields.target_value);
+  if (baseline != null && !Number.isFinite(baseline)) throw new Error('baseline_value must be a number');
+  if (target != null && !Number.isFinite(target)) throw new Error('target_value must be a number');
+  const q = await pool.query(
+    `INSERT INTO design_partner_goals (clinic_id, metric, baseline_value, target_value, baseline_date, note)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (clinic_id, metric) DO UPDATE SET
+       baseline_value = EXCLUDED.baseline_value, target_value = EXCLUDED.target_value,
+       baseline_date = EXCLUDED.baseline_date, note = EXCLUDED.note, updated_at = now()
+     RETURNING metric, baseline_value, target_value, to_char(baseline_date,'YYYY-MM-DD') AS baseline_date, note, updated_at`,
+    [clinicId, metric, baseline, target, isoDateOrNull(fields.baseline_date), fields.note ? String(fields.note).slice(0, 300) : null],
+  );
+  return q.rows[0];
+}
+
+// "Şu anki ölçüm": son 7 günün gerçek verisinden, haftalık rapordaki AYNI
+// pencereyle. Ayrı bir SQL icat etmek yerine mevcut ölçüm yollarını
+// (getResponseTimes, getWeeklyReportStats'ın randevu/lead oranı) çağırmak,
+// panelin başka bir yerinde gösterilen sayıyla burada farklı bir sayı
+// çıkmasını imkânsız kılar.
+export async function getCurrentKpiMeasurements() {
+  const now = new Date();
+  const weekStart = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+  // getWeeklyReportStats zaten pencere içi ortalama cevap süresini VE
+  // nitelikli-lead/randevu sayılarını taşıyor; ayrı bir sorgu YAZMIYORUZ —
+  // panelin başka bir yerinde (haftalık rapor) gösterilen sayıyla burada
+  // farklı bir sayı çıkması imkânsız olsun diye aynı fonksiyonu çağırıyoruz.
+  const weekly = await getWeeklyReportStats({ weekStart: weekStart.toISOString(), weekEnd: now.toISOString() });
+  const conversion = weekly.qualified_leads > 0 ? weekly.appointments_booked / weekly.qualified_leads : null;
+  return {
+    response_time_seconds: weekly.avg_response_seconds,
+    appointment_conversion_rate: conversion,
+  };
+}
+
+export async function getDesignPartnerKpiReport() {
+  const [goals, measurements] = await Promise.all([listDesignPartnerGoals(), getCurrentKpiMeasurements()]);
+  return { metrics: buildKpiReport(goals, measurements), measured_at: new Date().toISOString() };
 }

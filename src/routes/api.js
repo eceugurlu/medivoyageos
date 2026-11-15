@@ -22,6 +22,7 @@ import {
   getConversionEventStats,
   getBenchmarkStats, addBenchmarkProbe, setBenchmarkReply, deleteBenchmarkProbe,
   saveComplianceCheck, getComplianceCheckStats, listComplianceCheckLeads,
+  listDesignPartnerGoals, setDesignPartnerGoal, getDesignPartnerKpiReport,
   getPassportForLead, upsertPassport, issuePassport, revokePassport, getPassportByToken,
   getStats,
   listConversations,
@@ -883,6 +884,21 @@ apiRouter.delete('/benchmark/:probeId', h(async (req, res) => {
 
 apiRouter.get('/capi', h(async (req, res) => {
   res.json(await getConversionEventStats({ branchId: normalizeBranchId(req.query.branch_id) }));
+}));
+
+// Tasarım Ortağı KPI Paneli. Ölçüm hiçbir yerde saklanmaz, her istekte
+// gerçek veriden yeniden hesaplanır.
+apiRouter.get('/design-partner-kpis', h(async (_req, res) => {
+  res.json(await getDesignPartnerKpiReport());
+}));
+
+apiRouter.put('/design-partner-kpis/:metric', h(async (req, res) => {
+  try {
+    res.json(await setDesignPartnerGoal(req.params.metric, req.body || {}));
+  } catch (err) {
+    if (/metric|must be a number/.test(err.message)) return res.status(400).json({ error: err.message });
+    throw err;
+  }
 }));
 
 apiRouter.get('/compliance', h(async (req, res) => {

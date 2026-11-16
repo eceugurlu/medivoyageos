@@ -2,12 +2,12 @@
 // CLINIC KNOWLEDGE BASE
 // This is the single place you edit to teach the concierge about a clinic.
 // It is injected into the AI system prompt on every reply.
-// The sample below is a hair-transplant / aesthetic / dental clinic (Este Future
-// style). Replace every value with the real clinic's data before a demo.
+// The sample below is a hair-transplant / aesthetic / dental clinic (sample
+// profile). Replace every value with the real clinic's data before a demo.
 // ────────────────────────────────────────────────────────────────────────────
 
 export const clinicProfile = {
-  name: 'Este Future Clinic',              // ← replace
+  name: 'Demo Klinik',                     // ← replace
   city: 'Istanbul, Türkiye',
   languages: ['Türkçe', 'English', 'العربية', 'Deutsch', 'Русский', 'Français', 'Italiano'],
   tone: 'warm, premium, concise, reassuring — like a five-star patient host, never pushy',

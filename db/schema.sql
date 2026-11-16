@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS clinics (
   name               TEXT NOT NULL,
   whatsapp_phone_id  TEXT UNIQUE,        -- Meta phone_number_id — hangi mesaj hangi kliniğe ait, bununla çözülür
   profile            JSONB,              -- düzenlenebilir klinik bilgi tabanı (AI Prompt Studio)
+  business_hours     JSONB,              -- NULL = varsayılan (bkz. 037_business_hours.sql, services/businessHours.js)
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -129,7 +130,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_wamid ON messages(whatsapp_messag
 
 -- ── demo/default clinic (MVP tek klinik) ───────────────────────────────
 INSERT INTO clinics (name, whatsapp_phone_id)
-SELECT 'Este Future Clinic', NULL
+SELECT 'Demo Klinik', NULL
 WHERE NOT EXISTS (SELECT 1 FROM clinics);
 
 -- ── operations: devices, appointments, post-op tasks, logistics ────────
@@ -407,13 +408,16 @@ ALTER TABLE leads
 CREATE INDEX IF NOT EXISTS idx_leads_campaign ON leads (campaign_id) WHERE campaign_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_leads_ad_source ON leads (ad_source_id) WHERE ad_source_id IS NOT NULL;
 
--- ── Klinik Risk & Uyum Skoru (see 028_compliance_risk.sql) ─────────────────
+-- ── Klinik Risk & Uyum Skoru (see 028_compliance_risk.sql,
+--    kind listesi 036_compliance_kind_fix.sql ile düzeltildi: "7/24 çağrı
+--    merkezi" Madde 6/2-b'ye göre ARACI KURULUŞA ait, klinik şemasından
+--    kaldırıldı; yerine Madde 7/2'nin sağlık tesisine ait maddesi geldi) ──
 CREATE TABLE IF NOT EXISTS compliance_records (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   clinic_id   UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
   kind        TEXT NOT NULL CHECK (kind IN (
                 'health_tourism_authorization', 'accreditation',
-                'complication_insurance', 'kvkk_registry', 'call_center_contract'
+                'complication_insurance', 'kvkk_registry', 'foreign_language_staff'
               )),
   status      TEXT NOT NULL DEFAULT 'missing'
                 CHECK (status IN ('missing','in_progress','valid','expired')),

@@ -14,6 +14,7 @@ import { buildKpiReport, METRIC_IDS } from '../services/designPartnerKpis.js';
 import { summarizePmf, ANSWERS as PMF_ANSWERS } from '../services/pmfSurvey.js';
 import { buildChecklist, AUTO_KEYS, MANUAL_KEYS } from '../services/setupChecklist.js';
 import { sendEnabled } from '../config.js';
+import { getClinicMonthWindow, monthLabel, buildComplianceReport } from '../services/complianceReport.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -3868,4 +3869,113 @@ export async function setSetupStepDone(itemKey, { done, note } = {}) {
 export async function getSetupChecklist() {
   const [auto, manual] = await Promise.all([getSetupAutoSignals(), listSetupManualState()]);
   return buildChecklist(auto, manual);
+}
+
+// ── Aylık Uyum Raporu (PDF) ─────────────────────────────────────────────
+// Hiçbir şey SAKLANMAZ — rapor istendiği anda gerçek veriden hesaplanır.
+// Hesabın tamamı services/complianceReport.js içinde; burada yalnızca ham
+// pay/payda sayıları toplanıyor, hiçbir oran burada hesaplanmıyor.
+
+export async function getComplianceReportRaw({ monthStart, monthEnd, branchId } = {}) {
+  const clinicId = await getDefaultClinicId();
+  const bid = normalizeUuid(branchId);
+
+  const [leadStats, appointments, byLanguage, responseTime, postOp, night] = await Promise.all([
+    pool.query(
+      `SELECT count(*)::int AS new_leads,
+              count(*) FILTER (WHERE status IN ('hot','handed_over','booked'))::int AS qualified_leads
+         FROM leads WHERE clinic_id = $1 AND created_at >= $2 AND created_at < $3
+           AND ($4::uuid IS NULL OR branch_id = $4)`,
+      [clinicId, monthStart, monthEnd, bid],
+    ),
+    pool.query(
+      `SELECT count(*)::int AS booked
+         FROM appointments a JOIN leads l ON l.id = a.lead_id
+        WHERE a.created_at >= $1 AND a.created_at < $2 AND a.status = 'booked'
+          AND l.clinic_id = $3 AND ($4::uuid IS NULL OR l.branch_id = $4)`,
+      [monthStart, monthEnd, clinicId, bid],
+    ),
+    // "Dillere göre mesaj sayısı": mesajlarda dil kolonu yok, ama her
+    // mesaj bir konuşmaya, her konuşma bir lead'e bağlı ve leads.language
+    // o lead için AI'ın en son algıladığı dildir — elimizdeki en yakın
+    // gerçek. Yalnızca hastanın yazdığı mesajlar sayılıyor (AI'ın kaç
+    // dilde YANIT verdiği değil, hastanın kaç dilde YAZDIĞI soruluyor).
+    pool.query(
+      `SELECT l.language, count(*)::int AS count
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         JOIN leads l ON l.id = c.lead_id
+        WHERE m.role = 'user' AND m.created_at >= $1 AND m.created_at < $2
+          AND l.clinic_id = $3 AND ($4::uuid IS NULL OR l.branch_id = $4)
+        GROUP BY l.language`,
+      [monthStart, monthEnd, clinicId, bid],
+    ),
+    pool.query(
+      `WITH turns AS (
+         SELECT m.role, m.created_at,
+                LEAD(m.role) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) AS next_role,
+                LEAD(m.created_at) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) AS next_at
+           FROM messages m
+           JOIN conversations c ON c.id = m.conversation_id
+           JOIN leads l ON l.id = c.lead_id
+          WHERE l.clinic_id = $3 AND ($4::uuid IS NULL OR l.branch_id = $4)
+       )
+       SELECT avg(EXTRACT(EPOCH FROM (next_at - created_at))) AS avg_seconds, count(*)::int AS replied_turns
+         FROM turns
+        WHERE role = 'user' AND next_role = 'assistant' AND created_at >= $1 AND created_at < $2`,
+      [monthStart, monthEnd, clinicId, bid],
+    ),
+    // O ay İÇİNDE vadesi gelmiş takip görevleri — gelecek ay vadesi olan
+    // bir görev bu ayın takip oranını haksız yere düşürmesin.
+    pool.query(
+      `SELECT count(*)::int AS due, count(*) FILTER (WHERE t.status = 'sent')::int AS sent
+         FROM post_op_tasks t JOIN leads l ON l.id = t.lead_id
+        WHERE t.due_at >= $1 AND t.due_at < $2 AND l.clinic_id = $3 AND ($4::uuid IS NULL OR l.branch_id = $4)`,
+      [monthStart, monthEnd, clinicId, bid],
+    ),
+    // Gece kapsamı (23:00–07:00 TSİ): compliance.js'teki NIGHT_FROM/NIGHT_TO
+    // ile aynı pencere, ayrı bir sabit tanımlamak yerine aynı mantığı burada
+    // SQL'e çeviriyoruz — Türkiye DST uygulamadığı için sabit ofset güvenli.
+    pool.query(
+      `WITH tagged AS (
+         SELECT m.id,
+                (EXTRACT(HOUR FROM m.created_at AT TIME ZONE 'Europe/Istanbul') >= 23
+                 OR EXTRACT(HOUR FROM m.created_at AT TIME ZONE 'Europe/Istanbul') < 7) AS is_night,
+                LEAD(m.role) OVER (PARTITION BY m.conversation_id ORDER BY m.created_at) AS next_role
+           FROM messages m
+           JOIN conversations c ON c.id = m.conversation_id
+           JOIN leads l ON l.id = c.lead_id
+          WHERE m.role = 'user' AND m.created_at >= $1 AND m.created_at < $2
+            AND l.clinic_id = $3 AND ($4::uuid IS NULL OR l.branch_id = $4)
+       )
+       SELECT count(*) FILTER (WHERE is_night)::int AS night_messages,
+              count(*) FILTER (WHERE is_night AND next_role = 'assistant')::int AS night_replied
+         FROM tagged`,
+      [monthStart, monthEnd, clinicId, bid],
+    ),
+  ]);
+
+  return {
+    newLeads: leadStats.rows[0].new_leads,
+    qualifiedLeads: leadStats.rows[0].qualified_leads,
+    appointmentsBooked: appointments.rows[0].booked,
+    messagesByLanguage: byLanguage.rows,
+    avgResponseSeconds: responseTime.rows[0].avg_seconds,
+    repliedTurns: responseTime.rows[0].replied_turns,
+    postOpDue: postOp.rows[0].due,
+    postOpSent: postOp.rows[0].sent,
+    nightMessages: night.rows[0].night_messages,
+    nightReplied: night.rows[0].night_replied,
+  };
+}
+
+export async function getComplianceReport({ monthsAgo = 1, branchId } = {}) {
+  const { monthStart, monthEnd } = getClinicMonthWindow(new Date(), -Math.abs(monthsAgo));
+  const raw = await getComplianceReportRaw({ monthStart, monthEnd, branchId });
+  return {
+    ...buildComplianceReport(raw),
+    month: monthLabel(monthStart),
+    month_start: monthStart.toISOString(),
+    month_end: monthEnd.toISOString(),
+  };
 }

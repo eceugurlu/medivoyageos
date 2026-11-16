@@ -183,6 +183,113 @@ export async function renderQuotePdf({ clinic, lead, quote }) {
   }
 }
 
+// Aylık uyum raporu: yönetmeliğin istediği 7/24 çok dilli iletişim ve
+// hasta takibi iddiasını tek sayfada kanıta çeviren rapor. Aynı "klinik
+// defteri" tasarım dilinin daha sade bir hâli — fatura değil, bir KPI
+// özeti, o yüzden ayrı bir buildHtml.
+const CR_LABELS = {
+  en: { title: 'Monthly Compliance Report', period: 'Period', newLeads: 'New patient inquiries', qualified: 'Qualified leads',
+    booked: 'Appointments booked', response: 'Median response time', repliedTurns: 'patient messages answered',
+    byLang: 'Messages received by language', byLangCol: 'Language', countCol: 'Messages', shareCol: 'Share',
+    followUp: 'Post-op follow-up completion', night: 'Overnight coverage (23:00–07:00)',
+    noData: 'No data yet for this period.', footer: 'Generated for the clinic\u2019s own accreditation file — against the International Health Tourism Regulation (Official Gazette 26.04.2025, No. 32882).' },
+  tr: { title: 'Aylık Uyum Raporu', period: 'Dönem', newLeads: 'Yeni hasta başvurusu', qualified: 'Nitelikli lead',
+    booked: 'Randevuya dönüşen', response: 'Medyan cevap süresi', repliedTurns: 'hasta mesajı cevaplandı',
+    byLang: 'Dillere göre gelen mesaj sayısı', byLangCol: 'Dil', countCol: 'Mesaj', shareCol: 'Pay',
+    followUp: 'Ameliyat sonrası takip tamamlanma oranı', night: 'Gece kapsamı (23:00–07:00)',
+    noData: 'Bu dönem için henüz veri yok.', footer: 'Kliniğin kendi akreditasyon dosyası için üretildi — Uluslararası Sağlık Turizmi Yönetmeliği (26.04.2025 tarihli ve 32882 sayılı Resmî Gazete) karşısında.' },
+};
+function crLabelsFor(lang) { return CR_LABELS[lang] || CR_LABELS.en; }
+
+function fmtDuration(seconds) {
+  if (seconds == null) return '\u2013';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  return `${Math.round((seconds / 3600) * 10) / 10}h`;
+}
+
+function buildComplianceReportHtml({ clinic, report, lang }) {
+  const L = crLabelsFor(lang);
+  const rtl = RTL_LANGS.has(lang);
+  const byLang = report.messages_by_language || [];
+
+  const row = (label, value, sub) => `<div class="cr-stat">
+    <div class="cr-label">${escapeHtml(label)}</div>
+    <div class="cr-val">${value}</div>
+    ${sub ? `<div class="cr-sub">${escapeHtml(sub)}</div>` : ''}
+  </div>`;
+
+  return `<!doctype html>
+<html lang="${lang}" dir="${rtl ? 'rtl' : 'ltr'}">
+<head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 20mm 16mm; }
+  *{box-sizing:border-box}
+  body{margin:0;color:#0c1316;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:10.5pt;line-height:1.5}
+  .brand{display:flex;align-items:center;gap:10px;border-bottom:2px solid #0c1316;padding-bottom:12px;margin-bottom:16px}
+  .mark{width:24px;height:24px;border-radius:3px;background:#0e5750;flex:none}
+  .brand-name{font-size:15px;font-weight:700;letter-spacing:-.01em}
+  .brand-city{color:#4b555b;font-size:9.5pt;margin-${rtl ? 'right' : 'left'}:auto}
+  h1{font-size:19px;font-weight:700;letter-spacing:-.015em;margin:0 0 3px}
+  .period{color:#4b555b;font-size:9.5pt;margin-bottom:18px}
+  .cr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#c3ccd1;border:1px solid #c3ccd1;border-radius:4px;overflow:hidden;margin-bottom:16px}
+  .cr-stat{background:#fff;padding:10px 12px}
+  .cr-label{font-size:8pt;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#4b555b}
+  .cr-val{font-size:18px;font-weight:700;margin-top:5px;font-variant-numeric:tabular-nums}
+  .cr-sub{color:#7f8a90;font-size:8pt;margin-top:3px}
+  table{width:100%;border-collapse:collapse;margin:8px 0 16px}
+  th{font-size:8pt;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#4b555b;text-align:${rtl ? 'right' : 'left'};padding:6px;border-bottom:1px solid #c3ccd1}
+  th.num,td.num{text-align:${rtl ? 'left' : 'right'};font-variant-numeric:tabular-nums}
+  td{padding:7px 6px;border-bottom:1px solid #dde3e6;font-size:9.5pt}
+  .sec-title{font-size:9pt;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:#4b555b;margin:18px 0 6px}
+  .empty{color:#7f8a90;font-size:9.5pt;padding:8px 0}
+  .footer{margin-top:28px;padding-top:12px;border-top:1px solid #dde3e6;color:#7f8a90;font-size:8.5pt;line-height:1.5}
+</style></head>
+<body>
+  <div class="brand">
+    <div class="mark"></div>
+    <div class="brand-name">${escapeHtml(clinic.name)}</div>
+    <div class="brand-city">${escapeHtml(clinic.city || '')}</div>
+  </div>
+  <h1>${L.title}</h1>
+  <div class="period">${L.period}: ${escapeHtml(report.month)}</div>
+
+  <div class="cr-grid">
+    ${row(L.newLeads, report.new_leads)}
+    ${row(L.qualified, report.qualified_leads)}
+    ${row(L.booked, report.appointments_booked)}
+    ${row(L.response, fmtDuration(report.avg_response_seconds), report.replied_turns ? `${report.replied_turns} ${L.repliedTurns}` : null)}
+    ${row(L.followUp, report.follow_up_rate == null ? '\u2013' : `${report.follow_up_rate}%`, report.post_op_due ? `${report.post_op_sent}/${report.post_op_due}` : null)}
+    ${row(L.night, report.night_coverage_rate == null ? '\u2013' : `${report.night_coverage_rate}%`, report.night_messages ? `${report.night_replied}/${report.night_messages}` : null)}
+  </div>
+
+  <div class="sec-title">${L.byLang}</div>
+  ${byLang.length === 0 ? `<div class="empty">${L.noData}</div>` : `<table>
+    <thead><tr><th>${escapeHtml(L.byLangCol)}</th><th class="num">${escapeHtml(L.countCol)}</th><th class="num">${escapeHtml(L.shareCol)}</th></tr></thead>
+    <tbody>
+      ${byLang.map((r) => `<tr>
+        <td>${escapeHtml(r.language ? r.language.toUpperCase() : '\u2014')}</td>
+        <td class="num">${r.count}</td>
+        <td class="num">${r.share == null ? '\u2013' : `${r.share}%`}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`}
+
+  <div class="footer">${escapeHtml(clinic.name)}${clinic.contact?.website ? ' \u00b7 ' + escapeHtml(clinic.contact.website) : ''}<br>${L.footer}</div>
+</body></html>`;
+}
+
+export async function renderComplianceReportPdf({ clinic, report, lang }) {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setContent(buildComplianceReportHtml({ clinic, report, lang: lang || 'en' }), { waitUntil: 'load' });
+    return await page.pdf({ format: 'A4', printBackground: true });
+  } finally {
+    await page.close();
+  }
+}
+
 export async function closePdfBrowser() {
   if (cachedBrowser) { await cachedBrowser.close(); cachedBrowser = null; }
 }

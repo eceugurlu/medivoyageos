@@ -10,7 +10,7 @@
     "check:weekly-report": "node scripts/test-weekly-report.mjs",
     "check:ai-cost": "node scripts/test-ai-cost.mjs",
     "check:voice": "node scripts/test-voice-helpers.mjs && node scripts/simulate-call.mjs",
-    "test": "npm run check:fx && npm run check:compliance && npm run check:selfcheck && npm run check:benchmark && npm run check:capi && npm run check:dp-kpis && npm run check:pmf && npm run check:demo-page && npm run check:setup-checklist && npm run check:lang && npm run check:monitoring && npm run check:weekly-report && npm run check:ai-cost && npm run check:voice",
+    "test": "npm run check:fx && npm run check:compliance && npm run check:selfcheck && npm run check:benchmark && npm run check:capi && npm run check:dp-kpis && npm run check:pmf && npm run check:demo-page && npm run check:setup-checklist && npm run check:lang && npm run check:compliance-report && npm run check:monitoring && npm run check:weekly-report && npm run check:ai-cost && npm run check:voice",
     "check:fx": "node scripts/test-fx.mjs",
     "check:attribution": "node scripts/test-attribution.mjs",
     "check:compliance": "node scripts/test-compliance.mjs",
@@ -29,7 +29,9 @@
     "check:demo-page": "node scripts/test-demo-page.mjs",
     "check:setup-checklist": "node scripts/test-setup-checklist.mjs",
     "check:setup-checklist-db": "node scripts/test-setup-checklist-db.mjs",
-    "check:lang": "node scripts/test-lang-check.mjs"
+    "check:lang": "node scripts/test-lang-check.mjs",
+    "check:compliance-report": "node scripts/test-compliance-report.mjs",
+    "check:compliance-report-db": "node scripts/test-compliance-report-db.mjs"
   },
   "keywords": [],
   "author": "",

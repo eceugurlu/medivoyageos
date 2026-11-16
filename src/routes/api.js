@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { config, isProduction } from '../config.js';
 import { dbEnabled } from '../db/pool.js';
 import { sendText, sendTemplate, sendDocument } from '../services/whatsapp.js';
-import { renderQuotePdf } from '../services/pdf.js';
+import { renderQuotePdf, renderComplianceReportPdf } from '../services/pdf.js';
 import { listTemplates, renderPreview, TEMPLATES } from '../templates.js';
 import { getProfile, updateProfile } from '../services/profile.js';
 import { createCheckoutSession } from '../services/stripe.js';
@@ -25,6 +25,7 @@ import {
   listDesignPartnerGoals, setDesignPartnerGoal, getDesignPartnerKpiReport,
   submitPmfResponse, getPmfSurveyStats,
   getSetupChecklist, setSetupStepDone,
+  getComplianceReport,
   getPassportForLead, upsertPassport, issuePassport, revokePassport, getPassportByToken,
   getStats,
   listConversations,
@@ -893,6 +894,32 @@ apiRouter.get('/capi', h(async (req, res) => {
 // Sean Ellis PMF sorusu. Koordinatör kimliği isteğe bağlı.
 // 1 Günde Kurulum Kontrol Listesi. Otomatik adımlar her istekte gerçek
 // veriden yeniden hesaplanır; elle işaretlenenler DB'de saklanır.
+// Aylık Uyum Raporu (JSON + PDF indirme). Hiçbir şey saklanmaz; her çağrıda
+// gerçek veriden hesaplanır. monthsAgo=1 (varsayılan) = tamamlanmış son ay —
+// içinde bulunulan ay henüz bitmediği için raporu yanıltırdı.
+apiRouter.get('/compliance-report', h(async (req, res) => {
+  const monthsAgo = Number(req.query.months_ago || 1);
+  res.json(await getComplianceReport({
+    monthsAgo: Number.isFinite(monthsAgo) && monthsAgo > 0 ? monthsAgo : 1,
+    branchId: normalizeBranchId(req.query.branch_id),
+  }));
+}));
+
+apiRouter.get('/compliance-report/pdf', h(async (req, res) => {
+  const monthsAgo = Number(req.query.months_ago || 1);
+  const [profile, report] = await Promise.all([
+    getProfile(),
+    getComplianceReport({
+      monthsAgo: Number.isFinite(monthsAgo) && monthsAgo > 0 ? monthsAgo : 1,
+      branchId: normalizeBranchId(req.query.branch_id),
+    }),
+  ]);
+  const pdf = await renderComplianceReportPdf({ clinic: profile, report, lang: req.query.lang || 'tr' });
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `inline; filename="uyum-raporu-${report.month}.pdf"`);
+  res.send(pdf);
+}));
+
 apiRouter.get('/setup-checklist', h(async (_req, res) => {
   res.json(await getSetupChecklist());
 }));

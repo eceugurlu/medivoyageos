@@ -174,14 +174,14 @@ export const processHandoverSla = guarded('handover-sla', _processHandoverSla);
 // Haftalık Sonuç Raporu — clinic's own fixed timezone (same one
 // repository.js's BUSINESS_HOURS already uses for every other "clinic-local
 // day" computation, e.g. the analytics trend chart).
-const REPORT_TIMEZONE = 'Europe/Istanbul';
+export const REPORT_TIMEZONE = 'Europe/Istanbul';
 
 // Standard trick: format `date` as if `timeZone`'s wall-clock fields were
 // UTC fields, then the difference from the real UTC instant IS that zone's
 // current offset. Recomputed from `date` each call rather than hardcoded,
 // so this stays correct even if REPORT_TIMEZONE is ever changed to a
 // DST-observing zone (Turkey itself has had no DST since 2016).
-function getUtcOffsetMs(date, timeZone) {
+export function getUtcOffsetMs(date, timeZone) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone, hourCycle: 'h23',
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',

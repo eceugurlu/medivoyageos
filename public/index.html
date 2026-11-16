@@ -865,6 +865,7 @@ const I18N = {
     "roi.revenue":"Revenue collected","roi.revenueFoot":"from bookings this AI helped qualify",
     "roi.monthlyUsage":"AI conversations this month","roi.monthlyUsageFootOf":"of","roi.monthlyUsageFootCap":"monthly plan limit",
     "roi.monthlyCost":"AI cost this month","roi.monthlyCostFoot":"Anthropic token usage — estimated from current published rates",
+    "rt.title":"First Response Time","rt.ai":"AI","rt.human":"Human","rt.avg":"average","rt.adjusted":"business-hours adjusted","rt.median":"median","rt.insufficient":"insufficient data","rt.insufficientFoot":"fewer than 5 samples","rt.foot":"Recomputed fresh on every request, never stored.",
     "roi.assumption":"Estimate: {min} min/reply — reading, pricing lookup and typing one WhatsApp reply by hand. Human-agent replies aren't counted.",
     "nav.doctors":"Doctors","doctors.sub":"Reviewing doctors — their own portal link, and the suitability calls they've made on assigned patients.",
     "nav.branches":"Branches","branches.sub":"Your clinic locations. The branch filter at the top of the panel, and every per-branch figure, reads from this list.",
@@ -1205,6 +1206,7 @@ const I18N = {
     "roi.revenue":"Tahsil edilen gelir","roi.revenueFoot":"AI'ın nitelendirdiği rezervasyonlardan",
     "roi.monthlyUsage":"Bu ay AI konuşması","roi.monthlyUsageFootOf":"/","roi.monthlyUsageFootCap":"aylık plan limiti",
     "roi.monthlyCost":"Bu ay AI maliyeti","roi.monthlyCostFoot":"Anthropic token kullanımı — güncel yayınlanmış fiyatlardan tahmini",
+    "rt.title":"İlk Yanıt Süresi","rt.ai":"AI","rt.human":"İnsan","rt.avg":"ortalama","rt.adjusted":"mesaiye göre düzeltilmiş","rt.median":"medyan","rt.insufficient":"yetersiz veri","rt.insufficientFoot":"5'ten az örneklem","rt.foot":"Her istekte taze hesaplanır, hiçbir yerde saklanmaz.",
     "roi.assumption":"Varsayım: yanıt başına {min} dk — okuma, fiyat kontrolü ve elle bir WhatsApp yanıtı yazma. İnsan temsilcinin yanıtları sayılmıyor.",
     "nav.doctors":"Doktorlar","doctors.sub":"Değerlendirme yapan doktorlar — kendi portal linkleri ve atanan hastalar için verdikleri uygunluk kararları.",
     "nav.branches":"Şubeler","branches.sub":"Klinik lokasyonlarınız. Panelin üstündeki şube filtresi ve şube bazlı tüm rakamlar bu listeden beslenir.",
@@ -1601,7 +1603,18 @@ function DemoShareCard(){
   </div>`;
 }
 
-function CommandCenter({ stats, analytics, handovers, risks, roi, onOpenLead }){
+// sn → okunur metin. İlk Yanıt Süresi widget'ı dışında kullanılmıyor,
+// bilerek burada tutuldu (tek tüketicisi olan yardımcıyı global yapmak
+// gereksiz bir ortak API yüzeyi açar).
+function formatDurationSeconds(sec){
+  if (sec == null) return "–";
+  if (sec < 90) return `${Math.round(sec)} sn`;
+  const min = sec / 60;
+  if (min < 90) return `${Math.round(min)} dk`;
+  return `${Math.round(min / 60 * 10) / 10} sa`;
+}
+
+function CommandCenter({ stats, analytics, handovers, risks, roi, responseTime, onOpenLead }){
   const s = stats||{};
   const n = (v)=> v==null? "–" : v;
   const hoursSaved = roi? Math.round((roi.minutes_saved/60)*10)/10 : null;
@@ -1665,6 +1678,28 @@ function CommandCenter({ stats, analytics, handovers, risks, roi, onOpenLead }){
             </div>
           </div>
           <div class="sub" style="margin:10px 0 0;font-size:11.5px">${T("roi.assumption").replace("{min}", roi.minutes_per_reply_assumption)}</div>
+        </div>` : null}
+
+      ${responseTime? html`
+        <div style="margin-bottom:22px">
+          <div class="section-title" style="margin-top:0">${T("rt.title")}</div>
+          ${[["ai",T("rt.ai")],["human",T("rt.human")]].map(([key,label])=>{
+            const r = responseTime[key] || {};
+            const insufficient = r.status !== "ok";
+            return html`<div key=${key} class="kpis" style="margin-bottom:8px">
+              <div class="glass kpi">
+                <div class="label">${label} · ${T("rt.avg")}</div>
+                <div class="val cyan">${insufficient? T("rt.insufficient") : formatDurationSeconds(r.avg_seconds)}</div>
+                <div class="foot">n=${r.n} ${insufficient? "" : `· ${T("rt.median")} ${formatDurationSeconds(r.median_seconds)}`}</div>
+              </div>
+              <div class="glass kpi">
+                <div class="label">${label} · ${T("rt.adjusted")}</div>
+                <div class="val mint">${insufficient? T("rt.insufficient") : formatDurationSeconds(r.avg_business_adjusted_seconds)}</div>
+                <div class="foot">${insufficient? T("rt.insufficientFoot") : `${T("rt.median")} ${formatDurationSeconds(r.median_business_adjusted_seconds)}`}</div>
+              </div>
+            </div>`;
+          })}
+          <div class="sub" style="margin:2px 0 0;font-size:11.5px">${T("rt.foot")} (${responseTime.business_hours?.timezone||"Europe/Istanbul"})</div>
         </div>` : null}
 
       <${DesignPartnerKpiPanel} />
@@ -4366,6 +4401,7 @@ function App(){
   const [partners, setPartners] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [roi, setRoi] = useState(null);
+  const [responseTime, setResponseTime] = useState(null);
   const [profitability, setProfitability] = useState(null);
   const [branchId, setBranchId] = useState(()=> store("mv-branch", "all"));
   const [handovers, setHandovers] = useState([]);
@@ -4384,7 +4420,7 @@ function App(){
       const limit = Math.max(50, convLimitRef.current);
       const qs = branchId && branchId!=="all" ? "?branch_id="+encodeURIComponent(branchId) : "";
       const convQs = "?limit="+limit+"&offset=0"+(branchId && branchId!=="all" ? "&branch_id="+encodeURIComponent(branchId) : "");
-      const [s,c,h,a,co,pd,rk,br,pt,ro,dc,pf] = await Promise.all([
+      const [s,c,h,a,co,pd,rk,br,pt,ro,dc,pf,rt] = await Promise.all([
         api("/stats"+qs),
         api("/conversations"+convQs),
         api("/handovers"+qs),
@@ -4397,13 +4433,14 @@ function App(){
         api("/roi"+qs),
         api("/doctors"),
         api("/profitability"+qs),
+        api("/response-time"+qs),
       ]);
       setStats(s);
       setConversations(c.items||[]);
       setConvTotal(c.total||0);
       convLimitRef.current = Math.max(50, (c.items||[]).length);
       setHandovers(h); setAnalytics(a); setConsultants(co); setPendingDeposits(pd); setRisks(rk);
-      setBranches(br||[]); setPartners(pt||[]); setRoi(ro); setDoctors(dc||[]); setProfitability(pf); setFatal(null);
+      setBranches(br||[]); setPartners(pt||[]); setRoi(ro); setDoctors(dc||[]); setProfitability(pf); setResponseTime(rt); setFatal(null);
     }catch(e){ setFatal(e.message); }
   }, [branchId]);
 
@@ -4476,7 +4513,7 @@ function App(){
         ${!fatal && stats===null ? html`<div class="initload"><${Spinner} large/> <span>${T("load.generic")}</span></div>` : null}
         <div class="view" key=${tab} hidden=${!fatal && stats===null}>
         <${ErrorBoundary} key=${"eb-"+tab}>
-        ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} roi=${roi} onOpenLead=${openLead} />`
+        ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} roi=${roi} responseTime=${responseTime} onOpenLead=${openLead} />`
           : tab==="compliance" ? html`<${Compliance} />`
           : tab==="benchmark" ? html`<${Benchmark} />`
           : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} convTotal=${convTotal} onLoadMore=${loadMoreConversations} loadingMore=${loadingMore} branches=${branches} partners=${partners} doctors=${doctors} />`

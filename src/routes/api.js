@@ -99,6 +99,7 @@ import {
   regeneratePartnerToken,
   getMessageMedia,
   getRoiStats,
+  getResponseTimeStats,
   listDoctors,
   createDoctor,
   setLeadDoctor,
@@ -1006,6 +1007,13 @@ apiRouter.get('/analytics', h(async (req, res) => {
 // and revenue collected — the PoC-to-paid closing argument (Command Center).
 apiRouter.get('/roi', h(async (req, res) => {
   res.json(await getRoiStats({ branchId: normalizeBranchId(req.query.branch_id) }));
+}));
+
+// İlk Yanıt Süresi: AI/insan ayrı, ortalama+medyan, hem toplam hem
+// mesaiye-göre-düzeltilmiş — her istekte taze hesaplanır (bkz.
+// services/responseTime.js — DB'siz birim testleriyle doğrulanmış saf hesap).
+apiRouter.get('/response-time', h(async (req, res) => {
+  res.json(await getResponseTimeStats({ branchId: normalizeBranchId(req.query.branch_id) }));
 }));
 
 // Consultant performance + language coordinator matching.

@@ -129,30 +129,30 @@ try {
 
   // ── belge kayıtları ──
   console.log('\n▶ Belge kaydı: beyan, doğrulama DEĞİL');
-  savedContract = (await listComplianceRecords()).find((r) => r.kind === 'call_center_contract') || null;
-  const rec = await upsertComplianceRecord('call_center_contract', {
+  savedContract = (await listComplianceRecords()).find((r) => r.kind === 'foreign_language_staff') || null;
+  const rec = await upsertComplianceRecord('foreign_language_staff', {
     status: 'valid', issuer: `${TAG} Telekom`, reference: 'SOZ-1', valid_until: '2027-03-01',
   });
   check('kayıt yazıldı', rec.status === 'valid' && rec.issuer === `${TAG} Telekom`);
   check('verified_at panelden set EDİLEMEZ (null kalır)', rec.verified_at === null, rec.verified_at);
-  const rec2 = await upsertComplianceRecord('call_center_contract', { status: 'expired' });
+  const rec2 = await upsertComplianceRecord('foreign_language_staff', { status: 'expired' });
   check('aynı tür ikinci kez yazılınca güncellenir, çoğalmaz', rec2.status === 'expired');
   check('tek satır kaldı',
-    (await listComplianceRecords()).filter((r) => r.kind === 'call_center_contract').length === 1);
+    (await listComplianceRecords()).filter((r) => r.kind === 'foreign_language_staff').length === 1);
   let rejected = false;
   try { await upsertComplianceRecord('not_a_real_kind', { status: 'valid' }); } catch { rejected = true; }
   check('bilinmeyen belge türü reddedilir', rejected);
-  const coerced = await upsertComplianceRecord('call_center_contract', { status: 'çok iyi' });
+  const coerced = await upsertComplianceRecord('foreign_language_staff', { status: 'çok iyi' });
   check("uydurma statü sessizce 'missing'e düşer, DB CHECK'ini patlatmaz", coerced.status === 'missing');
 
   console.log('\n▶ Bozuk tarih 500 değil, "tarih yok" olmalı');
   for (const bad of ['yakında', '2026-13-45', '2026-02-31', 'next year', '']) {
     let ok = true; let row = null;
-    try { row = await upsertComplianceRecord('call_center_contract', { status: 'valid', valid_until: bad }); }
+    try { row = await upsertComplianceRecord('foreign_language_staff', { status: 'valid', valid_until: bad }); }
     catch { ok = false; }
     check(`valid_until=${JSON.stringify(bad)} → hata yok, null`, ok && row && row.valid_until === null);
   }
-  const good = await upsertComplianceRecord('call_center_contract', { status: 'valid', valid_until: '2027-03-01' });
+  const good = await upsertComplianceRecord('foreign_language_staff', { status: 'valid', valid_until: '2027-03-01' });
   // Date nesnesi DEĞİL, metin dönmeli: pg'nin yerel-gece-yarısı Date'i
   // son tarih sayacını bir gün kaydırıyordu.
   check('geçerli tarih YYYY-MM-DD metni olarak döner', good.valid_until === '2027-03-01', good.valid_until);
@@ -202,7 +202,7 @@ try {
   check('kapsam 0..1 arasında', snap.coverage >= 0 && snap.coverage <= 1, snap.coverage);
   check('akreditasyon son tarihine kalan gün hesaplanmış',
     Number.isInteger(snap.deadlines.accreditation_days), snap.deadlines);
-  check('madde sayısı 12', snap.items.length === 12, snap.items.length);
+  check('madde sayısı 11', snap.items.length === 11, snap.items.length);
 } finally {
   // ── temizlik ──
   if (branchId) {
@@ -213,7 +213,7 @@ try {
   }
   const clinicId = await getDefaultClinicId().catch(() => null);
   if (clinicId) {
-    await pool.query(`DELETE FROM compliance_records WHERE clinic_id = $1 AND kind = 'call_center_contract'`, [clinicId]);
+    await pool.query(`DELETE FROM compliance_records WHERE clinic_id = $1 AND kind = 'foreign_language_staff'`, [clinicId]);
     if (savedContract) {
       await pool.query(
         `INSERT INTO compliance_records (clinic_id, kind, status, reference, issuer, valid_from, valid_until, verified_at, note)

@@ -2,7 +2,7 @@
 // Run: npm run check:compliance
 import {
   computeComplianceScore, band, daysUntil,
-  ACCREDITATION_DEADLINE, MIN_CLINICAL_SAMPLE, MIN_PROCESS_SAMPLE, MIN_CALL_SAMPLE,
+  ACCREDITATION_DEADLINE, COMPLICATION_INSURANCE_DEADLINE, MIN_CLINICAL_SAMPLE, MIN_PROCESS_SAMPLE,
 } from '../src/services/compliance.js';
 
 let failed = 0;
@@ -33,7 +33,7 @@ console.log('\n▶ Boş klinik: skor 0 DEĞİL, null olmalı');
   check('kapsam 0', r.coverage === 0);
   check('her madde unknown', r.items.every((i) => i.status === 'unknown'));
   check('hiçbir maddede score 0 yok', r.items.every((i) => i.score !== 0));
-  check('7 zorunlu maddenin tamamı açık olarak listelenir', r.gaps.length === 7);
+  check('6 zorunlu maddenin tamamı açık olarak listelenir', r.gaps.length === 6, r.gaps.length);
   check('belge maddeleri declared=false', item(r, 'accreditation').declared === false);
 }
 
@@ -66,18 +66,22 @@ console.log('\n▶ Belge maddeleri');
   check('missing kaydı, kayıt yokmuş gibi unknown', item(missing, 'accreditation').status === 'unknown');
 }
 
-console.log('\n▶ Yürürlük tarihi ile son tarih karıştırılmaz');
+console.log('\n▶ Komplikasyon sigortası: Geçici Madde 1/2, 31.12.2025 (geçmiş bir son tarih)');
 {
-  // 01.01.2026 sigortanın YÜRÜRLÜK tarihi, poliçenin bitişi değil. Tek alanda
-  // tutulunca hiç girilmemiş sigorta satırı "SÜRESİ GEÇTİ" rozetiyle çıkıyordu.
+  // 16.11.2026 düzeltmesi: 31.12.2025 sigortanın YÜRÜRLÜK tarihi değil,
+  // Resmî Gazete'nin kendi GEÇİŞ SÜRESİ son tarihi (Geçici Madde 1/2,
+  // birebir doğrulandı). Akreditasyon gibi gerçek bir deadline — tek fark,
+  // bugünün tarihine göre bu süre ÇOKTAN DOLMUŞ, yani negatif.
   const r = computeComplianceScore({ now: NOW });
   const ins = item(r, 'complication_insurance');
-  check('sigorta maddesi geri sayım taşımaz', ins.deadline_days === null, ins.deadline_days);
-  check('yürürlük tarihi ayrı alanda', ins.in_force_since === '2026-01-01');
-  check('akreditasyon ise geri sayım taşır, yürürlük alanı boş',
+  check('sigorta maddesi deadline_days TAŞIR (artık geri sayımsız değil)', ins.deadline_days != null, ins.deadline_days);
+  check('28.10.2026 tarihine göre süre çoktan geçmiş (negatif)', ins.deadline_days < 0, ins.deadline_days);
+  check('in_force_since hâlâ bilgi amaçlı taşınıyor', ins.in_force_since === COMPLICATION_INSURANCE_DEADLINE);
+  check('akreditasyon ise gelecekteki bir son tarih taşır (pozitif)',
     item(r, 'accreditation').deadline_days === 64 && item(r, 'accreditation').in_force_since === null);
   const gap = r.gaps.find((g) => g.id === 'complication_insurance');
-  check('açıklar listesi de yürürlük tarihini taşır', gap && gap.in_force_since === '2026-01-01');
+  check('açıklar listesi de deadline_days ve in_force_since\'i birlikte taşır',
+    gap && gap.deadline_days < 0 && gap.in_force_since === COMPLICATION_INSURANCE_DEADLINE);
 }
 
 console.log('\n▶ Son tarihler yönetmelikten, elle değil');
@@ -95,14 +99,12 @@ console.log('\n▶ Örneklem tabanı: az veri skor üretmez');
   const thin = computeComplianceScore({
     now: NOW,
     consent: { total: MIN_PROCESS_SAMPLE - 1, granted: 0 },
-    calls: { total: MIN_CALL_SAMPLE - 1, complete_logs: 0, distinct_hours: 1, distinct_languages: 1 },
     outcomes: { operated: MIN_PROCESS_SAMPLE - 1, recorded: 0 },
     postop: { completed: 0, overdue: MIN_PROCESS_SAMPLE - 1 },
     response: { human_samples: MIN_PROCESS_SAMPLE - 1, human_median_minutes: 600, ai_samples: MIN_PROCESS_SAMPLE - 1, ai_median_seconds: 3 },
   });
   // Hepsi en kötü değerlerde, ama örneklem altında: hiçbiri 0 puan almamalı.
   check('az örneklemli rıza oranı unknown', item(thin, 'kvkk_consent_rate').status === 'unknown');
-  check('az örneklemli çağrı kaydı unknown', item(thin, 'call_log_completeness').status === 'unknown');
   check('az örneklemli takip uyumu unknown', item(thin, 'postop_followup_compliance').status === 'unknown');
   check('az örneklemli insan cevap süresi unknown', item(thin, 'human_response_time').status === 'unknown');
   check('az örneklemli AI cevap süresi unknown', item(thin, 'ai_response_time').status === 'unknown');
@@ -110,7 +112,7 @@ console.log('\n▶ Örneklem tabanı: az veri skor üretmez');
   // Regresyon koruması: örneklem altındaki bir madde DEĞER de taşımamalı.
   // Taşıdığında panel "%100" basıp yanına "veri yok" yazıyordu.
   check('örneklem altında value da null (panel yanıltıcı sayı basmasın)',
-    ['kvkk_consent_rate','call_log_completeness','postop_followup_compliance','handover_response','human_response_time']
+    ['kvkk_consent_rate','postop_followup_compliance','human_response_time']
       .map((id) => item(thin, id)).filter(Boolean)
       .every((i) => i.value === null));
 
@@ -155,7 +157,7 @@ console.log('\n▶ Kapsam (coverage) skorla birlikte raporlanır');
   });
   check('tek maddeli skor 100 çıkabilir', partial.score === 100);
   check('ama kapsam düşük olduğunu söyler', partial.coverage > 0 && partial.coverage < 0.3);
-  check('kalan 6 zorunlu açık listede', partial.gaps.length === 6);
+  check('kalan 5 zorunlu açık listede (6 zorunlu - 1 girilen)', partial.gaps.length === 5, partial.gaps.length);
 
   const full = computeComplianceScore({
     now: NOW,
@@ -164,9 +166,9 @@ console.log('\n▶ Kapsam (coverage) skorla birlikte raporlanır');
       { kind: 'accreditation', status: 'valid', valid_until: '2028-01-01' },
       { kind: 'complication_insurance', status: 'valid', valid_until: '2027-06-01' },
       { kind: 'kvkk_registry', status: 'valid' },
+      { kind: 'foreign_language_staff', status: 'valid' },
     ],
     consent: { total: 120, granted: 119 },
-    calls: { total: 240, complete_logs: 238, distinct_hours: 24, distinct_languages: 5 },
     outcomes: { operated: 80, recorded: 76, complications: 2, revisions: 1 },
     postop: { completed: 190, overdue: 4 },
     response: { human_samples: 40, human_median_minutes: 9, ai_samples: 300, ai_median_seconds: 3.1, unknown_samples: 12 },

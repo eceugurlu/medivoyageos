@@ -24,7 +24,7 @@ try {
       answers: {
         health_tourism_authorization: 'valid', accreditation: 'in_progress',
         complication_insurance: 'missing', kvkk_registry: 'valid',
-        multilingual_24_7: 'mostly', contact_logs: 'always',
+        foreign_language_staff: 'valid', contact_logs: 'always',
         consent_records: 'always', postop_followup: 'sometimes', outcome_records: 'never',
       },
     });

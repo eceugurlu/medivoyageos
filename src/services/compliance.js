@@ -11,13 +11,42 @@
 // "kapsam" (coverage) oranını taşımak zorunda olmamızdır: skor 92 ama kapsam
 // %30 ise, skor 92 değildir — henüz yoktur.
 //
-// Yasal dayanak: 26.04.2025 tarihli Sağlık Turizmi Yönetmeliği (RG 32882).
-// Akreditasyon son tarihi 31.12.2026; komplikasyon sigortası 01.01.2026'dan
-// beri yurt dışından gelen hastaların cerrahi/girişimsel işlemleri için
-// zorunlu. Tarihler burada sabit — yönetmelik değişirse tek yerden değişir.
-
+// Yasal dayanak: Uluslararası Sağlık Turizmi ve Turistin Sağlığı Hakkında
+// Yönetmelik (26.04.2025 tarihli, RG 32882). Aşağıdaki madde numaraları ve
+// alıntılar, Resmî Gazete'nin kendi metninden (16.11.2026'da PDF'in içerik
+// akışları çözülerek) BİREBİR doğrulandı — ikincil kaynaktan aktarılmadı.
+//
+// Her madde için SAĞLIK TESİSİ (klinik) mi, ARACI KURULUŞ (acente) mi
+// muhatap olduğu AYRI AYRI doğrulandı, çünkü bu ikisi karıştırılırsa skor
+// kliniğe ait olmayan bir yükümlülüğü klinik üstünden puanlar:
+//
+//   GEÇİCİ MADDE 1/3: "Sağlık tesisi, 6 ncı maddenin birinci fıkrasının
+//   (b) bendinde yer alan yükümlülüğü 31/12/2026 tarihine kadar sağlar."
+//   → Madde 6/1-b = akreditasyon/sertifika. SAĞLIK TESİSİNE ait.
+//
+//   GEÇİCİ MADDE 1/2: "Sağlık tesisi, 6 ncı maddenin birinci fıkrasının
+//   (c) bendinde yer alan yükümlülükleri 31/12/2025 tarihine kadar sağlar."
+//   → Madde 6/1-c = komplikasyon sigortası. SAĞLIK TESİSİNE ait. Bugünün
+//   tarihine göre bu geçiş süresi ÇOKTAN DOLDU — yani artık geri sayım
+//   değil, geçmişte kalmış ve aşılmış bir son tarih.
+//
+//   MADDE 7/2: "Uluslararası sağlık turizmi biriminde çalışan personelin
+//   en az birinin yabancı dil bilmesi ve bunun belgelendirilmesi
+//   zorunludur." → SAĞLIK TESİSİNE ait. Bu, "7/24 iki dilde çağrı merkezi"
+//   DEĞİLDİR — o ayrı ve daha ağır bir yükümlülük (hemen altına bakın).
+//
+//   MADDE 6/2-b: "Aracı kuruluş, gelen çağrıları karşılamak amacıyla en az
+//   iki yabancı dilde ve 7 gün 24 saat esasına uygun olarak hizmet
+//   verebilecek bir alt yapıya sahip olmak ya da bu alt yapıyı
+//   sağlayabilecek bir çağrı merkezi ile hizmet alımı sözleşmesi yapmak
+//   zorundadır." → ARACI KURULUŞA (acente) aittir, SAĞLIK TESİSİNE DEĞİL.
+//   Bu modül yalnızca klinik (sağlık tesisi) skoru ürettiği için bu madde
+//   BİLEREK burada YOK — bir acente profili eklenirse oraya taşınmalı.
+//
+// Önceki sürümde "7/24 çok dilli erişim" kliniğe ait bir madde olarak
+// gösteriliyordu; bu YANLIŞ ATIFTI ve kaldırıldı (bkz. foreign_language_staff).
 export const ACCREDITATION_DEADLINE = '2026-12-31';
-export const INSURANCE_MANDATORY_SINCE = '2026-01-01';
+export const COMPLICATION_INSURANCE_DEADLINE = '2025-12-31';
 
 // Belgenin süresi bu kadar gün içinde doluyorsa "uyarı" — yenileme süresi
 // gerekir, dolduğu gün öğrenmek çok geç.
@@ -29,9 +58,6 @@ export const EXPIRY_WARNING_DAYS = 45;
 export const MIN_CLINICAL_SAMPLE = 20;
 export const MIN_PROCESS_SAMPLE = 5;
 export const MIN_CALL_SAMPLE = 10;
-
-// Yönetmelik 7/24 ve İngilizce + en az bir dil daha şartı koyuyor.
-const REQUIRED_LANGUAGES = 2;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -86,13 +112,11 @@ const pct = (r) => (r == null ? null : Math.round(r * 1000) / 10);
 // ── Belge maddeleri ────────────────────────────────────────────────────────
 // Klinik beyanı. verified_at boşsa doğrulanmamıştır ve bunu saklamıyoruz:
 // madde `declared: true, verified: false` taşır, panel de öyle gösterir.
-// `deadline` ile `inForceSince` AYRI şeylerdir ve karıştırılamaz:
-//   deadline      → gelecekteki son tarih (akreditasyon: 31.12.2026) → geri sayım
-//   inForceSince  → yükümlülüğün yürürlüğe girdiği, geçmişte kalan tarih
-//                   (komplikasyon sigortası: 01.01.2026) → geri sayım DEĞİL
-// İkisini tek alanda tutunca sigorta satırı "süresi geçti" rozetiyle
-// çıkıyordu — hiç girilmemiş bir belge için "poliçeniz doldu" demek,
-// olmayan bir olguyu bildirmek olurdu.
+// `deadline` ve `inForceSince` BİRLİKTE verilebilir (komplikasyon sigortası
+// gibi): deadline geri sayımı/rozeti besler (panelde deadline_days varsa o
+// öncelik alır), in_force_since yalnızca deadline hiç verilmemişse fallback
+// olarak "zaten zorunlu" rozetini gösterir. Akreditasyon gibi yalnızca
+// gelecekteki bir maddede sadece `deadline` yeterli.
 function documentItem({ id, label, weight, required, record, now, deadline, inForceSince }) {
   const deadlineDays = deadline ? daysUntil(deadline, now) : null;
   const base = {
@@ -193,7 +217,6 @@ export function computeComplianceScore(input = {}) {
   const now = toDate(input.now);
   const byKind = new Map((input.records || []).map((r) => [r.kind, r]));
   const consent = input.consent || {};
-  const calls = input.calls || {};
   const outcomes = input.outcomes || {};
   const postop = input.postop || {};
   const response = input.response || {};
@@ -216,12 +239,29 @@ export function computeComplianceScore(input = {}) {
     id: 'complication_insurance',
     label: 'Komplikasyon sigortası',
     weight: 3, required: true, record: byKind.get('complication_insurance'), now,
-    inForceSince: INSURANCE_MANDATORY_SINCE,
+    // Geçici Madde 1/2'nin kendisi bir SON TARİH (31.12.2025), "yürürlüğe
+    // giriş" değil — önceki sürüm bunu `inForceSince` (geri sayımsız,
+    // sabit bir rozet) olarak modelliyordu, bu YANLIŞTI. Artık akreditasyon
+    // gibi gerçek bir deadline: bugünün tarihine göre bu süre ÇOKTAN DOLDU,
+    // yani deadline_days negatif çıkıyor — "süresi geçti" burada doğru bir
+    // ifade, çünkü geçiş süresi gerçekten geçti.
+    deadline: COMPLICATION_INSURANCE_DEADLINE,
+    inForceSince: COMPLICATION_INSURANCE_DEADLINE,
   }));
   items.push(documentItem({
     id: 'kvkk_registry',
     label: 'VERBİS kaydı',
     weight: 1, required: true, record: byKind.get('kvkk_registry'), now,
+  }));
+  // Madde 7/2'nin birebir karşılığı: "Uluslararası sağlık turizmi biriminde
+  // çalışan personelin en az birinin yabancı dil bilmesi ve bunun
+  // belgelendirilmesi zorunludur." — SAĞLIK TESİSİNE ait, önceki sürümdeki
+  // "7/24 çok dilli erişim" maddesinin YANLIŞ atfedilmiş hâlinin yerini alır
+  // (o madde aslında Madde 6/2-b ile ARACI KURULUŞA ait, bkz. dosya başı).
+  items.push(documentItem({
+    id: 'foreign_language_staff',
+    label: 'Personel yabancı dil belgesi',
+    weight: 2, required: true, record: byKind.get('foreign_language_staff'), now,
   }));
 
   // ── UYUM: ölçümler ──
@@ -236,30 +276,17 @@ export function computeComplianceScore(input = {}) {
     evidenceOk: `${consent.granted || 0}/${consentTotal} hastada açık rıza kayıtlı (%${pct(consentRate)}).`,
   }));
 
-  const callTotal = Number(calls.total || 0);
-  const logRate = ratio(Number(calls.complete_logs || 0), callTotal);
-  items.push(measuredItem({
-    id: 'call_log_completeness', group: 'compliance',
-    label: 'Çağrı kaydı bütünlüğü',
-    weight: 2, required: true,
-    value: logRate, unit: 'rate', sample: callTotal, minSample: MIN_CALL_SAMPLE,
-    good: 0.98, bad: 0.7,
-    evidenceOk: `${calls.complete_logs || 0}/${callTotal} çağrıda zaman + arayan + sonuç alanları tam (%${pct(logRate)}). Yönetmeliğin istediği üç alan.`,
-  }));
-
-  const hours = Number(calls.distinct_hours || 0);
-  const langs = Number(calls.distinct_languages || 0);
-  const coverageValue = callTotal
-    ? 0.5 * Math.min(1, hours / 24) + 0.5 * Math.min(1, langs / REQUIRED_LANGUAGES)
-    : null;
-  items.push(measuredItem({
-    id: 'call_center_coverage', group: 'compliance',
-    label: '7/24 çok dilli erişim',
-    weight: 1, required: true,
-    value: coverageValue, unit: 'score', sample: callTotal, minSample: MIN_CALL_SAMPLE,
-    good: 0.95, bad: 0.4,
-    evidenceOk: `Günün ${hours}/24 saatinde ve ${langs} dilde cevaplanmış çağrı var. Bu gözlenen kapsamdır; taahhüt edilen erişilebilirlik değil.`,
-  }));
+  // "Çağrı kaydı bütünlüğü" ve "7/24 çok dilli erişim" maddeleri buradan
+  // KALDIRILDI (16.11.2026 denetiminde):
+  //   - "7/24 çok dilli erişim" Madde 6/2-b'ye dayandırılmıştı ama o madde
+  //     ARACI KURULUŞA aittir, sağlık tesisine (klinik) değil — yanlış atıf.
+  //   - "Çağrı kaydı bütünlüğü"ndeki "yönetmeliğin istediği üç alan" (zaman
+  //     + arayan + sonuç) iddiasının yönetmelik metninde karşılığı
+  //     doğrulanamadı; böyle bir madde bulunamadı. Kesin hukuki referans
+  //     olmadan bir maddeyi yönetmeliğe dayandırmak yanıltıcı olurdu.
+  // Her ikisi de zaten `calls` tablosuna (sesli AI) bağlıydı ve telefon
+  // hattı henüz canlı değil — kaldırılmaları bugün hiçbir ölçülen veriyi
+  // kaybetmiyor.
 
   // ── RİSK: sonuç verisi ──
   const operated = Number(outcomes.operated || 0);
@@ -387,8 +414,14 @@ export function computeComplianceScore(input = {}) {
     gaps,
     deadlines: {
       accreditation_days: daysUntil(ACCREDITATION_DEADLINE, now),
-      insurance_mandatory_since: INSURANCE_MANDATORY_SINCE,
+      complication_insurance_deadline: COMPLICATION_INSURANCE_DEADLINE,
+      complication_insurance_days: daysUntil(COMPLICATION_INSURANCE_DEADLINE, now),
     },
+    // Kullanıcı talebi (16.11.2026): bu motor bir hukuki değerlendirme
+    // üretmiyor, yalnızca kliniğin beyanını ve ölçülebilen veriyi bir araya
+    // getiriyor. Skor ya da kapsam ne olursa olsun bu metin HER ZAMAN döner;
+    // panel ve PDF rapor bunu olduğu gibi göstermeli.
+    legal_disclaimer: 'Uyum göstergeleri, hukuki görüş değildir. Yönetmeliğe tam uyum için kendi hukuk danışmanınıza başvurun.',
   };
 }
 
@@ -397,7 +430,7 @@ export const COMPLIANCE_KINDS = [
   'accreditation',
   'complication_insurance',
   'kvkk_registry',
-  'call_center_contract',
+  'foreign_language_staff',
 ];
 export const COMPLIANCE_STATUSES = ['missing', 'in_progress', 'valid', 'expired'];
 export const OUTCOME_STATUSES = ['recovering', 'recovered', 'complication', 'revision_needed', 'lost_contact'];

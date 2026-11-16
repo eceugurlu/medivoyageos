@@ -10,9 +10,9 @@
 // birinin diğerine karışmasıyla biter. Son tarihler ve eşikler ise
 // compliance.js'ten içe aktarılıyor; yönetmelik değişirse tek yerden değişir.
 
-import { ACCREDITATION_DEADLINE, INSURANCE_MANDATORY_SINCE, daysUntil, EXPIRY_WARNING_DAYS } from './compliance.js';
+import { ACCREDITATION_DEADLINE, COMPLICATION_INSURANCE_DEADLINE, daysUntil, EXPIRY_WARNING_DAYS } from './compliance.js';
 
-export { ACCREDITATION_DEADLINE, INSURANCE_MANDATORY_SINCE };
+export { ACCREDITATION_DEADLINE, COMPLICATION_INSURANCE_DEADLINE };
 
 // Belge soruları: klinik ne diyor?
 export const DOC_ANSWERS = ['valid', 'in_progress', 'missing'];
@@ -23,15 +23,24 @@ export const PRACTICE_ANSWERS = ['always', 'mostly', 'sometimes', 'never'];
 // kabul etmiyor, o yüzden "çoğu zaman" tam puan almıyor.
 const PRACTICE_SCORE = { always: 1, mostly: 0.6, sometimes: 0.3, never: 0 };
 
+// 16.11.2026 denetiminde Resmî Gazete metni (RG 32882) birebir doğrulandı:
+//   - Madde 6/1-c (komplikasyon sigortası) ve 6/1-b (akreditasyon) SAĞLIK
+//     TESİSİNE ait — ikisi de burada doğru yerde.
+//   - Madde 7/2: "Uluslararası sağlık turizmi biriminde çalışan personelin
+//     en az birinin yabancı dil bilmesi ve bunun belgelendirilmesi
+//     zorunludur." SAĞLIK TESİSİNE ait — bir BELGE sorusu, aşağıda.
+//   - "7/24 iki dilde çağrı merkezi" (Madde 6/2-b) ARACI KURULUŞA aittir,
+//     sağlık tesisine DEĞİL — bu yüzden PRACTICE_QUESTIONS'tan kaldırıldı.
 export const DOC_QUESTIONS = [
   { id: 'health_tourism_authorization', weight: 3, label: 'Sağlık turizmi yetki belgesi' },
   { id: 'accreditation', weight: 3, label: 'Akreditasyon belgesi', deadline: ACCREDITATION_DEADLINE },
-  { id: 'complication_insurance', weight: 3, label: 'Komplikasyon sigortası', inForceSince: INSURANCE_MANDATORY_SINCE },
+  { id: 'complication_insurance', weight: 3, label: 'Komplikasyon sigortası',
+    deadline: COMPLICATION_INSURANCE_DEADLINE, inForceSince: COMPLICATION_INSURANCE_DEADLINE },
   { id: 'kvkk_registry', weight: 1, label: 'KVKK / VERBİS kaydı' },
+  { id: 'foreign_language_staff', weight: 2, label: 'Personel yabancı dil belgesi (Madde 7/2)' },
 ];
 
 export const PRACTICE_QUESTIONS = [
-  { id: 'multilingual_24_7', weight: 2, label: '7/24 çok dilli erişim' },
   { id: 'contact_logs', weight: 2, label: 'Hasta iletişim kayıtları' },
   { id: 'consent_records', weight: 2, label: 'Açık rıza kaydı' },
   { id: 'postop_followup', weight: 2, label: 'Ameliyat sonrası takip' },
@@ -136,8 +145,10 @@ export function selfAssess(answers = {}, opts = {}) {
     gaps,
     deadlines: {
       accreditation_days: daysUntil(ACCREDITATION_DEADLINE, now),
-      insurance_mandatory_since: INSURANCE_MANDATORY_SINCE,
+      complication_insurance_deadline: COMPLICATION_INSURANCE_DEADLINE,
+      complication_insurance_days: daysUntil(COMPLICATION_INSURANCE_DEADLINE, now),
     },
+    legal_disclaimer: 'Uyum göstergeleri, hukuki görüş değildir. Yönetmeliğe tam uyum için kendi hukuk danışmanınıza başvurun.',
   };
 }
 

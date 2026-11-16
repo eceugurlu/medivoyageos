@@ -2,7 +2,7 @@
 // Run: npm run check:selfcheck
 import {
   selfAssess, DOC_QUESTIONS, PRACTICE_QUESTIONS, ALL_QUESTION_IDS,
-  ACCREDITATION_DEADLINE, INSURANCE_MANDATORY_SINCE,
+  ACCREDITATION_DEADLINE, COMPLICATION_INSURANCE_DEADLINE,
 } from '../src/services/complianceSelfCheck.js';
 
 let failed = 0;
@@ -15,7 +15,7 @@ const item = (r, id) => r.items.find((i) => i.id === id);
 const allValid = {
   health_tourism_authorization: 'valid', accreditation: 'valid', accreditation_valid_until: '2028-01-01',
   complication_insurance: 'valid', complication_insurance_valid_until: '2027-06-01', kvkk_registry: 'valid',
-  multilingual_24_7: 'always', contact_logs: 'always', consent_records: 'always',
+  foreign_language_staff: 'valid', contact_logs: 'always', consent_records: 'always',
   postop_followup: 'always', outcome_records: 'always',
 };
 
@@ -100,12 +100,16 @@ console.log('\n▶ Son tarihler compliance.js ile aynı kaynaktan');
 {
   const r = selfAssess(allValid, { now: NOW });
   check('akreditasyon son tarihi 31.12.2026', ACCREDITATION_DEADLINE === '2026-12-31');
-  check('sigorta yürürlük tarihi 01.01.2026', INSURANCE_MANDATORY_SINCE === '2026-01-01');
+  check('komplikasyon sigortası geçiş süresi son tarihi 31.12.2025 (Geçici Madde 1/2)',
+    COMPLICATION_INSURANCE_DEADLINE === '2025-12-31');
   check('kalan gün hesaplandı (64)', r.deadlines.accreditation_days === 64, r.deadlines);
   check('akreditasyon maddesi geri sayım taşır', item(r, 'accreditation').deadline_days === 64);
-  // Sigorta YÜRÜRLÜK tarihi, son tarih değil: geri sayım taşımamalı.
-  check('sigorta geri sayım taşımaz', item(r, 'complication_insurance').deadline_days === null);
-  check('sigorta yürürlük alanını taşır', item(r, 'complication_insurance').in_force_since === '2026-01-01');
+  // 16.11.2026 düzeltmesi: bu artık geri sayımsız bir rozet değil, gerçek
+  // bir deadline — 28.10.2026'ya göre 31.12.2025 ÇOKTAN GEÇMİŞ (negatif).
+  check('sigorta maddesi deadline_days taşır (negatif, süresi çoktan geçmiş)',
+    item(r, 'complication_insurance').deadline_days < 0, item(r, 'complication_insurance').deadline_days);
+  check('sigorta in_force_since alanını da taşır (bilgi amaçlı)',
+    item(r, 'complication_insurance').in_force_since === COMPLICATION_INSURANCE_DEADLINE);
 }
 
 console.log('\n▶ Soru listesi ve ağırlıklar');

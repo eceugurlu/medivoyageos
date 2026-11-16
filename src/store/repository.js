@@ -15,6 +15,10 @@ import { summarizePmf, ANSWERS as PMF_ANSWERS } from '../services/pmfSurvey.js';
 import { buildChecklist, AUTO_KEYS, MANUAL_KEYS } from '../services/setupChecklist.js';
 import { sendEnabled } from '../config.js';
 import { getClinicMonthWindow, monthLabel, buildComplianceReport } from '../services/complianceReport.js';
+import {
+  DEFAULT_BUSINESS_HOURS, normalizeBusinessHours, businessHoursLabel, toPgDow,
+} from '../services/businessHours.js';
+import { computeResponseTimeStats } from '../services/responseTime.js';
 
 // The MVP runs one clinic; cache its id after first lookup.
 let cachedClinicId = null;
@@ -27,6 +31,33 @@ export async function getDefaultClinicId() {
   }
   cachedClinicId = rows[0].id;
   return cachedClinicId;
+}
+
+// Mesai saatleri: şubeye (varsa) bağlı kliniğin business_hours'u, yoksa tek
+// klinik (MVP). NULL/bozuk JSONB → normalizeBusinessHours sessizce
+// varsayılana düşer — bkz. services/businessHours.js. Her çağrıda DB'den
+// okunur (cachedClinicId gibi önbelleğe alınmaz): panelden değiştirilen bir
+// ayar hemen yansısın.
+export async function getBusinessHoursForBranch(branchId = null) {
+  const bid = normalizeUuid(branchId);
+  const { rows } = bid
+    ? await pool.query(
+      `SELECT cl.business_hours FROM branches b JOIN clinics cl ON cl.id = b.clinic_id WHERE b.id = $1`,
+      [bid],
+    )
+    : await pool.query(
+      `SELECT business_hours FROM clinics ORDER BY created_at LIMIT 1`,
+    );
+  return normalizeBusinessHours(rows[0]?.business_hours);
+}
+
+export async function setBusinessHours(clinicId, hours) {
+  const normalized = normalizeBusinessHours(hours);
+  const { rows } = await pool.query(
+    `UPDATE clinics SET business_hours = $2::jsonb WHERE id = $1 RETURNING business_hours`,
+    [clinicId, JSON.stringify(normalized)],
+  );
+  return normalizeBusinessHours(rows[0]?.business_hours);
 }
 
 // Optional şube scope. NULL = tüm şubeler (mevcut global davranış — kırılmaz).
@@ -347,7 +378,7 @@ export async function getStats({ branchId = null } = {}) {
          WHERE d.active GROUP BY d.id
        ) u)                                                                    AS device_occupancy
   `,
-    [bid, BUSINESS_HOURS.timezone],
+    [bid, DEFAULT_BUSINESS_HOURS.timezone],
   );
   const row = q.rows[0];
   const convs = Number(row.total_conversations);
@@ -1130,10 +1161,11 @@ export async function markHotFollowupSent(leadId) {
 // (reading + translating + pricing lookup + typing one WhatsApp reply by
 // hand) — shown as an assumption in the UI, not presented as measured fact.
 const MINUTES_PER_AI_REPLY = 4;
-const BUSINESS_HOURS = { startHour: 9, endHour: 19, timezone: 'Europe/Istanbul' }; // matches clinic-profile.js's stated hours
 
 export async function getRoiStats({ branchId = null } = {}) {
   const bid = normalizeBranchId(branchId);
+  const hours = await getBusinessHoursForBranch(bid);
+  const closedPgDow = hours.closedWeekdays.map(toPgDow);
   // Independent of each other — parallelized rather than sequential.
   const [q, monthly, totals] = await Promise.all([
     pool.query(
@@ -1142,7 +1174,10 @@ export async function getRoiStats({ branchId = null } = {}) {
       count(*) FILTER (WHERE m.is_ai) AS ai_replies,
       count(*) FILTER (
         WHERE m.is_ai
-          AND extract(hour FROM m.created_at AT TIME ZONE $2) NOT BETWEEN $3 AND $4 - 1
+          AND (
+            extract(hour FROM m.created_at AT TIME ZONE $2) NOT BETWEEN $3 AND $4 - 1
+            OR extract(dow FROM m.created_at AT TIME ZONE $2) = ANY($5::int[])
+          )
       ) AS ai_replies_after_hours,
       count(DISTINCT l.id) FILTER (WHERE m.is_ai) AS leads_ai_touched
     FROM messages m
@@ -1150,7 +1185,7 @@ export async function getRoiStats({ branchId = null } = {}) {
     JOIN leads l ON l.id = c.lead_id
     WHERE ($1::uuid IS NULL OR l.branch_id = $1)
   `,
-      [bid, BUSINESS_HOURS.timezone, BUSINESS_HOURS.startHour, BUSINESS_HOURS.endHour],
+      [bid, hours.timezone, hours.openHour, hours.closeHour, closedPgDow],
     ),
     // AI Maliyet Panosu — scoped to the CURRENT calendar month in the
     // clinic's own local time (same timezone-aware boundary technique as
@@ -1173,7 +1208,7 @@ export async function getRoiStats({ branchId = null } = {}) {
       AND (m.created_at AT TIME ZONE $2) >= date_trunc('month', now() AT TIME ZONE $2)
       AND ($1::uuid IS NULL OR l.branch_id = $1)
   `,
-      [bid, BUSINESS_HOURS.timezone],
+      [bid, hours.timezone],
     ),
     getPaymentTotals({ branchId }),
   ]);
@@ -1196,7 +1231,7 @@ export async function getRoiStats({ branchId = null } = {}) {
     minutes_saved: aiReplies * MINUTES_PER_AI_REPLY,
     minutes_per_reply_assumption: MINUTES_PER_AI_REPLY,
     revenue_collected: totals.collected,
-    business_hours: `${BUSINESS_HOURS.startHour}:00–${BUSINESS_HOURS.endHour}:00`,
+    business_hours: businessHoursLabel(hours),
     // AI Maliyet Panosu — token totals from messages predating this
     // feature are NULL and contribute 0 via COALESCE, not a gap; cost is
     // only ever as complete as the token data actually stored.
@@ -1645,7 +1680,7 @@ export async function createWidgetLead(d) {
 // ── Analytics (CAC / ROAS / funnel / trend) ─────────────────────────────────
 export async function getAnalytics({ branchId = null } = {}) {
   const bid = normalizeBranchId(branchId);
-  // Bucketed in the CLINIC's timezone (same BUSINESS_HOURS.timezone used by
+  // Bucketed in the CLINIC's timezone (same DEFAULT_BUSINESS_HOURS.timezone used by
   // getRoiStats below), not the DB session's default (UTC on managed
   // Postgres) — a lead created at, say, 01:00 Istanbul time is 22:00 UTC the
   // PREVIOUS day, so a plain now()::date/created_at::date comparison would
@@ -1666,7 +1701,7 @@ export async function getAnalytics({ branchId = null } = {}) {
       AND ($1::uuid IS NULL OR l.branch_id = $1)
     GROUP BY d ORDER BY d
   `,
-    [bid, BUSINESS_HOURS.timezone],
+    [bid, DEFAULT_BUSINESS_HOURS.timezone],
   );
   const funnel = await pool.query(
     `
@@ -2845,7 +2880,7 @@ export async function getDevicesWithUtilization() {
     LEFT JOIN appointments a ON a.device_id = d.id
     WHERE d.active GROUP BY d.id ORDER BY d.name
   `,
-    [BUSINESS_HOURS.timezone],
+    [DEFAULT_BUSINESS_HOURS.timezone],
   );
   return q.rows.map((r) => ({
     ...r,
@@ -3219,6 +3254,47 @@ export async function getResponseTimes({ branchId } = {}) {
   };
 }
 
+// İLK yanıt süresi paneli — getResponseTimes() ile AYNI "tur" tanımını
+// (bkz. yukarıdaki yorum) kullanır ama üç ek şey verir: ortalama VE medyan
+// (yalnızca medyan değil), toplam SÜRE yanında mesaiye-göre-düzeltilmiş süre
+// (bkz. services/businessHours.js — tek, klinik başına ayarlanabilir mesai
+// tanımı), ve örneklem küçükse (n<5) "yetersiz veri" durumu (bkz.
+// services/responseTime.js::MIN_RESPONSE_SAMPLE). Sayılar HER İSTEKTE aynı
+// sorgudan yeniden hesaplanır, hiçbir yerde saklanmaz.
+export async function getResponseTimeStats({ branchId } = {}) {
+  const clinicId = await getDefaultClinicId();
+  const scope = normalizeUuid(branchId);
+  const hours = await getBusinessHoursForBranch(scope);
+  const q = await pool.query(
+    `WITH tagged AS (
+       SELECT m.conversation_id, m.created_at, m.role, m.is_ai,
+              COALESCE(sum(CASE WHEN m.role = 'assistant' THEN 1 ELSE 0 END) OVER (
+                PARTITION BY m.conversation_id ORDER BY m.created_at, m.id
+                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+              ), 0) AS turn_no
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         JOIN leads l        ON l.id = c.lead_id
+        WHERE c.clinic_id = $1
+          AND ($2::uuid IS NULL OR l.branch_id = $2)
+     ),
+     turns AS (
+       SELECT conversation_id, turn_no,
+              min(created_at) FILTER (WHERE role = 'user')      AS asked_at,
+              min(created_at) FILTER (WHERE role = 'assistant') AS replied_at,
+              bool_or(is_ai)  FILTER (WHERE role = 'assistant') AS by_ai
+         FROM tagged
+        GROUP BY conversation_id, turn_no
+     )
+     SELECT asked_at, replied_at, by_ai
+       FROM turns
+      WHERE asked_at IS NOT NULL AND replied_at IS NOT NULL AND replied_at > asked_at`,
+    [clinicId, scope],
+  );
+  const turns = q.rows.map((r) => ({ askedAt: r.asked_at, repliedAt: r.replied_at, byAi: r.by_ai }));
+  return computeResponseTimeStats(turns, hours);
+}
+
 // Doktor bazlı sonuç kırılımı — underwriting'in asıl ilgilendiği tablo.
 // Oran HESAPLANMAZ: pay/payda gider, eşik kontrolü panelde tek yerde yapılır.
 export async function getOutcomesByDoctor({ branchId } = {}) {
@@ -3247,23 +3323,18 @@ export async function getComplianceSnapshot({ branchId } = {}) {
   const clinicId = await getDefaultClinicId();
   const scope = normalizeUuid(branchId);
 
-  const [records, consentQ, callsQ, outcomesQ, postopQ, response, byDoctor] = await Promise.all([
+  const [records, consentQ, outcomesQ, postopQ, response, byDoctor] = await Promise.all([
     listComplianceRecords(),
     pool.query(
       `SELECT count(*)::int AS total, count(*) FILTER (WHERE consent)::int AS granted
          FROM leads WHERE clinic_id = $1 AND ($2::uuid IS NULL OR branch_id = $2)`,
       [clinicId, scope],
     ),
-    pool.query(
-      `SELECT count(*)::int AS total,
-              count(*) FILTER (
-                WHERE lead_id IS NOT NULL AND status <> 'in_progress' AND outcome IS NOT NULL
-              )::int AS complete_logs,
-              count(DISTINCT date_part('hour', started_at))::int AS distinct_hours,
-              count(DISTINCT language) FILTER (WHERE language IS NOT NULL)::int AS distinct_languages
-         FROM calls WHERE clinic_id = $1 AND ($2::uuid IS NULL OR branch_id = $2)`,
-      [clinicId, scope],
-    ),
+    // Daha önce burada `calls` tablosundan "çağrı kaydı bütünlüğü" ve
+    // "7/24 çok dilli erişim" için veri toplayan bir sorgu vardı. İkisi de
+    // 16.11.2026 denetiminde kaldırıldı (bkz. services/compliance.js'in
+    // başı) — biri yanlış atıflıydı (Madde 6/2-b, aracı kuruluşa ait),
+    // diğerinin yönetmelik metninde karşılığı doğrulanamadı.
     pool.query(
       `SELECT count(*) FILTER (WHERE operated_at IS NOT NULL)::int AS operated,
               count(*) FILTER (WHERE operated_at IS NOT NULL AND outcome_status IS NOT NULL)::int AS recorded,
@@ -3292,7 +3363,6 @@ export async function getComplianceSnapshot({ branchId } = {}) {
     now: new Date(),
     records,
     consent: consentQ.rows[0],
-    calls: callsQ.rows[0],
     outcomes: outcomesQ.rows[0],
     postop: postopQ.rows[0],
     response,
@@ -3304,7 +3374,6 @@ export async function getComplianceSnapshot({ branchId } = {}) {
     by_doctor: byDoctor,
     raw: {
       consent: consentQ.rows[0],
-      calls: callsQ.rows[0],
       outcomes: outcomesQ.rows[0],
       postop: postopQ.rows[0],
       response,

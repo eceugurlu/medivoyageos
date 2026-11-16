@@ -10,7 +10,9 @@
     "check:weekly-report": "node scripts/test-weekly-report.mjs",
     "check:ai-cost": "node scripts/test-ai-cost.mjs",
     "check:voice": "node scripts/test-voice-helpers.mjs && node scripts/simulate-call.mjs",
-    "test": "npm run check:fx && npm run check:compliance && npm run check:selfcheck && npm run check:benchmark && npm run check:capi && npm run check:dp-kpis && npm run check:pmf && npm run check:demo-page && npm run check:setup-checklist && npm run check:lang && npm run check:compliance-report && npm run check:monitoring && npm run check:weekly-report && npm run check:ai-cost && npm run check:voice",
+    "check:response-time": "node scripts/test-response-time.mjs",
+    "check:response-time-db": "node scripts/test-response-time-db.mjs",
+    "test": "npm run check:fx && npm run check:compliance && npm run check:selfcheck && npm run check:benchmark && npm run check:capi && npm run check:dp-kpis && npm run check:pmf && npm run check:demo-page && npm run check:setup-checklist && npm run check:lang && npm run check:compliance-report && npm run check:monitoring && npm run check:weekly-report && npm run check:ai-cost && npm run check:voice && npm run check:response-time",
     "check:fx": "node scripts/test-fx.mjs",
     "check:attribution": "node scripts/test-attribution.mjs",
     "check:compliance": "node scripts/test-compliance.mjs",
@@ -31,7 +33,8 @@
     "check:setup-checklist-db": "node scripts/test-setup-checklist-db.mjs",
     "check:lang": "node scripts/test-lang-check.mjs",
     "check:compliance-report": "node scripts/test-compliance-report.mjs",
-    "check:compliance-report-db": "node scripts/test-compliance-report-db.mjs"
+    "check:compliance-report-db": "node scripts/test-compliance-report-db.mjs",
+    "screenshots": "node scripts/screenshots.js"
   },
   "keywords": [],
   "author": "",
@@ -45,5 +48,8 @@
     "express": "^5.2.1",
     "pg": "^8.23.0",
     "puppeteer-core": "^25.10.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.1"
   }
 }

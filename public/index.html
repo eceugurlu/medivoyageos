@@ -660,8 +660,9 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js" crossorigin></script>
+<script src="vendor/qrcode.min.js"></script>
 <script>
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 // This panel's markup is written plain-HTML style: class="..." and
 // style="a:b" as strings. React wants className and a style *object* — a
 // string style throws (React error #62) and takes the whole tree down, which
@@ -972,7 +973,7 @@ const I18N = {
     "comp.thin":"thin","comp.thinHint":"Below {n} recorded outcomes a rate is noise. The count is shown; the percentage is withheld until the sample supports it.",
     "comp.docs":"Documents","comp.docsSub":"What the clinic declares. We deliberately cannot mark anything \"verified\" from this panel — verification is a separate process, and blurring the two would destroy the only thing this score is worth.",
     "comp.kind.health_tourism_authorization":"Health tourism authorisation","comp.kind.accreditation":"Accreditation",
-    "comp.kind.complication_insurance":"Complication insurance","comp.kind.kvkk_registry":"KVKK / VERBİS registry","comp.kind.call_center_contract":"24/7 call centre",
+    "comp.kind.complication_insurance":"Complication insurance","comp.kind.kvkk_registry":"KVKK / VERBİS registry","comp.kind.foreign_language_staff":"Foreign-language staff certificate (Art. 7/2)",
     "comp.docst.missing":"not entered","comp.docst.in_progress":"in progress","comp.docst.valid":"valid","comp.docst.expired":"expired",
     "comp.issuer":"Issuer","comp.reference":"Reference no","comp.save":"Save",
     "admin.name":"Name","admin.languages":"Languages spoken","admin.branch":"Branch","admin.noBranch":"No branch",
@@ -1312,7 +1313,7 @@ const I18N = {
     "comp.thin":"az veri","comp.thinHint":"{n} kayıtlı sonucun altında oran gürültüdür. Sayı gösterilir; yüzde, örneklem taşıyana kadar gösterilmez.",
     "comp.docs":"Belgeler","comp.docsSub":"Kliniğin beyan ettikleri. Bu panelden hiçbir şeyi \"doğrulandı\" işaretleyemiyoruz, bilerek — doğrulama ayrı bir süreç ve ikisini karıştırmak bu skorun tek değerli yanını bitirirdi.",
     "comp.kind.health_tourism_authorization":"Sağlık turizmi yetki belgesi","comp.kind.accreditation":"Akreditasyon",
-    "comp.kind.complication_insurance":"Komplikasyon sigortası","comp.kind.kvkk_registry":"KVKK / VERBİS kaydı","comp.kind.call_center_contract":"7/24 çağrı merkezi",
+    "comp.kind.complication_insurance":"Komplikasyon sigortası","comp.kind.kvkk_registry":"KVKK / VERBİS kaydı","comp.kind.foreign_language_staff":"Personel yabancı dil belgesi (Madde 7/2)",
     "comp.docst.missing":"girilmedi","comp.docst.in_progress":"süreçte","comp.docst.valid":"geçerli","comp.docst.expired":"süresi doldu",
     "comp.issuer":"Veren kurum","comp.reference":"Belge no","comp.save":"Kaydet",
     "admin.name":"Ad","admin.languages":"Konuştuğu diller","admin.branch":"Şube","admin.noBranch":"Şube yok",
@@ -1511,10 +1512,11 @@ function riskReasonText(r){
 // sahte veri taşır (gerçek API'ye hiç dokunmaz) — bu kart yalnızca ona
 // giden yolu kolaylaştırır.
 //
-// QR görseli api.qrserver.com'dan (anahtar gerektirmez, ücretsiz). Bu tek
-// dış servis bağımlılığı: görsel yüklenemezse (offline, engellenmiş ağ)
-// linkin kendisi her zaman metin olarak kalır ve kopyalanabilir — QR
-// sadece bir kolaylık, tek erişim yolu değil.
+// QR kodu TAMAMEN İSTEMCİ TARAFINDA üretilir (vendor/qrcode.min.js —
+// kazuhikoarase/qrcode-generator, MIT, repoya gömülü) — hiçbir dış servise
+// (örn. eski api.qrserver.com) istek atılmaz. Üretim başarısız olursa
+// (kütüphane yüklenemedi vb.) linkin kendisi her zaman metin olarak kalır
+// ve kopyalanabilir — QR sadece bir kolaylık, tek erişim yolu değil.
 // 1 Günde Kurulum Kontrol Listesi.
 //
 // Otomatik adımlar gerçek veriden hesaplanıyor ve ASLA bir "işaretle"
@@ -1571,11 +1573,21 @@ function SetupChecklistCard(){
 
 function DemoShareCard(){
   const url = `${location.origin}/panel/demo.html`;
-  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=132x132&margin=4&data=${encodeURIComponent(url)}`;
+  // qrcode.min.js (vendor/) global `qrcode` fonksiyonunu tanımlar; o script
+  // index.html'den önce yüklenmezse (çok eski bir tarayıcı önbelleği vb.)
+  // burada sessizce atlanır — link zaten metin olarak her zaman görünür.
+  const qrDataUrl = useMemo(() => {
+    try {
+      if (typeof window.qrcode !== "function") return null;
+      const qr = window.qrcode(0, "L"); // 0 = en küçük sürümü otomatik seç
+      qr.addData(url);
+      qr.make();
+      return qr.createDataURL(4, 12);
+    } catch (e) { return null; }
+  }, [url]);
   return html`<div class="glass" style="padding:16px 18px;margin-bottom:22px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-    <img src=${qr} width="88" height="88" alt=${T("demo.qrAlt")}
-      style="border-radius:var(--r-sm);border:1px solid var(--rule);flex:none;background:#fff"
-      onError=${(e)=>{ e.target.style.display="none"; }}/>
+    ${qrDataUrl ? html`<img src=${qrDataUrl} width="88" height="88" alt=${T("demo.qrAlt")}
+      style="border-radius:var(--r-sm);border:1px solid var(--rule);flex:none;background:#fff"/>` : null}
     <div style="flex:1;min-width:220px">
       <div style="font-weight:600;font-size:13.5px;margin-bottom:3px">${T("demo.title")}</div>
       <div class="sub" style="margin:0 0 8px;font-size:12px">${T("demo.sub")}</div>
@@ -2917,7 +2929,7 @@ const COMP_ST = {
   unknown:  { cls:"",         key:"comp.st.unknown" },
   measured: { cls:"",         key:"comp.st.measured" },
 };
-const COMP_KINDS = ["health_tourism_authorization","accreditation","complication_insurance","kvkk_registry","call_center_contract"];
+const COMP_KINDS = ["health_tourism_authorization","accreditation","complication_insurance","kvkk_registry","foreign_language_staff"];
 const COMP_DOC_STATUSES = ["missing","in_progress","valid","expired"];
 
 // T() yer tutucu desteklemiyor; {n} burada doldurulur, yoksa ekranda

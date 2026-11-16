@@ -22,6 +22,50 @@ console.log('▶ Sayfa gerçekten salt-okunur ve izole');
   check('yer tutucu kalıntısı yok (${..._PLACEHOLDER})', !/PLACEHOLDER/.test(html));
   check('"DEMO" uyarı şeridi var', /demo ortamı/i.test(html));
   check('salt-okunur olduğunu açıkça söylüyor', /salt okunur/i.test(html));
+
+  // Herhangi bir dış sunucuya İSTEK ATAN bir etiket yok — favicon'un
+  // data: URI'si içindeki SVG xmlns="http://www.w3.org/2000/svg" bir ağ
+  // isteği DEĞİL (asla fetch edilmez), o yüzden bilerek hariç tutuluyor.
+  check('<link href="https?://..."> yok (örn. Google Fonts — eski bir dış bağımlılıktı, kaldırıldı)',
+    !/<link[^>]+href=["']https?:/i.test(html));
+  check('<img src="https?://..."> yok (örn. eski api.qrserver.com QR görseli)',
+    !/<img[^>]+src=["']https?:/i.test(html));
+  check('<script src="https?://..."> yok', !/<script[^>]+src=["']https?:/i.test(html));
+  check('CSS @import ile dış kaynak çekilmiyor', !/@import/i.test(html));
+  check('preconnect/dns-prefetch ile dış host ön-bağlantısı yok', !/rel=["'](preconnect|dns-prefetch)["']/i.test(html));
+}
+
+console.log('\n▶ "Este" / klinik adı sızıntısı yok (Demo Day Kesin Kural 3)');
+{
+  check('"Este" geçmiyor (klinik adı olarak — "estetik"/"destek" gibi sözcükler hariç)',
+    !/este/i.test(html.replace(/estetik/gi, '').replace(/destek\w*/gi, '')));
+  check('"Leon" geçmiyor', !/leon/i.test(html));
+  check('demo kliniğinin adı "Demo Klinik" (A.Ş. yok)', /Demo Klinik/.test(html) && !/Demo Klinik\s*A\.?Ş\.?/i.test(html));
+}
+
+console.log('\n▶ "Örnek veri" etiketi her bölümde görünür (Görev 4)');
+{
+  const sectionTitles = (html.match(/<div class="section-title"[^>]*>.*?<\/div>/gs) || []);
+  check('en az 10 bölüm başlığı var', sectionTitles.length >= 10, sectionTitles.length);
+  check('HER bölüm başlığında "Örnek veri" etiketi var (tek tek)',
+    sectionTitles.every((t) => /demo-tag">Örnek veri</.test(t)),
+    sectionTitles.filter((t) => !/demo-tag">Örnek veri</.test(t)));
+  // 02/03 ekran görüntüleri tek tek .chat bloklarını kırpar (başlığın
+  // DIŞINDA) — o yüzden etiket ayrıca HER sohbet balonunun içinde de olmalı.
+  check('her iki örnek sohbet bloğu da (handover+skor, çeviri) KENDİ içinde "Örnek veri" taşıyor',
+    /id="chatHandoverScore">\s*<div class="meta"><span class="demo-tag"[^>]*>Örnek veri</.test(html)
+    && /id="chatTranslation">\s*<div class="meta"><span class="demo-tag"[^>]*>Örnek veri</.test(html));
+}
+
+console.log('\n▶ Görev 4\'ün 4 senaryosu sayfada gerçekten var');
+{
+  check('(a) Cuma 23:10 mesai-dışı mesaj + 09:00 devir anlatımı var',
+    /23:10/.test(html) && /09:00/.test(html) && /mesai/i.test(html));
+  check('(b) Almanca hasta cevabı + panelde Türkçe çeviri gösterimi var',
+    /Guten Tag/.test(html) && /Türkçe çeviri/i.test(html));
+  check('(c) teklif + onay linki senaryosu var', /Onay linki/.test(html) && /quote-card|Teklif/i.test(html));
+  check('(d) yanıt süresi (AI\\/insan, ortalama\\/medyan) paneli var',
+    /İlk Yanıt Süresi/.test(html) && /medyan/i.test(html) && /AI/.test(html));
 }
 
 console.log('\n▶ Sahte veri kendi içinde tutarlı');

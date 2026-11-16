@@ -6,9 +6,6 @@
 <title>MediVoyage OS — Demo Klinik</title>
 <meta name="robots" content="noindex" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230e5750'/%3E%3Cpath d='M9 16a7 7 0 1 1 14 0 7 7 0 0 1-14 0z' fill='none' stroke='%23fff' stroke-width='2.4'/%3E%3C/svg%3E" />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=Azeret+Mono:wght@400;500&display=swap">
 <style>
   /*
    * Panelin KENDİ tasarım token sistemiyle aynı (public/index.html'den
@@ -61,7 +58,8 @@
     padding:4px 10px;border-radius:var(--r-sm);border:1px solid var(--burgundy);color:var(--burgundy);background:var(--burgundy-wash);
   }
 
-  .section-title{font-family:var(--display);font-weight:600;font-size:17px;margin:34px 0 4px;text-wrap:balance}
+  .section-title{font-family:var(--display);font-weight:600;font-size:17px;margin:34px 0 4px;text-wrap:balance;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .demo-tag{font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--burgundy);background:var(--burgundy-wash);border:1px solid var(--burgundy);border-radius:999px;padding:2px 9px}
   .sub{color:var(--ink-2);font-size:13.5px;margin:0 0 16px;max-width:70ch}
 
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:var(--r);margin-bottom:8px;overflow:hidden}
@@ -94,6 +92,20 @@
   }
   .disabled-btn{font:inherit;font-size:12px;padding:6px 11px;border:1px solid var(--rule-2);border-radius:var(--r-sm);background:var(--paper-2);color:var(--ink-3);cursor:not-allowed}
 
+  .chat{padding:15px 17px}
+  .chat + .chat{border-top:1px solid var(--rule)}
+  .chat .meta{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--ink-3);margin-bottom:3px}
+  .chat .bubble{max-width:88%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.5;margin-bottom:10px;overflow-wrap:anywhere}
+  .chat .bubble.patient{background:var(--paper-2);border:1px solid var(--rule);border-top-left-radius:3px}
+  .chat .bubble.ai{background:var(--accent-wash);border:1px solid var(--accent-line);border-top-right-radius:3px;margin-left:auto}
+  .chat .handover{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.03em;color:var(--pos);background:var(--pos-wash);border:1px solid var(--pos);border-radius:var(--r-sm);padding:7px 11px;margin:4px 0 10px;text-align:center}
+  .translation{margin:-4px 0 10px;margin-left:auto;max-width:88%;padding:8px 11px;border-radius:var(--r-sm);background:var(--sunk);border:1px dashed var(--rule-2);font-size:12px;color:var(--ink-2)}
+  .translation .tag{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);display:block;margin-bottom:3px}
+  .quote-card{padding:16px 18px}
+  .quote-card .price{font-family:var(--display);font-weight:600;font-size:22px;color:var(--accent)}
+  .quote-line{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--paper-2);font-size:13px}
+  .approve-link{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);background:var(--paper-2);border:1px solid var(--rule);border-radius:var(--r-sm);padding:7px 10px;overflow-wrap:anywhere;margin-top:10px}
+
   .scroller{overflow-x:auto}
   footer.end{margin-top:36px;padding-top:18px;border-top:1px solid var(--rule-2);color:var(--ink-3);font-size:12.5px;line-height:1.55}
   @media (max-width:560px){ .kpis{grid-template-columns:1fr 1fr} header.top{flex-direction:column;align-items:flex-start} }
@@ -104,14 +116,14 @@
 <div class="wrap">
   <header class="top">
     <div class="brand"><span class="mark">M</span><h1>MediVoyage OS</h1></div>
-    <span class="demo-chip">Demo Klinik · Este Örnek Kliniği</span>
+    <span class="demo-chip">Demo Klinik · Örnek Veri</span>
   </header>
 
   <div class="readonly-note">
     Bu bir gösterim ortamıdır. Hiçbir buton bir API çağrısı yapmaz, hiçbir sayı gerçek bir hastaya ait değildir — hepsi örnek. Gerçek panel gerçek klinik verisiyle aynı ekranları gösterir.
   </div>
 
-  <div class="section-title">Komuta Merkezi</div>
+  <div class="section-title">Komuta Merkezi<span class="demo-tag">Örnek veri</span></div>
   <div class="sub">Kliniğe gelen talebin canlı görünümü — örnek bir hafta.</div>
   <div class="kpis">
     <div class="kpi"><div class="label">Bugünkü lead'ler</div><div class="val cyan">14</div><div class="foot">212 lead havuzda</div></div>
@@ -122,20 +134,76 @@
     <div class="kpi"><div class="label">AI cevap süresi</div><div class="val mint">2 sn</div><div class="foot">medyan, ilk mesajdan</div></div>
   </div>
 
-  <div class="section-title">Dönüşüm hunisi — son 30 gün</div>
+  <div class="section-title">Dönüşüm hunisi — son 30 gün<span class="demo-tag">Örnek veri</span></div>
   <div class="glass" id="funnelBox" style="padding:16px 18px"></div>
 
-  <div class="section-title">Gelen kutusu (örnek)</div>
+  <section id="shotInbox">
+  <div class="section-title">Gelen kutusu (örnek)<span class="demo-tag">Örnek veri</span></div>
   <div class="sub">Çok kanallı, çok dilli — WhatsApp, Instagram, web widget.</div>
   <div class="glass" id="inboxList"></div>
+  </section>
 
-  <div class="section-title">CAC &amp; ROAS — hangi reklam gerçekten hasta üretti</div>
+  <div class="section-title">Hasta dilinde yanıt — örnek sohbetler<span class="demo-tag">Örnek veri</span></div>
+  <div class="sub">AI her zaman hastanın YAZDIĞI dilde cevap verir; koordinatör panelde kendi dilinde (Türkçe) çevirisini görür.</div>
+  <div class="glass" id="chatExamples">
+    <div class="chat" id="chatHandoverScore">
+      <div class="meta"><span class="demo-tag" style="margin-right:7px">Örnek veri</span>🇬🇧 J. Carter · WhatsApp · Cuma 23:10 (mesai dışı) · Lead skoru <b>81</b> · sıcak</div>
+      <div class="bubble patient">Hi, is anyone there tonight? I want to ask about a hair transplant before I book my flight.</div>
+      <div class="meta" style="text-align:right">AI · Cuma 23:11 · İngilizce</div>
+      <div class="bubble ai">Hello! Our coordinators are offline right now, but I can start right away — could you share a recent photo of your hairline and your budget range?</div>
+      <div class="handover">⤷ Devredildi: Koordinatör Aylin K. — Cumartesi 09:00 (mesai açılışı, 1. Görev'deki mesai tanımına göre)</div>
+    </div>
+    <div class="chat" id="chatTranslation">
+      <div class="meta"><span class="demo-tag" style="margin-right:7px">Örnek veri</span>🇩🇪 A. Schmidt · WhatsApp · Salı 11:04 · mesai içi</div>
+      <div class="bubble patient">Guten Tag, was kostet eine Zahnbehandlung mit Veneers?</div>
+      <div class="meta" style="text-align:right">AI · Salı 11:05 · Almanca (hastaya gönderilen dil)</div>
+      <div class="bubble ai">Guten Tag! Veneers kosten zwischen 180 € und 250 € pro Zahn, inklusive Beratung. Möchten Sie ein kostenloses Foto-Angebot?</div>
+      <div class="translation"><span class="tag">Panelde koordinatöre gösterilen Türkçe çeviri — hastaya gönderilmez</span>Merhaba! Veneer diş başına 180–250 € arası, konsültasyon dahil. Ücretsiz fotoğraflı teklif ister misiniz?</div>
+    </div>
+  </div>
+
+  <section id="shotQuote">
+  <div class="section-title">Teklif &amp; Onay (örnek)<span class="demo-tag">Örnek veri</span></div>
+  <div class="sub">Yüksek skorlu bir lead'e gönderilen teklif — PDF ve onay linki.</div>
+  <div class="glass quote-card" id="quoteCard">
+    <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:baseline">
+      <div>
+        <div style="font-weight:600;font-size:14px">🇬🇧 J. Carter — Saç Ekimi (Safir FUE)</div>
+        <div class="sub" style="margin:3px 0 0">Lead skoru <b style="color:var(--pos)">81</b> · sıcak · Cumartesi 09:14'te gönderildi</div>
+      </div>
+      <div class="price">€2.450</div>
+    </div>
+    <div style="margin-top:12px">
+      <div class="quote-line"><span>Konsültasyon + işlem (3.200 greft tahmini)</span><span class="num">€2.450</span></div>
+      <div class="quote-line"><span>5★ otel (3 gece) + VIP transfer</span><span class="num">Dahil</span></div>
+      <div class="quote-line" style="border-bottom:0"><span>1 PRP seansı + bakım kiti</span><span class="num">Dahil</span></div>
+    </div>
+    <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:12px">
+      <button class="disabled-btn">Teklif PDF (demo'da kapalı)</button>
+      <span class="pill human">✓ Hasta onayladı — Cumartesi 14:02</span>
+    </div>
+    <div class="approve-link">Onay linki: medivoyage.app/onay/8f2a-c103 (demo — tıklanamaz)</div>
+  </div>
+  </section>
+
+  <section id="shotResponseTime">
+  <div class="section-title" id="responseTimeTitle">İlk Yanıt Süresi (örnek)<span class="demo-tag">Örnek veri</span></div>
+  <div class="sub">UTC olarak saklanır, İstanbul saatiyle gösterilir. Mesai dışı gelen bir mesajın saati bir sonraki mesai açılışından başlar (bkz. services/businessHours.js) — AI ve insan ayrı raporlanır, n&lt;5 olsaydı "yetersiz veri" gösterilirdi.</div>
+  <div class="kpis" id="responseTimePanel">
+    <div class="kpi"><div class="label">AI · ortalama</div><div class="val cyan">8 sn</div><div class="foot">n=41 · medyan 5 sn</div></div>
+    <div class="kpi"><div class="label">AI · mesaiye göre düzeltilmiş</div><div class="val cyan">8 sn</div><div class="foot">AI zaten 7/24 — mesai AI'yı etkilemez</div></div>
+    <div class="kpi"><div class="label">İnsan · ortalama</div><div class="val mint">38 dk</div><div class="foot">n=12 · medyan 22 dk</div></div>
+    <div class="kpi"><div class="label">İnsan · mesaiye göre düzeltilmiş</div><div class="val mint">11 dk</div><div class="foot">mesai dışı bekleme süresi düşüldü</div></div>
+  </div>
+  </section>
+
+  <div class="section-title">CAC &amp; ROAS — hangi reklam gerçekten hasta üretti<span class="demo-tag">Örnek veri</span></div>
   <div class="sub">Harcama, tıklamaya değil, rezervasyona ve tahsil edilen gelire kadar izlendi.</div>
   <div class="glass scroller">
     <table id="campaignTable" style="padding:14px 18px"></table>
   </div>
 
-  <div class="section-title">Klinik Risk &amp; Uyum Skoru</div>
+  <div class="section-title">Klinik Risk &amp; Uyum Skoru<span class="demo-tag">Örnek veri</span></div>
   <div class="sub">Yönetmeliğe karşı uyum ve ameliyat sonucu verisinin ölçülmüş hâli — beyan değil.</div>
   <div class="kpis">
     <div class="kpi"><div class="label">Skor</div><div class="val mint">88</div><div class="foot">yalnızca ölçülebilen maddelerin ortalaması</div></div>
@@ -144,12 +212,12 @@
     <div class="kpi"><div class="label">Açık madde</div><div class="val">1</div><div class="foot">komplikasyon sigortası yenileniyor</div></div>
   </div>
 
-  <div class="section-title">Ameliyat sonucu — doktor bazlı (örnek)</div>
+  <div class="section-title">Ameliyat sonucu — doktor bazlı (örnek)<span class="demo-tag">Örnek veri</span></div>
   <div class="glass scroller">
     <table id="doctorTable" style="padding:14px 18px"></table>
   </div>
 
-  <div class="section-title">Hasta Sonuç Pasaportu (örnek)</div>
+  <div class="section-title">Hasta Sonuç Pasaportu (örnek)<span class="demo-tag">Örnek veri</span></div>
   <div class="sub">Hastanın ülkesine döndükten sonra yanında taşıdığı, 7 dilde etiketli kayıt.</div>
   <div class="glass" style="padding:16px 18px">
     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">

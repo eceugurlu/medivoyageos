@@ -4,7 +4,7 @@
   "description": "",
   "main": "src/server.js",
   "scripts": {
-    "dev": "node --watch src/server.js",
+    "dev": "node --watch -r dotenv/config src/server.js dotenv_config_path=.env.local",
     "check:ai": "node scripts/ai-quality-check.mjs",
     "check:monitoring": "node scripts/test-health-monitor.mjs",
     "check:weekly-report": "node scripts/test-weekly-report.mjs",

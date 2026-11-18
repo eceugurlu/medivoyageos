@@ -9,7 +9,7 @@
 export const clinicProfile = {
   name: 'Demo Klinik',                     // ← replace
   city: 'Istanbul, Türkiye',
-  languages: ['Türkçe', 'English', 'العربية', 'Deutsch', 'Русский', 'Français', 'Italiano'],
+  languages: ['Türkçe', 'English', 'العربية', 'Deutsch', 'Русский', 'Français', 'Italiano', 'Azərbaycanca', 'Kurdî'],
   tone: 'warm, premium, concise, reassuring — like a five-star patient host, never pushy',
 
   treatments: [

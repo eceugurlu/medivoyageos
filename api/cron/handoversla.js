@@ -2,9 +2,10 @@ import { processHandoverSla } from '../../src/services/scheduler.js';
 import { verifyCronSecret } from '../../src/middleware/verifyCronSecret.js';
 
 // Same shape as postop.js/risk.js — see postop.js's comment for why this
-// exists as a cron-triggered route instead of a setInterval. Runs more
-// often than the others (every 5 minutes, see vercel.json) since a 10-minute
-// first-reminder threshold needs finer-grained checking than the daily jobs do.
+// exists as a cron-triggered route instead of a setInterval. Ideally runs
+// every 5 minutes (a 10-minute first-reminder threshold needs it), but Vercel
+// Hobby rejects any deployment with a cron that fires more than once a day,
+// so vercel.json schedules it daily. On Pro, set it back to "*/5 * * * *".
 export default async function handler(req, res) {
   if (!verifyCronSecret(req, res)) return;
   try {

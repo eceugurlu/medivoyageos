@@ -30,7 +30,7 @@
     },
     {
       "path": "/api/cron/handoversla",
-      "schedule": "*/5 * * * *"
+      "schedule": "15 8 * * *"
     },
     {
       "path": "/api/cron/weeklyreport",
@@ -38,7 +38,7 @@
     },
     {
       "path": "/api/cron/capi",
-      "schedule": "*/5 * * * *"
+      "schedule": "45 8 * * *"
     }
   ]
 }

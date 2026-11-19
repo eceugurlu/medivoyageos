@@ -81,6 +81,8 @@ async function main() {
       { file: '03-devir-lead-skoru.png', selector: '#chatHandoverScore' },
       { file: '04-teklif-onay.png', selector: '#shotQuote' },
       { file: '05-yanit-suresi.png', selector: '#shotResponseTime' },
+      { file: '07-insana-devir-guvenlik.png', selector: '#shotHandover' },
+      { file: '08-ameliyat-sonrasi-takip.png', selector: '#shotPostOp' },
     ];
     for (const s of shots) {
       const el = page.locator(s.selector);
@@ -111,6 +113,8 @@ async function main() {
       { file: '05-kpi-paneli.png', locate: (p) => p.locator('.section-title', { hasText: 'Komuta Merkezi' }) },
       { file: '06-risk-uyum.png', locate: (p) => p.locator('.section-title', { hasText: 'Risk' }) },
       { file: '07-yanit-suresi.png', locate: (p) => p.locator('#shotResponseTime') },
+      { file: '08-insana-devir-guvenlik.png', locate: (p) => p.locator('#shotHandover') },
+      { file: '09-ameliyat-sonrasi-takip.png', locate: (p) => p.locator('#shotPostOp') },
     ];
     for (const f of frames) {
       const el = f.locate(framePage).first();

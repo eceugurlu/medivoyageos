@@ -80,6 +80,27 @@ console.log('\n▶ Görev 4\'ün 4 senaryosu sayfada gerçekten var');
     /İlk Yanıt Süresi/.test(html) && /medyan/i.test(html) && /AI/.test(html));
 }
 
+console.log('\n▶ Slayt 3 ekranları: devir/güvenlik ve ameliyat sonrası takip');
+{
+  // Ekranda gösterilen 9 kural concierge.js'teki "HAND OVER TO A HUMAN" listesiyle
+  // aynı sayıda olmalı — sayı değişirse ekran yalan söylemeye başlar.
+  const concierge = readFileSync(new URL('../src/services/concierge.js', import.meta.url), 'utf8');
+  const block = concierge.split('# HAND OVER TO A HUMAN')[1].split('\n# ')[0];
+  const ruleCount = (block.match(/^- /gm) || []).length;
+  const shown = ((html.match(/<ol class="rules">([\s\S]*?)<\/ol>/) || [])[1] || '').match(/<li/g) || [];
+  check('ekrandaki devir kuralı sayısı concierge.js ile aynı', shown.length === ruleCount, { shown: shown.length, ruleCount });
+  check('"9 devir kuralı" yazısı gerçek sayıyla uyumlu', !/\b9 devir kural/.test(html) || ruleCount === 9, ruleCount);
+  check('devir bölümü var ve "Örnek veri" taşıyor', /id="shotHandover">\s*<div class="section-title">[^<]*<span class="demo-tag">Örnek veri</.test(html));
+  check('AI\'ın devirde susmadığı, koordinatör devralınca sustuğu doğru anlatılıyor', /devraldığında AI tamamen susar/.test(html));
+  // Ameliyat sonrası adımlar repository.js POST_OP_SEQUENCE ile aynı olmalı.
+  const repo = readFileSync(new URL('../src/store/repository.js', import.meta.url), 'utf8');
+  const days = [...repo.split('const POST_OP_SEQUENCE')[1].split('];')[0].matchAll(/days:\s*(\d+)/g)].map((m) => Number(m[1])).sort((a, b) => a - b);
+  const shownDays = [...new Set([...html.matchAll(/\["(\d+)\. gün"|\["1 yıl"/g)].map((m) => (m[1] ? Number(m[1]) : 365)))].sort((a, b) => a - b);
+  check('ameliyat sonrası gün dizisi gerçek kodla aynı', JSON.stringify(days) === JSON.stringify(shownDays), { days, shownDays });
+  check('ameliyat sonrası bölümü var ve "Örnek veri" taşıyor', /id="shotPostOp">\s*<div class="section-title">[^<]*<span class="demo-tag">Örnek veri</.test(html));
+  check('kodda olmayan "fotoğraf talebi" adımı ekranda yok', !/fotoğraf talebi/i.test(html));
+}
+
 console.log('\n▶ Sahte veri kendi içinde tutarlı');
 {
   check('<script> içinde gömülü veri dizileri var', /var INBOX = \[/.test(html) && /var CAMPAIGNS = \[/.test(html) && /var DOCTORS = \[/.test(html));

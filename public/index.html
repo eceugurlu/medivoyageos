@@ -413,7 +413,7 @@
     color:var(--ink-3);margin-top:7px;
   }
   .composer{border-top:1px solid var(--rule);padding:12px;display:flex;gap:10px;align-items:flex-end}
-  @media (max-width:900px){ .sim-grid{grid-template-columns:1fr !important} }
+  @media (max-width:900px){ .sim-grid,.wiz-grid{grid-template-columns:1fr !important} }
 
   /* ── Fields ───────────────────────────────────────────────────────────── */
   textarea,.main input,.main select{
@@ -704,7 +704,7 @@ const I18N = {
     "nav.command":"Command Center","nav.inbox":"Omnichannel Inbox","nav.analytics":"CAC & ROAS Analytics",
     "nav.campaigns":"WhatsApp Broadcast","nav.studio":"AI Prompt Studio","nav.widget":"Lead Widget",
     "nav.consultants":"Consultant Performance","nav.matching":"Language Matching","nav.devices":"Smart Device Booking",
-    "nav.logistics":"VIP Transfer & Logistics","nav.postop":"Fit-to-Fly & Post-Op","nav.simulator":"Patient Simulator","sim.title":"Patient Simulator — live AI","sim.sub":"Type as a patient. The message runs through exactly the same pipeline as WhatsApp: the real AI replies, and the lead score, language, handover and coordinator assignment are written to the database.","sim.banner":"Only difference from WhatsApp: the message comes from this screen instead of a phone. These conversations appear in the Inbox tagged Simulator and are never sent to the CRM.","sim.name":"Patient name (optional)","sim.namePh":"e.g. Test patient","sim.examples":"Example messages","sim.typePh":"Write as the patient, in any language…","sim.newPatient":"New patient","sim.thinking":"AI is replying…","sim.result":"What the system recorded (read from the database)","sim.lang":"Detected language","sim.score":"Lead score","sim.treatment":"Treatment interest","sim.readiness":"Readiness","sim.status":"Conversation","sim.urgent":"URGENT handover — in the handover queue","sim.needsHuman":"Handed over — waiting for a coordinator","sim.aiHandling":"AI is handling it","sim.humanHandling":"A coordinator has taken over — AI is silent","sim.coordinator":"Assigned coordinator","sim.none":"—","sim.medicalNote":"Medical note","sim.handoverReason":"Handover reason","sim.openInbox":"Open in Inbox","sim.secs":"s","sim.empty":"Pick an example or type a message to start.","sim.noReply":"(no reply — see server log)","sim.r.researching":"researching","sim.r.considering":"considering","sim.r.ready_to_book":"ready to book","nav.reviews":"Trust & Review Engine",
+    "nav.logistics":"VIP Transfer & Logistics","nav.postop":"Fit-to-Fly & Post-Op","nav.wizard":"Setup Wizard","wiz.title":"Setup Wizard","wiz.sub":"Eight steps from an empty clinic to a live pilot. Each step tells you what to do and why; the tick comes from real data wherever the system can measure it.","wiz.step":"Step","wiz.of":"of","wiz.why":"Why it matters","wiz.how":"What to do","wiz.back":"Back","wiz.next":"Next","wiz.recheck":"Check again","wiz.go":"Open the page","wiz.measuredDone":"Measured: done","wiz.measuredOpen":"Measured: not done yet","wiz.manualDone":"Marked done by hand","wiz.manualOpen":"Needs your confirmation","wiz.markDone":"I did this — mark it done","wiz.unmark":"Undo","wiz.autoNote":"This step is measured from real data, so it cannot be ticked by hand. Do the steps above, then press Check again.","wiz.envNote":"This is not done from the panel. The values are secrets: they go into the hosting provider's Environment Variables (Vercel → Settings → Environment Variables), then a Redeploy. Never paste them into chat or a screenshot.","wiz.envNames":"Variable names","wiz.notePh":"Optional note (who / when)","wiz.allDone":"Setup complete","wiz.allDoneText":"All eight steps are done. The clinic can start with real patients.","wiz.openLeft":"steps still open","wiz.firstOpen":"Go to first open step","wiz.checklist":"Show the checklist","wiz.open":"Open setup wizard","wiz.done":"done","wiz.simHint":"The Patient Simulator runs the real AI and the real handover flow, so it is the fastest way to do this check.","nav.simulator":"Patient Simulator","sim.title":"Patient Simulator — live AI","sim.sub":"Type as a patient. The message runs through exactly the same pipeline as WhatsApp: the real AI replies, and the lead score, language, handover and coordinator assignment are written to the database.","sim.banner":"Only difference from WhatsApp: the message comes from this screen instead of a phone. These conversations appear in the Inbox tagged Simulator and are never sent to the CRM.","sim.name":"Patient name (optional)","sim.namePh":"e.g. Test patient","sim.examples":"Example messages","sim.typePh":"Write as the patient, in any language…","sim.newPatient":"New patient","sim.thinking":"AI is replying…","sim.result":"What the system recorded (read from the database)","sim.lang":"Detected language","sim.score":"Lead score","sim.treatment":"Treatment interest","sim.readiness":"Readiness","sim.status":"Conversation","sim.urgent":"URGENT handover — in the handover queue","sim.needsHuman":"Handed over — waiting for a coordinator","sim.aiHandling":"AI is handling it","sim.humanHandling":"A coordinator has taken over — AI is silent","sim.coordinator":"Assigned coordinator","sim.none":"—","sim.medicalNote":"Medical note","sim.handoverReason":"Handover reason","sim.openInbox":"Open in Inbox","sim.secs":"s","sim.empty":"Pick an example or type a message to start.","sim.noReply":"(no reply — see server log)","sim.r.researching":"researching","sim.r.considering":"considering","sim.r.ready_to_book":"ready to book","nav.reviews":"Trust & Review Engine",
     "nav.workflow":"Workflow Automation",
     "group.overview":"Overview","group.growth":"Growth","group.team":"Team","group.operations":"Operations",
     "cmd.sub":"Live overview of your clinic's inbound demand.",
@@ -1037,7 +1037,7 @@ const I18N = {
     "nav.command":"Komuta Merkezi","nav.inbox":"Tüm Kanallar Gelen Kutusu","nav.analytics":"CAC & ROAS Analizi",
     "nav.campaigns":"WhatsApp Toplu Gönderim","nav.studio":"AI Prompt Stüdyosu","nav.widget":"Lead Widget'ı",
     "nav.consultants":"Danışman Performansı","nav.matching":"Dil Eşleştirme","nav.devices":"Akıllı Cihaz Rezervasyonu",
-    "nav.logistics":"VIP Transfer & Lojistik","nav.postop":"Uçuşa Uygunluk & Ameliyat Sonrası","nav.simulator":"Hasta Simülatörü","sim.title":"Hasta Simülatörü — canlı AI","sim.sub":"Hasta gibi yazın. Mesaj WhatsApp ile birebir aynı akıştan geçer: gerçek AI cevap verir; lead skoru, dil, devir ve koordinatör ataması veritabanına yazılır.","sim.banner":"WhatsApp'tan tek farkı: mesaj telefondan değil bu ekrandan gelir. Bu konuşmalar Gelen Kutusu'nda \"Simülatör\" etiketiyle görünür ve CRM'e gönderilmez.","sim.name":"Hasta adı (isteğe bağlı)","sim.namePh":"ör. Test hasta","sim.examples":"Örnek mesajlar","sim.typePh":"Hasta gibi, istediğiniz dilde yazın…","sim.newPatient":"Yeni hasta","sim.thinking":"AI cevap yazıyor…","sim.result":"Sistemin kaydettiği (veritabanından okunur)","sim.lang":"Algılanan dil","sim.score":"Lead skoru","sim.treatment":"Tedavi ilgisi","sim.readiness":"Hazırlık","sim.status":"Konuşma","sim.urgent":"ACİL DEVİR — devir kuyruğunda","sim.needsHuman":"Devredildi — koordinatör bekliyor","sim.aiHandling":"AI yürütüyor","sim.humanHandling":"Koordinatör devraldı — AI susuyor","sim.coordinator":"Atanan koordinatör","sim.none":"—","sim.medicalNote":"Tıbbi not","sim.handoverReason":"Devir nedeni","sim.openInbox":"Gelen Kutusu'nda aç","sim.secs":"sn","sim.empty":"Başlamak için bir örnek seçin ya da mesaj yazın.","sim.noReply":"(cevap yok — sunucu kaydına bakın)","sim.r.researching":"araştırıyor","sim.r.considering":"düşünüyor","sim.r.ready_to_book":"rezervasyona hazır",
+    "nav.logistics":"VIP Transfer & Lojistik","nav.postop":"Uçuşa Uygunluk & Ameliyat Sonrası","nav.wizard":"Kurulum Sihirbazı","wiz.title":"Kurulum Sihirbazı","wiz.sub":"Boş bir klinikten canlı pilota sekiz adım. Her adım ne yapacağınızı ve neden gerektiğini söyler; sistem ölçebildiği yerde tik gerçek veriden gelir.","wiz.step":"Adım","wiz.of":"/","wiz.why":"Neden önemli","wiz.how":"Ne yapmalı","wiz.back":"Geri","wiz.next":"İleri","wiz.recheck":"Tekrar kontrol et","wiz.go":"Sayfayı aç","wiz.measuredDone":"Ölçüldü: tamam","wiz.measuredOpen":"Ölçüldü: henüz tamam değil","wiz.manualDone":"Elle tamam işaretlendi","wiz.manualOpen":"Sizin onayınızı bekliyor","wiz.markDone":"Yaptım — tamam işaretle","wiz.unmark":"Geri al","wiz.autoNote":"Bu adım gerçek veriden ölçülür, bu yüzden elle işaretlenemez. Yukarıdaki adımları yapın, sonra Tekrar kontrol et'e basın.","wiz.envNote":"Bu adım panelden yapılmaz. Değerler gizlidir: barındırma sağlayıcısının Environment Variables bölümüne (Vercel → Settings → Environment Variables) girilir, sonra Redeploy yapılır. Değerleri asla sohbete ya da ekran görüntüsüne yapıştırmayın.","wiz.envNames":"Değişken adları","wiz.notePh":"İsteğe bağlı not (kim / ne zaman)","wiz.allDone":"Kurulum tamam","wiz.allDoneText":"Sekiz adımın hepsi tamam. Klinik gerçek hastalarla başlayabilir.","wiz.openLeft":"adım açık","wiz.firstOpen":"İlk açık adıma git","wiz.checklist":"Kontrol listesini göster","wiz.open":"Kurulum sihirbazını aç","wiz.done":"tamam","wiz.simHint":"Hasta Simülatörü gerçek AI'ı ve gerçek devir akışını çalıştırır; bu kontrolü yapmanın en hızlı yolu budur.","nav.simulator":"Hasta Simülatörü","sim.title":"Hasta Simülatörü — canlı AI","sim.sub":"Hasta gibi yazın. Mesaj WhatsApp ile birebir aynı akıştan geçer: gerçek AI cevap verir; lead skoru, dil, devir ve koordinatör ataması veritabanına yazılır.","sim.banner":"WhatsApp'tan tek farkı: mesaj telefondan değil bu ekrandan gelir. Bu konuşmalar Gelen Kutusu'nda \"Simülatör\" etiketiyle görünür ve CRM'e gönderilmez.","sim.name":"Hasta adı (isteğe bağlı)","sim.namePh":"ör. Test hasta","sim.examples":"Örnek mesajlar","sim.typePh":"Hasta gibi, istediğiniz dilde yazın…","sim.newPatient":"Yeni hasta","sim.thinking":"AI cevap yazıyor…","sim.result":"Sistemin kaydettiği (veritabanından okunur)","sim.lang":"Algılanan dil","sim.score":"Lead skoru","sim.treatment":"Tedavi ilgisi","sim.readiness":"Hazırlık","sim.status":"Konuşma","sim.urgent":"ACİL DEVİR — devir kuyruğunda","sim.needsHuman":"Devredildi — koordinatör bekliyor","sim.aiHandling":"AI yürütüyor","sim.humanHandling":"Koordinatör devraldı — AI susuyor","sim.coordinator":"Atanan koordinatör","sim.none":"—","sim.medicalNote":"Tıbbi not","sim.handoverReason":"Devir nedeni","sim.openInbox":"Gelen Kutusu'nda aç","sim.secs":"sn","sim.empty":"Başlamak için bir örnek seçin ya da mesaj yazın.","sim.noReply":"(cevap yok — sunucu kaydına bakın)","sim.r.researching":"araştırıyor","sim.r.considering":"düşünüyor","sim.r.ready_to_book":"rezervasyona hazır",
     "nav.reviews":"Güven & Değerlendirme Motoru","nav.workflow":"İş Akışı Otomasyonu",
     "group.overview":"Genel Bakış","group.growth":"Büyüme","group.team":"Ekip","group.operations":"Operasyon",
     "cmd.sub":"Kliniğinize gelen talebin canlı görünümü.",
@@ -1551,7 +1551,8 @@ function SetupChecklistCard(){
   return html`<div class="glass" style="padding:16px 18px;margin-bottom:22px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
       <div class="section-title" style="margin-top:0">${T("setup.title")}</div>
-      <span class="badge ${data.complete?"human":""}">${data.done}/${data.total}</span>
+      <div style="display:flex;gap:8px;align-items:center"><span class="badge ${data.complete?"human":""}">${data.done}/${data.total}</span>
+        <button class="btn primary" style="padding:4px 10px;font-size:12px" onClick=${()=>window.dispatchEvent(new CustomEvent("mv-goto",{detail:"wizard"}))}>${T("wiz.open")} →</button></div>
     </div>
     <div class="sub" style="margin:-4px 0 12px">${T("setup.sub")}</div>
     <div class="bar" style="height:6px;border-radius:3px;background:var(--rule);overflow:hidden;margin-bottom:14px">
@@ -4326,6 +4327,133 @@ function Workflow(){
   </div>`;
 }
 
+// ── Kurulum Sihirbazı ───────────────────────────────────────────────────────
+// Adım listesi, durumlar ve "tamam" bilgisi /api/setup-checklist'ten gelir
+// (sunucu tarafı gerçek veriden ölçer). Burada yalnızca anlatım var. Otomatik
+// bir adım ASLA elle işaretlenemez; yalnızca elle-adımlarda onay düğmesi görünür.
+const WIZARD_GUIDE={
+  clinic_profile:{ tab:"studio",
+    tr:{why:"AI, kliniğin adını, dillerini ve fiyat çerçevesini bu profilden okur. Boş profille AI genel cevaplar verir.",
+        how:["Soldaki menüden «AI Prompt Stüdyosu»nu açın.","Klinik adını, şehri ve hizmet verilen dilleri girin.","Fiyat aralıklarını ve randevu politikasını kendi kliniğinize göre yazın.","Kaydedin, sonra buraya dönüp «Tekrar kontrol et»e basın."]},
+    en:{why:"The AI reads the clinic's name, languages and price framing from this profile. With an empty profile it gives generic answers.",
+        how:["Open «AI Prompt Studio» in the left menu.","Enter the clinic name, city and the languages you serve.","Write your own price ranges and booking policy.","Save, then come back here and press «Check again»."]}},
+  whatsapp_connected:{ env:["WHATSAPP_ACCESS_TOKEN","WHATSAPP_PHONE_NUMBER_ID","WHATSAPP_APP_SECRET","WHATSAPP_VERIFY_TOKEN"],
+    tr:{why:"Hastalar mesajı WhatsApp'tan atar; bağlantı olmadan AI yalnızca panelden denenebilir, hastaya cevap gidemez.",
+        how:["Meta Business hesabınızda bir WhatsApp Business uygulaması oluşturun ve bir telefon numarası ekleyin (test için Meta'nın ücretsiz test numarası yeter).","Webhook adresi olarak bu sitenin /webhook yolunu girin; doğrulama anahtarı WHATSAPP_VERIFY_TOKEN ile aynı olmalı.","Aşağıdaki değişkenleri Vercel'e girin ve Redeploy yapın.","Redeploy bitince «Tekrar kontrol et»e basın; sistem değişkenleri kendisi ölçer."]},
+    en:{why:"Patients message on WhatsApp; without the connection the AI can only be tried from the panel and cannot reply to a patient.",
+        how:["In your Meta Business account create a WhatsApp Business app and add a phone number (Meta's free test number is enough for a pilot).","Set the webhook URL to this site's /webhook path; the verify token must equal WHATSAPP_VERIFY_TOKEN.","Enter the variables below in Vercel and Redeploy.","When the redeploy finishes press «Check again»; the system measures the variables itself."]}},
+  first_branch:{ tab:"branches",
+    tr:{why:"Tüm raporlar şubeye göre kırılır; tek şubeli klinik için de en az bir şube gerekir.",
+        how:["Soldaki menüden «Şubeler»i açın.","Şube adını ve şehrini girip ekleyin.","Buraya dönüp «Tekrar kontrol et»e basın."]},
+    en:{why:"Every report is split by branch; even a single-branch clinic needs at least one.",
+        how:["Open «Branches» in the left menu.","Add the branch name and city.","Come back and press «Check again»."]}},
+  first_coordinator:{ tab:"consultants",
+    tr:{why:"AI bir hastayı devrettiğinde konuşmanın düşeceği en az bir insan olmalı; koordinatör hastanın diline göre atanır.",
+        how:["Soldaki menüden «Danışman Performansı»nı açın.","Koordinatörün adını ve konuştuğu dilleri girip ekleyin.","Buraya dönüp «Tekrar kontrol et»e basın."]},
+    en:{why:"When the AI hands a patient over, the conversation needs at least one human to land on; coordinators are matched by language.",
+        how:["Open «Consultant Performance» in the left menu.","Add the coordinator's name and the languages they speak.","Come back and press «Check again»."]}},
+  payment_provider:{ env:["STRIPE_SECRET_KEY","STRIPE_WEBHOOK_SECRET","IYZICO_API_KEY","IYZICO_SECRET_KEY"],
+    tr:{why:"Kapora ve ödeme linkleri bir ödeme sağlayıcısı olmadan yalnızca kuru-çalışma modunda çalışır; gerçek tahsilat olmaz.",
+        how:["Stripe ya da İyzico hesabı açın (ikisinden biri yeter).","Sağlayıcının gizli anahtarını ve webhook anahtarını aşağıdaki değişkenlere girin.","Vercel'de Redeploy yapın.","«Tekrar kontrol et»e basın."]},
+    en:{why:"Deposit and payment links only run in dry-run mode without a payment provider; nothing is actually collected.",
+        how:["Open a Stripe or İyzico account (either one is enough).","Enter the provider's secret key and webhook secret in the variables below.","Redeploy in Vercel.","Press «Check again»."]}},
+  test_conversation:{ tab:"inbox",
+    tr:{why:"Kuruluma güvenmenin tek yolu, gerçek bir telefondan gerçek bir mesaj atıp AI'ın doğru dilde cevap verdiğini görmek.",
+        how:["WhatsApp bağlandıktan sonra kendi telefonunuzdan klinik numarasına bir mesaj yazın (örn. Almanca bir fiyat sorusu).","AI'ın aynı dilde cevap verdiğini ve konuşmanın Gelen Kutusu'nda göründüğünü doğrulayın.","Gördüyseniz aşağıdan işaretleyin."],
+        note:"Hasta Simülatörü bu adımın yerine geçmez: burada kanalın kendisi de test edilir."},
+    en:{why:"The only way to trust the setup is to send a real message from a real phone and see the AI answer in the right language.",
+        how:["After WhatsApp is connected, write to the clinic number from your own phone (e.g. a German price question).","Check that the AI answered in the same language and the conversation shows in the Inbox.","Once you saw it, tick it below."],
+        note:"The Patient Simulator does not replace this step: here the channel itself is tested too."}},
+  team_trained:{ tab:"simulator",
+    tr:{why:"Devir kuyruğu, teklif ve ödeme linki, ekip panelde kaybolmadan kullanabildiğinde işe yarar.",
+        how:["Ekibe Gelen Kutusu'nda bir konuşmayı devralmayı gösterin (Devral düğmesi).","Bir teklif oluşturup göndermeyi gösterin.","Ödeme linki oluşturmayı gösterin.","Hasta Simülatörü'nü örnek hasta olarak kullanabilirsiniz.","Üçünü de en az bir kez gösterdiyseniz aşağıdan işaretleyin."]},
+    en:{why:"The handover queue, quotes and payment links only help once the team can use them without getting lost.",
+        how:["Show the team how to take over a conversation in the Inbox (Take over button).","Show how to create and send a quote.","Show how to create a payment link.","You can use the Patient Simulator as the sample patient.","When all three were shown at least once, tick it below."]}},
+  escalation_tested:{ tab:"simulator", simHint:true,
+    tr:{why:"Kliniğe verdiğimiz güvenlik sözünün kanıtı: komplikasyon ya da kriz dilinde AI satışı durdurup insana devreder.",
+        how:["«Hasta Simülatörü»nü açın ve «Arapça — ameliyat sonrası kanama» örneğine basın.","AI'ın sakin bir güvenlik cevabı verdiğini, satışa devam etmediğini görün.","Sağdaki kartta kırmızı «ACİL DEVİR» çıktığını ve tıbbi notun dolduğunu doğrulayın.","Gördüyseniz aşağıdan işaretleyin."]},
+    en:{why:"The proof of our safety promise: on complication or crisis language the AI stops selling and hands over to a human.",
+        how:["Open «Patient Simulator» and press the first example button (the Arabic post-op bleeding message).","See that the AI gives a calm safety answer and does not continue the sale.","On the right card check that a red «URGENT handover» appears and the medical note is filled.","Once you saw it, tick it below."]}},
+};
+const WIZARD_TAB_LABEL={studio:"nav.studio",branches:"nav.branches",consultants:"nav.consultants",inbox:"nav.inbox",simulator:"nav.simulator"};
+
+function SetupWizard({onGoTab}){
+  const [data,setData]=useState(null);
+  const [idx,setIdx]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [note,setNote]=useState("");
+  const [err,setErr]=useState(null);
+  const load=()=> api("/setup-checklist").then((d)=>{ setData(d); setErr(null); return d; }).catch((x)=>{ setErr(x.message); });
+  useEffect(()=>{ load().then((d)=>{ if(d&&idx===null){ const first=d.items.findIndex((i)=>!i.done); setIdx(first<0?0:first); } }); },[]);
+  if(err&&!data) return html`<div class="err">${err}</div>`;
+  if(!data||idx===null) return loadingBox();
+  const items=data.items, item=items[idx], g=WIZARD_GUIDE[item.key]||{};
+  const L=(g[LANG==="tr"?"tr":"en"])||{why:item.hint,how:[]};
+  const go=(n)=>{ setIdx(Math.max(0,Math.min(items.length-1,n))); setNote(""); };
+  const setDone=async(done)=>{
+    setBusy(true);
+    try{ await api("/setup-checklist/"+item.key,{method:"PUT",body:JSON.stringify({done,note:note.trim()||undefined})}); await load(); }
+    catch(x){ showToast(x.message,"error"); } finally{ setBusy(false); }
+  };
+  const recheck=async()=>{ setBusy(true); await load(); setBusy(false); };
+  const openLeft=items.filter((i)=>!i.done).length;
+  const status=item.auto
+    ? (item.done? html`<span class="badge human">${T("wiz.measuredDone")}</span>` : html`<span class="badge awaiting">${T("wiz.measuredOpen")}</span>`)
+    : (item.done? html`<span class="badge human">${T("wiz.manualDone")}</span>` : html`<span class="badge awaiting">${T("wiz.manualOpen")}</span>`);
+  return html`<div>
+    <h1>${T("wiz.title")}</h1>
+    <div class="sub">${T("wiz.sub")}</div>
+    <div class="glass" style="padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div class="bar" style="height:6px;border-radius:3px;background:var(--rule);overflow:hidden"><div style="height:100%;width:${data.progress}%;border-radius:3px;background:${data.complete?"var(--pos)":"var(--accent)"}"></div></div>
+      </div>
+      <span class="badge ${data.complete?"human":""}">${data.done}/${data.total} ${T("wiz.done")}</span>
+      ${!data.complete? html`<button class="btn" style="padding:5px 10px;font-size:12px" onClick=${()=>go(Math.max(0,items.findIndex((i)=>!i.done)))}>${T("wiz.firstOpen")} (${openLeft} ${T("wiz.openLeft")})</button>`:null}
+    </div>
+    ${data.complete? html`<div class="glass" style="padding:14px 16px;margin-bottom:14px;border-left:4px solid var(--pos)"><b>✓ ${T("wiz.allDone")}</b><div class="sub" style="margin:4px 0 0">${T("wiz.allDoneText")}</div></div>`:null}
+    <div style="display:grid;grid-template-columns:minmax(200px,260px) minmax(0,1fr);gap:14px;align-items:start" class="wiz-grid">
+      <div class="glass" style="padding:6px">
+        ${items.map((it,i)=> html`<button key=${it.key} onClick=${()=>go(i)} style="display:flex;gap:9px;align-items:flex-start;width:100%;text-align:left;border:0;background:${i===idx?"var(--accent-wash)":"transparent"};padding:9px 10px;border-radius:var(--r-sm);cursor:pointer;font:inherit;color:var(--ink)">
+          <span style="flex:none;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;${it.done?"background:var(--pos);color:#fff":"border:1.5px solid var(--rule-2);color:var(--ink-2)"}">${it.done?"✓":i+1}</span>
+          <span style="font-size:12.5px;line-height:1.35;font-weight:${i===idx?600:400}">${it.label}</span>
+        </button>`)}
+      </div>
+      <div class="glass" style="padding:16px 18px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)">${T("wiz.step")} ${idx+1} ${T("wiz.of")} ${items.length} · ${T(SETUP_CATEGORY_LABEL[item.category]||item.category)}</span>
+          ${status}
+        </div>
+        <div style="font-family:var(--display);font-size:19px;font-weight:600;margin-bottom:10px">${item.label}</div>
+        <div style="font-size:12px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono)">${T("wiz.why")}</div>
+        <div style="font-size:13.5px;margin:3px 0 14px;line-height:1.5">${L.why}</div>
+        ${(L.how||[]).length? html`<div style="font-size:12px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono)">${T("wiz.how")}</div>
+          <ol style="margin:6px 0 14px;padding-left:22px;font-size:13.5px;line-height:1.6">${L.how.map((h,i)=> html`<li key=${i}>${h}</li>`)}</ol>`:null}
+        ${g.env? html`<div style="padding:10px 12px;border-radius:var(--r-sm);background:var(--brass-wash);border:1px solid var(--brass);font-size:12.5px;line-height:1.5;margin-bottom:12px">
+          ${T("wiz.envNote")}
+          <div style="margin-top:7px"><b>${T("wiz.envNames")}:</b> ${g.env.map((n)=> html`<code key=${n} style="font-family:var(--mono);font-size:11.5px;background:var(--paper);border:1px solid var(--rule);border-radius:4px;padding:1px 5px;margin-right:5px;white-space:nowrap">${n}</code>`)}</div>
+        </div>`:null}
+        ${L.note? html`<div style="font-size:12.5px;color:var(--ink-2);margin-bottom:12px">${L.note}</div>`:null}
+        ${g.simHint? html`<div style="font-size:12.5px;color:var(--ink-2);margin-bottom:12px">${T("wiz.simHint")}</div>`:null}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+          ${g.tab? html`<button class="btn" onClick=${()=>onGoTab(g.tab)}>${T("wiz.go")}: ${T(WIZARD_TAB_LABEL[g.tab])} →</button>`:null}
+          ${item.auto? html`<button class="btn primary" disabled=${busy} onClick=${recheck}>${T("wiz.recheck")}</button>`:null}
+        </div>
+        ${item.auto? html`<div style="font-size:12px;color:var(--ink-3)">${T("wiz.autoNote")}</div>`
+          : html`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              ${!item.done? html`<input placeholder=${T("wiz.notePh")} value=${note} onInput=${(e)=>setNote(e.target.value)} style="flex:1;min-width:180px"/>`
+                : (item.note? html`<span style="font-size:12.5px;color:var(--ink-2)">“${item.note}”</span>`:null)}
+              ${item.done? html`<button class="btn" disabled=${busy} onClick=${()=>setDone(false)}>${T("wiz.unmark")}</button>`
+                : html`<button class="btn primary" disabled=${busy} onClick=${()=>setDone(true)}>${T("wiz.markDone")}</button>`}
+            </div>`}
+        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:18px;padding-top:12px;border-top:1px solid var(--rule)">
+          <button class="btn" disabled=${idx===0} onClick=${()=>go(idx-1)}>← ${T("wiz.back")}</button>
+          <button class="btn" disabled=${idx===items.length-1} onClick=${()=>go(idx+1)}>${T("wiz.next")} →</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 // ── Hasta Simülatörü ────────────────────────────────────────────────────────
 // Gerçek AI, gerçek boru hattı (POST /api/simulator/message → webhook.js
 // runSimulatorTurn). Sağdaki kart AI'ın cevabından DEĞİL, turdan sonra
@@ -4414,6 +4542,7 @@ function Simulator({onOpenInbox}){
 const NAV_META={
   command:{label:"nav.command",icon:"grid"},
   inbox:{label:"nav.inbox",icon:"inbox"},
+  wizard:{label:"nav.wizard",icon:"firstaid"},
   simulator:{label:"nav.simulator",icon:"wand"},
   analytics:{label:"nav.analytics",icon:"chart"},
   campaigns:{label:"nav.campaigns",icon:"bullhorn"},
@@ -4433,12 +4562,12 @@ const NAV_META={
   benchmark:{label:"nav.benchmark",icon:"stopwatch"},
 };
 const NAV_GROUPS=[
-  ["group.overview",["command","inbox","simulator","compliance"]],
+  ["group.overview",["command","wizard","inbox","simulator","compliance"]],
   ["group.growth",["analytics","benchmark","campaigns","widget","studio","partners"]],
   ["group.team",["consultants","matching","doctors","branches"]],
   ["group.operations",["devices","logistics","postop","reviews","workflow"]],
 ];
-const ENABLED = new Set(["command","inbox","simulator","compliance","analytics","benchmark","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
+const ENABLED = new Set(["command","wizard","inbox","simulator","compliance","analytics","benchmark","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
 
 const ICONS={
   grid:'<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
@@ -4478,6 +4607,7 @@ function Spinner({large}){
 
 function App(){
   const [tab, setTab] = useState("command");
+  useEffect(()=>{ const f=(e)=>{ if(e.detail) setTab(e.detail); }; window.addEventListener("mv-goto",f); return ()=>window.removeEventListener("mv-goto",f); },[]);
   const [stats, setStats] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [convTotal, setConvTotal] = useState(0);
@@ -4600,6 +4730,7 @@ function App(){
         <div class="view" key=${tab} hidden=${!fatal && stats===null}>
         <${ErrorBoundary} key=${"eb-"+tab}>
         ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} roi=${roi} responseTime=${responseTime} onOpenLead=${openLead} />`
+          : tab==="wizard" ? html`<${SetupWizard} onGoTab=${(t)=>setTab(t)} />`
           : tab==="simulator" ? html`<${Simulator} onOpenInbox=${(id)=>{ setSelectedId(id); setTab("inbox"); reloadShared(); }} />`
           : tab==="compliance" ? html`<${Compliance} />`
           : tab==="benchmark" ? html`<${Benchmark} />`

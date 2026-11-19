@@ -91,6 +91,37 @@ async function main() {
       results.push({ file: s.file, selector: s.selector, path: outPath });
     }
 
+    // ── Tam kare 1920x1080 (deviceScaleFactor 1 → dosya tam olarak 1920x1080
+    // piksel): sunum slaytına doğrudan konabilen, tarayıcı çubuğu olmayan
+    // görüntüler. Her bölüm görünümün en üstüne kaydırılıp yalnızca görünüm
+    // (viewport) çekilir. ──
+    const FRAME_DIR = path.join(OUT_DIR, '1920x1080');
+    mkdirSync(FRAME_DIR, { recursive: true });
+    const frameCtx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+    const framePage = await frameCtx.newPage();
+    framePage.on('request', (req) => requests.push(req.url()));
+    framePage.on('pageerror', (err) => consoleErrors.push(String(err)));
+    await framePage.goto(`${BASE}/panel/demo.html`, { waitUntil: 'networkidle' });
+    await framePage.waitForSelector('#inboxList .row');
+    const frames = [
+      { file: '01-gelen-kutusu.png', locate: (p) => p.locator('#shotInbox') },
+      { file: '02-konusma-turkce-ceviri.png', locate: (p) => p.locator('#chatTranslation') },
+      { file: '03-devir-handover.png', locate: (p) => p.locator('#chatHandoverScore') },
+      { file: '04-teklif-onay.png', locate: (p) => p.locator('#shotQuote') },
+      { file: '05-kpi-paneli.png', locate: (p) => p.locator('.section-title', { hasText: 'Komuta Merkezi' }) },
+      { file: '06-risk-uyum.png', locate: (p) => p.locator('.section-title', { hasText: 'Risk' }) },
+      { file: '07-yanit-suresi.png', locate: (p) => p.locator('#shotResponseTime') },
+    ];
+    for (const f of frames) {
+      const el = f.locate(framePage).first();
+      await el.evaluate((node) => window.scrollTo(0, node.getBoundingClientRect().top + window.scrollY - 24));
+      await framePage.waitForTimeout(150);
+      const outPath = path.join(FRAME_DIR, f.file);
+      await framePage.screenshot({ path: outPath });
+      console.log(`  ✓ 1920x1080/${f.file}`);
+      results.push({ file: `1920x1080/${f.file}`, selector: '(viewport 1920x1080)', path: outPath });
+    }
+
     // ── Mobil: iPhone boyutlu görünüm, tüm sayfa (QR'ı telefonla okutan
     // kişinin gerçekte göreceği şey) ──
     const mobileCtx = await browser.newContext({

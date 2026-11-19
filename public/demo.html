@@ -81,6 +81,9 @@
   table{width:100%;border-collapse:collapse;font-size:13px}
   th{text-align:left;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);padding:0 10px 8px 0;border-bottom:1px solid var(--rule)}
   td{padding:10px 10px 10px 0;border-bottom:1px solid var(--paper-2);vertical-align:top}
+  th{padding-top:12px}
+  th:first-child,td:first-child{padding-left:18px}
+  th:last-child,td:last-child{padding-right:18px}
   .num{font-variant-numeric:tabular-nums}
   .bar{height:5px;border-radius:3px;background:var(--rule);overflow:hidden;margin-top:6px}
   .bar > span{display:block;height:100%;border-radius:3px;background:var(--accent)}
@@ -130,7 +133,7 @@
     <div class="kpi"><div class="label">Sıcak lead'ler</div><div class="val mint">6</div><div class="foot">skor ≥ 70</div></div>
     <div class="kpi"><div class="label">İnsan bekliyor</div><div class="val alert">2</div><div class="foot">devir kuyruğunda</div></div>
     <div class="kpi"><div class="label">Ülkeler</div><div class="val">9</div><div class="foot">konumu bilinen lead</div></div>
-    <div class="kpi"><div class="label">AI özerkliği</div><div class="val cyan">94%</div><div class="foot">görüşme hâlâ insansız yürüyor</div></div>
+    <div class="kpi"><div class="label">AI özerkliği</div><div class="val cyan">%94</div><div class="foot">görüşme hâlâ insansız yürüyor</div></div>
     <div class="kpi"><div class="label">AI cevap süresi</div><div class="val mint">2 sn</div><div class="foot">medyan, ilk mesajdan</div></div>
   </div>
 
@@ -151,7 +154,7 @@
       <div class="bubble patient">Hi, is anyone there tonight? I want to ask about a hair transplant before I book my flight.</div>
       <div class="meta" style="text-align:right">AI · Cuma 23:11 · İngilizce</div>
       <div class="bubble ai">Hello! Our coordinators are offline right now, but I can start right away — could you share a recent photo of your hairline and your budget range?</div>
-      <div class="handover">⤷ Devredildi: Koordinatör Aylin K. — Cumartesi 09:00 (mesai açılışı, 1. Görev'deki mesai tanımına göre)</div>
+      <div class="handover">⤷ Devredildi: Koordinatör Aylin K. — Cumartesi 09:00 (mesai açılışı — mesai dışı bekleme süreye sayılmaz)</div>
     </div>
     <div class="chat" id="chatTranslation">
       <div class="meta"><span class="demo-tag" style="margin-right:7px">Örnek veri</span>🇩🇪 A. Schmidt · WhatsApp · Salı 11:04 · mesai içi</div>
@@ -188,7 +191,7 @@
 
   <section id="shotResponseTime">
   <div class="section-title" id="responseTimeTitle">İlk Yanıt Süresi (örnek)<span class="demo-tag">Örnek veri</span></div>
-  <div class="sub">UTC olarak saklanır, İstanbul saatiyle gösterilir. Mesai dışı gelen bir mesajın saati bir sonraki mesai açılışından başlar (bkz. services/businessHours.js) — AI ve insan ayrı raporlanır, n&lt;5 olsaydı "yetersiz veri" gösterilirdi.</div>
+  <div class="sub">İstanbul saatiyle ölçülür. Mesai dışında gelen mesajda insan ekibinin süresi bir sonraki mesai açılışından başlar. AI ve insan ayrı raporlanır; 5'ten az ölçüm varsa sayı yerine "yetersiz veri" gösterilir.</div>
   <div class="kpis" id="responseTimePanel">
     <div class="kpi"><div class="label">AI · ortalama</div><div class="val cyan">8 sn</div><div class="foot">n=41 · medyan 5 sn</div></div>
     <div class="kpi"><div class="label">AI · mesaiye göre düzeltilmiş</div><div class="val cyan">8 sn</div><div class="foot">AI zaten 7/24 — mesai AI'yı etkilemez</div></div>
@@ -280,9 +283,9 @@ document.getElementById("campaignTable").innerHTML =
   }).join("") + "</tbody>";
 
 var DOCTORS = [
-  { name: "Dr. Elif Demir", specialty: "Plastik Cerrahi", operated: 34, recorded: 31, complications: 1 },
-  { name: "Dr. Mehmet Kaya", specialty: "Saç Ekimi", operated: 58, recorded: 52, complications: 0 },
-  { name: "Dr. Ayşe Yıldız", specialty: "Diş Hekimliği", operated: 21, recorded: 21, complications: 0 },
+  { name: "Doktor A", specialty: "Plastik Cerrahi", operated: 34, recorded: 31, complications: 1 },
+  { name: "Doktor B", specialty: "Saç Ekimi", operated: 58, recorded: 52, complications: 0 },
+  { name: "Doktor C", specialty: "Diş Hekimliği", operated: 21, recorded: 21, complications: 0 },
 ];
 document.getElementById("doctorTable").innerHTML =
   "<thead><tr><th>Doktor</th><th>Branş</th><th>Ameliyat</th><th>Kayıtlı sonuç</th><th>Komplikasyon</th><th>Kayıt oranı</th></tr></thead><tbody>" +

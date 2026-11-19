@@ -43,6 +43,18 @@ console.log('\n▶ "Este" / klinik adı sızıntısı yok (Demo Day Kesin Kural 
   check('demo kliniğinin adı "Demo Klinik" (A.Ş. yok)', /Demo Klinik/.test(html) && !/Demo Klinik\s*A\.?Ş\.?/i.test(html));
 }
 
+console.log('\n▶ Jüriye görünen metinde iç geliştirme notu / gerçeğe benzer tam isim yok');
+{
+  // Önce <style> ayıklanır: CSS yorumunda geçen "<script>" kelimesi aksi hâlde
+  // sahte bir script başlangıcı gibi eşleşip sayfanın çoğunu yutuyordu.
+  const visible = html.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<script[\s\S]*?<\/script>/g, '');
+  check('"Görev" (iç görev numarası) görünür metinde geçmiyor', !/Görev/.test(visible));
+  check('kaynak dosya yolu (örn. services/x.js) görünür metinde geçmiyor', !/\w+\/\w+\.js\b/.test(visible));
+  check('"n<5" gibi istatistik jargonu görünür metinde geçmiyor', !/n&lt;\d|n<\d/.test(visible));
+  // Örnek doktorlar "Doktor A/B/C" — yaygın Ad Soyad gerçek bir hekimle çakışabilir (Kural 1).
+  check('örnek doktor adları gerçek kişiye benzemiyor (Dr. Ad Soyad yok)', !/"Dr\. [A-ZÇĞİÖŞÜ][a-zçğıöşü]+ [A-ZÇĞİÖŞÜ][a-zçğıöşü]+"/.test(html));
+}
+
 console.log('\n▶ "Örnek veri" etiketi her bölümde görünür (Görev 4)');
 {
   const sectionTitles = (html.match(/<div class="section-title"[^>]*>.*?<\/div>/gs) || []);

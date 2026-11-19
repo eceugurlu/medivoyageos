@@ -1,7 +1,8 @@
 {
-  "total_requests": 2,
+  "total_requests": 3,
   "external_requests": [],
   "all_requests": [
+    "http://localhost:4173/panel/demo.html",
     "http://localhost:4173/panel/demo.html",
     "http://localhost:4173/panel/demo.html"
   ]

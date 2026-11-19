@@ -18,7 +18,7 @@ import { config } from '../config.js';
 import { sendTemplate } from './whatsapp.js';
 import { notifyNoShowRisk, notifySlaFirstReminder, notifySlaEscalation, notifyWeeklyReport } from './notify.js';
 import {
-  getDuePostOpTasks, markPostOpSent, getNoShowRisks, markRiskNotified, clearRiskNotified,
+  getDuePostOpTasks, markPostOpSent, setPostOpResult, getNoShowRisks, markRiskNotified, clearRiskNotified,
   getSilentHotLeads, markHotFollowupSent, recordAgentMessage,
   getHandoversNeedingFirstReminder, markSlaFirstReminderSent,
   getHandoversNeedingEscalation, markSlaEscalated,
@@ -59,13 +59,20 @@ async function _processPostOp() {
     const claimed = await markPostOpSent(t.id).catch((e) => { console.error('[post-op] claim failed:', e.message); return false; });
     if (!claimed) continue; // another run already has this one
     try {
-      await sendTemplate(t.phone, t.kind, t.language || 'en', [t.name || 'there']);
+      const result = await sendTemplate(t.phone, t.kind, t.language || 'en', [t.name || 'there']);
+      if (result?.dryRun) {
+        // WhatsApp not configured — nothing actually left. Don't let the panel say "sent".
+        await setPostOpResult(t.id, 'not_sent').catch((e) => console.error('[post-op] status update failed:', e.message));
+        continue;
+      }
       console.log(`[post-op] sent "${t.kind}" → ${t.name || t.phone}`);
       sent++;
     } catch (err) {
       // Already claimed above — a permanent failure (e.g. an unapproved
-      // template) must not retry every minute forever.
-      console.error(`[post-op] "${t.kind}" send failed (already claimed, won't retry):`, err.message);
+      // template) must not retry every minute forever. Mark it 'failed' so
+      // the panel shows it as not delivered instead of "✓ sent".
+      console.error(`[post-op] "${t.kind}" send failed (won't retry):`, err.message);
+      await setPostOpResult(t.id, 'failed').catch((e) => console.error('[post-op] status update failed:', e.message));
     }
   }
   return sent;

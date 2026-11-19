@@ -147,7 +147,7 @@
   </header>
 
   <div class="readonly-note">
-    Bu bir gösterim ortamıdır. Hiçbir buton bir API çağrısı yapmaz, hiçbir sayı gerçek bir hastaya ait değildir — hepsi örnek. Gerçek panel gerçek klinik verisiyle aynı ekranları gösterir.
+    Bu bir gösterim ortamıdır. Hiçbir buton bir API çağrısı yapmaz, hiçbir sayı gerçek bir hastaya ait değildir — hepsi örnek. Gerçek panel gerçek klinik verisiyle aynı ekranları gösterir; WhatsApp ve Instagram bağlantısı pilot kliniğin kendi hesabıyla kurulur.
   </div>
 
   <div class="section-title">Komuta Merkezi<span class="demo-tag">Örnek veri</span></div>
@@ -191,7 +191,7 @@
 
   <section id="shotHandover">
   <div class="section-title">İnsana devir &amp; klinik güvenlik (örnek)<span class="demo-tag">Örnek veri</span></div>
-  <div class="sub">Komplikasyon, şikâyet, ödeme gibi durumlarda AI satış yapmaz, konuşmayı koordinatöre devreder. Devir kararını AI talimatındaki 9 kurala göre verir. Acil durum senaryosu her sürümde otomatik testle kontrol edilir.</div>
+  <div class="sub">Komplikasyon, şikâyet, ödeme gibi durumlarda AI satış yapmaz, konuşmayı koordinatöre devreder. Devir kararını AI talimatındaki 9 kurala göre verir. Acil durum senaryosu otomatik bir kalite testiyle gerçek modele karşı kontrol edilir.</div>
   <div class="glass handover-grid">
     <div class="chat" id="chatEmergency">
       <div class="meta"><span class="demo-tag" style="margin-right:7px">Örnek veri</span>🇸🇦 ع. الحداد · WhatsApp · Çarşamba 02:41 (mesai dışı) · Arapça algılandı</div>
@@ -219,7 +219,7 @@
       <ul class="steps">
         <li>Satış konuşması durdu, hasta acile yönlendirildi</li>
         <li>Konuşma ACİL işaretiyle devir kuyruğuna düştü</li>
-        <li>Koordinatöre bildirim gitti (Arapça bilen koordinatör atandı)</li>
+        <li>Arapça bilen koordinatör atandı; ekip kanalına (ör. Slack) anlık bildirim gitti</li>
         <li>Tıbbi not: "Ameliyat sonrası kanama bildiriyor, acil yardım istiyor."</li>
         <li>Koordinatör konuşmayı devraldığında AI tamamen susar</li>
       </ul>
@@ -229,7 +229,7 @@
 
   <section id="shotQuote">
   <div class="section-title">Teklif &amp; Onay (örnek)<span class="demo-tag">Örnek veri</span></div>
-  <div class="sub">Yüksek skorlu bir lead'e gönderilen teklif — PDF ve onay linki.</div>
+  <div class="sub">Koordinatör teklifi panelden hazırlar. Hastaya, hastanın dilinde PDF ve teklif linki gider. Hasta linki açınca panelde "açtı" görünür.</div>
   <div class="glass quote-card" id="quoteCard">
     <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:baseline">
       <div>
@@ -245,16 +245,17 @@
     </div>
     <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:12px">
       <button class="disabled-btn">Teklif PDF (demo'da kapalı)</button>
-      <span class="pill human">✓ Hasta onayladı — Cumartesi 14:02</span>
+      <span class="pill">✓ Hasta teklifi açtı — Cumartesi 09:31</span>
+      <span class="pill human">✓ Kabul edildi — Cumartesi 14:02 (koordinatör işaretledi)</span>
     </div>
-    <div class="approve-link">Onay linki: medivoyage.app/onay/8f2a-c103 (demo — tıklanamaz)</div>
-    <div class="sub" style="margin:10px 0 0">Teklif PDF'i hastanın dilinde hazırlanır (bu örnekte İngilizce; Arapça için sağdan sola).</div>
+    <div class="approve-link">Teklif linki: …/api/public/quote/•••••••• (demo — tıklanamaz)</div>
+    <div class="sub" style="margin:10px 0 0">Teklif PDF'i hastanın dilinde hazırlanır (bu örnekte İngilizce; Arapça için sağdan sola). Kabulü, hasta onay verdikten sonra koordinatör işaretler.</div>
   </div>
   </section>
 
   <section id="shotPostOp">
   <div class="section-title">Ameliyat sonrası takip (örnek)<span class="demo-tag">Örnek veri</span></div>
-  <div class="sub">Koordinatör hastayı "taburcu" işaretleyince 6 adımlı takip otomatik planlanır. Vadesi gelen adım hastaya kendi dilinde WhatsApp şablonuyla otomatik gönderilir. Bugün: 19.11.2026.</div>
+  <div class="sub">Koordinatör hastayı "taburcu" işaretleyince 6 adımlı takip otomatik planlanır. Vadesi gelen adım WhatsApp şablon mesajıyla otomatik gönderilir (şablonların kliniğin Meta hesabında onaylı olması gerekir). Gönderilemeyen adım panelde "gönderilemedi" olarak görünür. Bugün: 19.11.2026.</div>
   <div class="glass scroller">
     <table id="postOpTable" class="postop-table" style="padding:0 0 6px"></table>
   </div>

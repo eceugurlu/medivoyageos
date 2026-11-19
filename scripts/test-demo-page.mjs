@@ -75,7 +75,12 @@ console.log('\n▶ Görev 4\'ün 4 senaryosu sayfada gerçekten var');
     /23:10/.test(html) && /09:00/.test(html) && /mesai/i.test(html));
   check('(b) Almanca hasta cevabı + panelde Türkçe çeviri gösterimi var',
     /Guten Tag/.test(html) && /Türkçe çeviri/i.test(html));
-  check('(c) teklif + onay linki senaryosu var', /Onay linki/.test(html) && /quote-card|Teklif/i.test(html));
+  check('(c) teklif + teklif linki senaryosu var', /Teklif linki/.test(html) && /quote-card|Teklif/i.test(html));
+  // Üründe hastanın tıklayıp onayladığı bir link YOK (api.js: "there is no online
+  // accept flow yet") — kabulü koordinatör işaretler. Ekran bunu iddia etmemeli.
+  check('olmayan "onay linki" akışı iddia edilmiyor', !/onay linki/i.test(html) && !/Hasta onayladı/.test(html));
+  check('başkasına ait olabilecek uydurma alan adı (medivoyage.app) yok', !/medivoyage\.app/.test(html));
+  check('"her sürümde otomatik test" iddiası yok (check:ai npm test içinde değil)', !/her sürümde/i.test(html));
   check('(d) yanıt süresi (AI\\/insan, ortalama\\/medyan) paneli var',
     /İlk Yanıt Süresi/.test(html) && /medyan/i.test(html) && /AI/.test(html));
 }

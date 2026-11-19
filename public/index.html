@@ -818,7 +818,7 @@ const I18N = {
     "postop.empty":"No post-op flows yet. Open a conversation in the Inbox and click \"Mark discharged\".",
     "postop.thankYou":"Thank-you","postop.reviewInvite":"Review invite","postop.checkin7":"Day-7 check-in",
     "postop.checkin30":"Day-30 check-in","postop.fitToFly":"Fit-to-Fly doc","postop.checkup1y":"1-year checkup",
-    "postop.sentMark":"✓ sent",
+    "postop.sentMark":"✓ sent","postop.failedMark":"✗ send failed","postop.notSentMark":"not sent — WhatsApp not connected",
     "reviews.sub":"Every discharged patient is automatically invited to leave a Trustpilot / Google review — growing your reputation on autopilot.",
     "reviews.invites":"Review invites","reviews.scheduled":"scheduled","reviews.sent":"Sent",
     "reviews.delivered":"delivered automatically","reviews.reputation":"Reputation","reviews.noRatingSource":"needs a Trustpilot / Google connection",
@@ -1158,7 +1158,7 @@ const I18N = {
     "postop.empty":"Henüz ameliyat sonrası akış yok. Gelen Kutusu'nda bir görüşme açın ve \"Taburcu işaretle\"ye tıklayın.",
     "postop.thankYou":"Teşekkür","postop.reviewInvite":"Değerlendirme daveti","postop.checkin7":"7. gün kontrol",
     "postop.checkin30":"30. gün kontrol","postop.fitToFly":"Uçuşa uygunluk belgesi","postop.checkup1y":"1 yıllık kontrol",
-    "postop.sentMark":"✓ gönderildi",
+    "postop.sentMark":"✓ gönderildi","postop.failedMark":"✗ gönderilemedi","postop.notSentMark":"gönderilmedi — WhatsApp bağlı değil",
     "reviews.sub":"Taburcu olan her hasta otomatik olarak Trustpilot / Google değerlendirmesi bırakmaya davet edilir — itibarınız kendiliğinden büyür.",
     "reviews.invites":"Değerlendirme davetleri","reviews.scheduled":"planlandı","reviews.sent":"Gönderilen",
     "reviews.delivered":"otomatik iletildi","reviews.reputation":"İtibar","reviews.noRatingSource":"Trustpilot / Google bağlantısı gerekiyor",
@@ -3946,7 +3946,7 @@ function PostOp(){
       : d.map((p,i)=> html`<div class="glass" key=${i} style="padding:14px 18px;margin-bottom:12px">
         <div style="font-weight:700;margin-bottom:8px">${leadIdentity(p)} ${channelBadge(p.source)}</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
-          ${(p.tasks||[]).map((t,j)=> html`<span key=${j} class="badge ${t.status==='sent'?'human':''}" style="font-size:11.5px">${POSTOP_LABELS[t.kind]?T(POSTOP_LABELS[t.kind]):t.kind} · ${t.status==='sent'?T("postop.sentMark"):new Date(t.due_at).toLocaleDateString()}</span>`)}
+          ${(p.tasks||[]).map((t,j)=> html`<span key=${j} class="badge ${t.status==='sent'?'human':t.status==='failed'||t.status==='not_sent'?'hot':''}" style="font-size:11.5px">${POSTOP_LABELS[t.kind]?T(POSTOP_LABELS[t.kind]):t.kind} · ${t.status==='sent'?T("postop.sentMark"):t.status==='failed'?T("postop.failedMark"):t.status==='not_sent'?T("postop.notSentMark"):new Date(t.due_at).toLocaleDateString()}</span>`)}
         </div>
       </div>`)}
   </div>`;

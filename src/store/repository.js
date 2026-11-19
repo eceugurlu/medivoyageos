@@ -2722,6 +2722,14 @@ export async function markPostOpSent(id) {
   return Boolean(q.rows[0]);
 }
 
+// Claim (markPostOpSent) happens BEFORE the send so two runs can't double-send.
+// If the send then turns out not to have happened, overwrite the claim so the
+// panel never shows "✓ sent" for a message that never left: 'not_sent' when
+// WhatsApp isn't configured (dry-run), 'failed' when Meta rejected it.
+export async function setPostOpResult(id, status) {
+  await pool.query(`UPDATE post_op_tasks SET status=$2 WHERE id=$1`, [id, status]);
+}
+
 export async function getPostOpOverview() {
   const q = await pool.query(`
     SELECT l.id AS lead_id, l.name, l.phone, l.source, l.external_id,
@@ -3348,7 +3356,8 @@ export async function getComplianceSnapshot({ branchId } = {}) {
     // paydasına girerse, yeni ameliyatlar kliniğin takip skorunu düşürür.
     pool.query(
       `SELECT count(*) FILTER (WHERE t.status = 'sent')::int AS completed,
-              count(*) FILTER (WHERE t.status = 'pending' AND t.due_at < now())::int AS overdue,
+              -- Gönderilemeyen (failed / WhatsApp bağlı değil) görev yapılmış değildir: gecikmiş sayılır.
+              count(*) FILTER (WHERE (t.status = 'pending' AND t.due_at < now()) OR t.status IN ('failed','not_sent'))::int AS overdue,
               count(*) FILTER (WHERE t.status = 'pending' AND t.due_at >= now())::int AS upcoming
          FROM post_op_tasks t
          JOIN leads l ON l.id = t.lead_id

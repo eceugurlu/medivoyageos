@@ -214,12 +214,23 @@ export async function generateReply({ history, userText, image }) {
   // Anthropic's SDK parses tool_use.input from valid JSON already — no manual
   // JSON.parse, so there's no string-escaping failure mode left to catch here.
   const parsed = toolUse.input;
+  const handover = parsed.handover || { needed: false, urgent: false, reason: null };
+  const lead = parsed.lead || null;
+  // The prompt asks for a one-line clinical summary on urgent handovers, but the
+  // schema can't make it required (it's null for every non-medical turn), and in
+  // a live run the model left it empty 2 times out of 6. A coordinator opening
+  // an urgent case must never see a blank note, so fall back to the patient's
+  // own words — clearly labelled as raw text, never presented as a summary.
+  if (handover.urgent && lead && !lead.medical_note) {
+    const raw = String(userText || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (raw) lead.medical_note = `[otomatik — hastanin kendi sozleri] ${raw}`;
+  }
   return {
     reply: parsed.reply,
     meta: {
       detected_language: parsed.detected_language || null,
-      lead: parsed.lead || null,
-      handover: parsed.handover || { needed: false, urgent: false, reason: null },
+      lead,
+      handover,
     },
     // For the AI Maliyet Panosu (see repository.js::saveExchange() /
     // getRoiStats()'s monthly_* fields) — persisted onto the assistant

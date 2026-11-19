@@ -1969,6 +1969,26 @@ export async function getLeadsBySegment(segment) {
   return q.rows;
 }
 
+// Dinamik segment: hazır segmentlerin (all/past/hot/new) yanında istediğin
+// kombinasyon. Her filtre isteğe bağlı; hepsi boşsa telefonu olan HERKES döner
+// (arayüz bunu gönderimden önce sayıyla gösterir). Tüm değerler parametreli.
+const SEGMENT_STATUSES = ['new', 'hot', 'handed_over', 'booked', 'lost'];
+export async function getLeadsByFilter({ statuses, language, minScore, treatment, country } = {}) {
+  const where = ['phone IS NOT NULL'];
+  const vals = [];
+  const st = (Array.isArray(statuses) ? statuses : []).filter((s) => SEGMENT_STATUSES.includes(s));
+  if (st.length) where.push(`status = ANY($${vals.push(st)})`);
+  if (language) where.push(`language = $${vals.push(String(language).slice(0, 16))}`);
+  if (Number.isFinite(Number(minScore)) && minScore !== '' && minScore !== null) where.push(`score >= $${vals.push(Math.max(0, Math.min(100, Number(minScore))))}`);
+  if (treatment) where.push(`treatment_interest ILIKE $${vals.push('%' + String(treatment).slice(0, 80).replace(/[%_\\]/g, '') + '%')}`);
+  if (country) where.push(`country ILIKE $${vals.push('%' + String(country).slice(0, 80).replace(/[%_\\]/g, '') + '%')}`);
+  const q = await pool.query(
+    `SELECT id, phone, name, language FROM leads WHERE ${where.join(' AND ')} ORDER BY created_at DESC`,
+    vals,
+  );
+  return q.rows;
+}
+
 // Seed a few demo ad campaigns (idempotent-ish: only if table is empty).
 export async function seedCampaignsIfEmpty() {
   const c = await pool.query('SELECT count(*)::int AS n FROM campaigns');

@@ -414,6 +414,7 @@
   }
   .composer{border-top:1px solid var(--rule);padding:12px;display:flex;gap:10px;align-items:flex-end}
   @media (max-width:900px){ .sim-grid,.wiz-grid{grid-template-columns:1fr !important} }
+  @media (max-width:900px){ .pipe-grid{grid-template-columns:repeat(5,230px) !important} }
 
   /* ── Fields ───────────────────────────────────────────────────────────── */
   textarea,.main input,.main select{
@@ -704,7 +705,7 @@ const I18N = {
     "nav.command":"Command Center","nav.inbox":"Omnichannel Inbox","nav.analytics":"CAC & ROAS Analytics",
     "nav.campaigns":"WhatsApp Broadcast","nav.studio":"AI Prompt Studio","nav.widget":"Lead Widget",
     "nav.consultants":"Consultant Performance","nav.matching":"Language Matching","nav.devices":"Smart Device Booking",
-    "nav.logistics":"VIP Transfer & Logistics","nav.postop":"Fit-to-Fly & Post-Op","nav.wizard":"Setup Wizard","wiz.title":"Setup Wizard","wiz.sub":"Eight steps from an empty clinic to a live pilot. Each step tells you what to do and why; the tick comes from real data wherever the system can measure it.","wiz.step":"Step","wiz.of":"of","wiz.why":"Why it matters","wiz.how":"What to do","wiz.back":"Back","wiz.next":"Next","wiz.recheck":"Check again","wiz.go":"Open the page","wiz.measuredDone":"Measured: done","wiz.measuredOpen":"Measured: not done yet","wiz.manualDone":"Marked done by hand","wiz.manualOpen":"Needs your confirmation","wiz.markDone":"I did this — mark it done","wiz.unmark":"Undo","wiz.autoNote":"This step is measured from real data, so it cannot be ticked by hand. Do the steps above, then press Check again.","wiz.envNote":"This is not done from the panel. The values are secrets: they go into the hosting provider's Environment Variables (Vercel → Settings → Environment Variables), then a Redeploy. Never paste them into chat or a screenshot.","wiz.envNames":"Variable names","wiz.notePh":"Optional note (who / when)","wiz.allDone":"Setup complete","wiz.allDoneText":"All eight steps are done. The clinic can start with real patients.","wiz.openLeft":"steps still open","wiz.firstOpen":"Go to first open step","wiz.checklist":"Show the checklist","wiz.open":"Open setup wizard","wiz.done":"done","wiz.simHint":"The Patient Simulator runs the real AI and the real handover flow, so it is the fastest way to do this check.","nav.simulator":"Patient Simulator","sim.title":"Patient Simulator — live AI","sim.sub":"Type as a patient. The message runs through exactly the same pipeline as WhatsApp: the real AI replies, and the lead score, language, handover and coordinator assignment are written to the database.","sim.banner":"Only difference from WhatsApp: the message comes from this screen instead of a phone. These conversations appear in the Inbox tagged Simulator and are never sent to the CRM.","sim.name":"Patient name (optional)","sim.namePh":"e.g. Test patient","sim.examples":"Example messages","sim.typePh":"Write as the patient, in any language…","sim.newPatient":"New patient","sim.thinking":"AI is replying…","sim.result":"What the system recorded (read from the database)","sim.lang":"Detected language","sim.score":"Lead score","sim.treatment":"Treatment interest","sim.readiness":"Readiness","sim.status":"Conversation","sim.urgent":"URGENT handover — in the handover queue","sim.needsHuman":"Handed over — waiting for a coordinator","sim.aiHandling":"AI is handling it","sim.humanHandling":"A coordinator has taken over — AI is silent","sim.coordinator":"Assigned coordinator","sim.none":"—","sim.medicalNote":"Medical note","sim.handoverReason":"Handover reason","sim.openInbox":"Open in Inbox","sim.secs":"s","sim.empty":"Pick an example or type a message to start.","sim.noReply":"(no reply — see server log)","sim.r.researching":"researching","sim.r.considering":"considering","sim.r.ready_to_book":"ready to book","nav.reviews":"Trust & Review Engine",
+    "nav.logistics":"VIP Transfer & Logistics","nav.postop":"Fit-to-Fly & Post-Op","nav.pipeline":"Sales Pipeline","pipe.title":"Sales Pipeline","pipe.sub":"Every lead, by stage. Stages update automatically from the AI's read of the conversation (hot, handed over); you can also move a lead by hand — a new hot or handover signal from the AI may move it again.","pipe.new":"New","pipe.hot":"Hot","pipe.handed_over":"Handed over","pipe.booked":"Booked","pipe.lost":"Lost","pipe.move":"Move to…","pipe.open":"Open","pipe.empty":"No leads","pipe.truncated":"Showing the 200 most recent conversations.","pipe.urgent":"URGENT","assist.title":"AI assistant","assist.note":"Drafts only — nothing is sent until you press Send.","assist.brief":"Summarize","assist.draft":"Suggest a reply","assist.working":"AI is working…","assist.summary":"Summary","assist.tasks":"Suggested next steps","assist.close":"Close","assist.rewrite":"Edit my draft","assist.shorter":"Shorter","assist.warmer":"Warmer","assist.professional":"More formal","assist.fix":"Fix spelling","assist.translate":"Translate to patient's language","assist.needText":"Write a draft first.","assist.draftTr":"Turkish translation of the draft (for you; not sent)","assist.draftWarn":"AI draft — read and edit before sending.","seg.custom":"Custom segment (filters)","seg.status":"Stage","seg.language":"Language","seg.anyLang":"Any","seg.minScore":"Minimum lead score","seg.treatment":"Treatment contains","seg.country":"Country contains","seg.count":"Recipients","seg.countBtn":"Count recipients","seg.confirm":"This will send the template to {n} people. Continue?","seg.zero":"No lead matches these filters.","nav.wizard":"Setup Wizard","wiz.title":"Setup Wizard","wiz.sub":"Eight steps from an empty clinic to a live pilot. Each step tells you what to do and why; the tick comes from real data wherever the system can measure it.","wiz.step":"Step","wiz.of":"of","wiz.why":"Why it matters","wiz.how":"What to do","wiz.back":"Back","wiz.next":"Next","wiz.recheck":"Check again","wiz.go":"Open the page","wiz.measuredDone":"Measured: done","wiz.measuredOpen":"Measured: not done yet","wiz.manualDone":"Marked done by hand","wiz.manualOpen":"Needs your confirmation","wiz.markDone":"I did this — mark it done","wiz.unmark":"Undo","wiz.autoNote":"This step is measured from real data, so it cannot be ticked by hand. Do the steps above, then press Check again.","wiz.envNote":"This is not done from the panel. The values are secrets: they go into the hosting provider's Environment Variables (Vercel → Settings → Environment Variables), then a Redeploy. Never paste them into chat or a screenshot.","wiz.envNames":"Variable names","wiz.notePh":"Optional note (who / when)","wiz.allDone":"Setup complete","wiz.allDoneText":"All eight steps are done. The clinic can start with real patients.","wiz.openLeft":"steps still open","wiz.firstOpen":"Go to first open step","wiz.checklist":"Show the checklist","wiz.open":"Open setup wizard","wiz.done":"done","wiz.simHint":"The Patient Simulator runs the real AI and the real handover flow, so it is the fastest way to do this check.","nav.simulator":"Patient Simulator","sim.title":"Patient Simulator — live AI","sim.sub":"Type as a patient. The message runs through exactly the same pipeline as WhatsApp: the real AI replies, and the lead score, language, handover and coordinator assignment are written to the database.","sim.banner":"Only difference from WhatsApp: the message comes from this screen instead of a phone. These conversations appear in the Inbox tagged Simulator and are never sent to the CRM.","sim.name":"Patient name (optional)","sim.namePh":"e.g. Test patient","sim.examples":"Example messages","sim.typePh":"Write as the patient, in any language…","sim.newPatient":"New patient","sim.thinking":"AI is replying…","sim.result":"What the system recorded (read from the database)","sim.lang":"Detected language","sim.score":"Lead score","sim.treatment":"Treatment interest","sim.readiness":"Readiness","sim.status":"Conversation","sim.urgent":"URGENT handover — in the handover queue","sim.needsHuman":"Handed over — waiting for a coordinator","sim.aiHandling":"AI is handling it","sim.humanHandling":"A coordinator has taken over — AI is silent","sim.coordinator":"Assigned coordinator","sim.none":"—","sim.medicalNote":"Medical note","sim.handoverReason":"Handover reason","sim.openInbox":"Open in Inbox","sim.secs":"s","sim.empty":"Pick an example or type a message to start.","sim.noReply":"(no reply — see server log)","sim.r.researching":"researching","sim.r.considering":"considering","sim.r.ready_to_book":"ready to book","nav.reviews":"Trust & Review Engine",
     "nav.workflow":"Workflow Automation",
     "group.overview":"Overview","group.growth":"Growth","group.team":"Team","group.operations":"Operations",
     "cmd.sub":"Live overview of your clinic's inbound demand.",
@@ -1037,7 +1038,7 @@ const I18N = {
     "nav.command":"Komuta Merkezi","nav.inbox":"Tüm Kanallar Gelen Kutusu","nav.analytics":"CAC & ROAS Analizi",
     "nav.campaigns":"WhatsApp Toplu Gönderim","nav.studio":"AI Prompt Stüdyosu","nav.widget":"Lead Widget'ı",
     "nav.consultants":"Danışman Performansı","nav.matching":"Dil Eşleştirme","nav.devices":"Akıllı Cihaz Rezervasyonu",
-    "nav.logistics":"VIP Transfer & Lojistik","nav.postop":"Uçuşa Uygunluk & Ameliyat Sonrası","nav.wizard":"Kurulum Sihirbazı","wiz.title":"Kurulum Sihirbazı","wiz.sub":"Boş bir klinikten canlı pilota sekiz adım. Her adım ne yapacağınızı ve neden gerektiğini söyler; sistem ölçebildiği yerde tik gerçek veriden gelir.","wiz.step":"Adım","wiz.of":"/","wiz.why":"Neden önemli","wiz.how":"Ne yapmalı","wiz.back":"Geri","wiz.next":"İleri","wiz.recheck":"Tekrar kontrol et","wiz.go":"Sayfayı aç","wiz.measuredDone":"Ölçüldü: tamam","wiz.measuredOpen":"Ölçüldü: henüz tamam değil","wiz.manualDone":"Elle tamam işaretlendi","wiz.manualOpen":"Sizin onayınızı bekliyor","wiz.markDone":"Yaptım — tamam işaretle","wiz.unmark":"Geri al","wiz.autoNote":"Bu adım gerçek veriden ölçülür, bu yüzden elle işaretlenemez. Yukarıdaki adımları yapın, sonra Tekrar kontrol et'e basın.","wiz.envNote":"Bu adım panelden yapılmaz. Değerler gizlidir: barındırma sağlayıcısının Environment Variables bölümüne (Vercel → Settings → Environment Variables) girilir, sonra Redeploy yapılır. Değerleri asla sohbete ya da ekran görüntüsüne yapıştırmayın.","wiz.envNames":"Değişken adları","wiz.notePh":"İsteğe bağlı not (kim / ne zaman)","wiz.allDone":"Kurulum tamam","wiz.allDoneText":"Sekiz adımın hepsi tamam. Klinik gerçek hastalarla başlayabilir.","wiz.openLeft":"adım açık","wiz.firstOpen":"İlk açık adıma git","wiz.checklist":"Kontrol listesini göster","wiz.open":"Kurulum sihirbazını aç","wiz.done":"tamam","wiz.simHint":"Hasta Simülatörü gerçek AI'ı ve gerçek devir akışını çalıştırır; bu kontrolü yapmanın en hızlı yolu budur.","nav.simulator":"Hasta Simülatörü","sim.title":"Hasta Simülatörü — canlı AI","sim.sub":"Hasta gibi yazın. Mesaj WhatsApp ile birebir aynı akıştan geçer: gerçek AI cevap verir; lead skoru, dil, devir ve koordinatör ataması veritabanına yazılır.","sim.banner":"WhatsApp'tan tek farkı: mesaj telefondan değil bu ekrandan gelir. Bu konuşmalar Gelen Kutusu'nda \"Simülatör\" etiketiyle görünür ve CRM'e gönderilmez.","sim.name":"Hasta adı (isteğe bağlı)","sim.namePh":"ör. Test hasta","sim.examples":"Örnek mesajlar","sim.typePh":"Hasta gibi, istediğiniz dilde yazın…","sim.newPatient":"Yeni hasta","sim.thinking":"AI cevap yazıyor…","sim.result":"Sistemin kaydettiği (veritabanından okunur)","sim.lang":"Algılanan dil","sim.score":"Lead skoru","sim.treatment":"Tedavi ilgisi","sim.readiness":"Hazırlık","sim.status":"Konuşma","sim.urgent":"ACİL DEVİR — devir kuyruğunda","sim.needsHuman":"Devredildi — koordinatör bekliyor","sim.aiHandling":"AI yürütüyor","sim.humanHandling":"Koordinatör devraldı — AI susuyor","sim.coordinator":"Atanan koordinatör","sim.none":"—","sim.medicalNote":"Tıbbi not","sim.handoverReason":"Devir nedeni","sim.openInbox":"Gelen Kutusu'nda aç","sim.secs":"sn","sim.empty":"Başlamak için bir örnek seçin ya da mesaj yazın.","sim.noReply":"(cevap yok — sunucu kaydına bakın)","sim.r.researching":"araştırıyor","sim.r.considering":"düşünüyor","sim.r.ready_to_book":"rezervasyona hazır",
+    "nav.logistics":"VIP Transfer & Lojistik","nav.postop":"Uçuşa Uygunluk & Ameliyat Sonrası","nav.pipeline":"Satış Hattı","pipe.title":"Satış Hattı","pipe.sub":"Her lead aşamasına göre. Aşamalar AI'ın konuşma okumasından otomatik güncellenir (sıcak, devredildi); bir lead'i elle de taşıyabilirsiniz — AI'dan yeni bir sıcak ya da devir sinyali gelirse yeniden taşınabilir.","pipe.new":"Yeni","pipe.hot":"Sıcak","pipe.handed_over":"Devredildi","pipe.booked":"Rezerve","pipe.lost":"Kayıp","pipe.move":"Taşı…","pipe.open":"Aç","pipe.empty":"Lead yok","pipe.truncated":"En yeni 200 konuşma gösteriliyor.","pipe.urgent":"ACİL","assist.title":"AI asistan","assist.note":"Yalnızca taslak — Gönder'e basana kadar hiçbir şey gitmez.","assist.brief":"Özetle","assist.draft":"Yanıt öner","assist.working":"AI çalışıyor…","assist.summary":"Özet","assist.tasks":"Önerilen sonraki adımlar","assist.close":"Kapat","assist.rewrite":"Taslağımı düzenle","assist.shorter":"Kısalt","assist.warmer":"Sıcak yap","assist.professional":"Resmî yap","assist.fix":"Yazımı düzelt","assist.translate":"Hastanın diline çevir","assist.needText":"Önce bir taslak yazın.","assist.draftTr":"Taslağın Türkçe çevirisi (size; hastaya gönderilmez)","assist.draftWarn":"AI taslağı — göndermeden önce okuyun ve düzenleyin.","seg.custom":"Özel segment (filtreler)","seg.status":"Aşama","seg.language":"Dil","seg.anyLang":"Hepsi","seg.minScore":"En düşük lead skoru","seg.treatment":"Tedavi içerir","seg.country":"Ülke içerir","seg.count":"Alıcı","seg.countBtn":"Alıcıları say","seg.confirm":"Şablon {n} kişiye gönderilecek. Devam edilsin mi?","seg.zero":"Bu filtrelere uyan lead yok.","nav.wizard":"Kurulum Sihirbazı","wiz.title":"Kurulum Sihirbazı","wiz.sub":"Boş bir klinikten canlı pilota sekiz adım. Her adım ne yapacağınızı ve neden gerektiğini söyler; sistem ölçebildiği yerde tik gerçek veriden gelir.","wiz.step":"Adım","wiz.of":"/","wiz.why":"Neden önemli","wiz.how":"Ne yapmalı","wiz.back":"Geri","wiz.next":"İleri","wiz.recheck":"Tekrar kontrol et","wiz.go":"Sayfayı aç","wiz.measuredDone":"Ölçüldü: tamam","wiz.measuredOpen":"Ölçüldü: henüz tamam değil","wiz.manualDone":"Elle tamam işaretlendi","wiz.manualOpen":"Sizin onayınızı bekliyor","wiz.markDone":"Yaptım — tamam işaretle","wiz.unmark":"Geri al","wiz.autoNote":"Bu adım gerçek veriden ölçülür, bu yüzden elle işaretlenemez. Yukarıdaki adımları yapın, sonra Tekrar kontrol et'e basın.","wiz.envNote":"Bu adım panelden yapılmaz. Değerler gizlidir: barındırma sağlayıcısının Environment Variables bölümüne (Vercel → Settings → Environment Variables) girilir, sonra Redeploy yapılır. Değerleri asla sohbete ya da ekran görüntüsüne yapıştırmayın.","wiz.envNames":"Değişken adları","wiz.notePh":"İsteğe bağlı not (kim / ne zaman)","wiz.allDone":"Kurulum tamam","wiz.allDoneText":"Sekiz adımın hepsi tamam. Klinik gerçek hastalarla başlayabilir.","wiz.openLeft":"adım açık","wiz.firstOpen":"İlk açık adıma git","wiz.checklist":"Kontrol listesini göster","wiz.open":"Kurulum sihirbazını aç","wiz.done":"tamam","wiz.simHint":"Hasta Simülatörü gerçek AI'ı ve gerçek devir akışını çalıştırır; bu kontrolü yapmanın en hızlı yolu budur.","nav.simulator":"Hasta Simülatörü","sim.title":"Hasta Simülatörü — canlı AI","sim.sub":"Hasta gibi yazın. Mesaj WhatsApp ile birebir aynı akıştan geçer: gerçek AI cevap verir; lead skoru, dil, devir ve koordinatör ataması veritabanına yazılır.","sim.banner":"WhatsApp'tan tek farkı: mesaj telefondan değil bu ekrandan gelir. Bu konuşmalar Gelen Kutusu'nda \"Simülatör\" etiketiyle görünür ve CRM'e gönderilmez.","sim.name":"Hasta adı (isteğe bağlı)","sim.namePh":"ör. Test hasta","sim.examples":"Örnek mesajlar","sim.typePh":"Hasta gibi, istediğiniz dilde yazın…","sim.newPatient":"Yeni hasta","sim.thinking":"AI cevap yazıyor…","sim.result":"Sistemin kaydettiği (veritabanından okunur)","sim.lang":"Algılanan dil","sim.score":"Lead skoru","sim.treatment":"Tedavi ilgisi","sim.readiness":"Hazırlık","sim.status":"Konuşma","sim.urgent":"ACİL DEVİR — devir kuyruğunda","sim.needsHuman":"Devredildi — koordinatör bekliyor","sim.aiHandling":"AI yürütüyor","sim.humanHandling":"Koordinatör devraldı — AI susuyor","sim.coordinator":"Atanan koordinatör","sim.none":"—","sim.medicalNote":"Tıbbi not","sim.handoverReason":"Devir nedeni","sim.openInbox":"Gelen Kutusu'nda aç","sim.secs":"sn","sim.empty":"Başlamak için bir örnek seçin ya da mesaj yazın.","sim.noReply":"(cevap yok — sunucu kaydına bakın)","sim.r.researching":"araştırıyor","sim.r.considering":"düşünüyor","sim.r.ready_to_book":"rezervasyona hazır",
     "nav.reviews":"Güven & Değerlendirme Motoru","nav.workflow":"İş Akışı Otomasyonu",
     "group.overview":"Genel Bakış","group.growth":"Büyüme","group.team":"Ekip","group.operations":"Operasyon",
     "cmd.sub":"Kliniğinize gelen talebin canlı görünümü.",
@@ -1874,6 +1875,9 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
   const [err, setErr] = useState(null);
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [brief, setBrief] = useState(null);
+  const [draftTr, setDraftTr] = useState(null);
+  const [assistBusy, setAssistBusy] = useState("");
   const msgsRef = useRef(null);
 
   // Tracks the CURRENT selection so an in-flight loadDetail() can tell, once
@@ -1943,12 +1947,31 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
     }catch(e){ setErr(e.message); showToast(e.message,"error"); } finally{ setBusy(false); }
   };
 
+  useEffect(()=>{ setBrief(null); setDraftTr(null); }, [selectedId]);
+  const runAssist = async (kind, fn)=>{
+    if(!selectedId||assistBusy) return;
+    setAssistBusy(kind);
+    try{ await fn(); }catch(e){ showToast(e.message,"error"); } finally{ setAssistBusy(""); }
+  };
+  const runBrief = ()=> runAssist("brief", async ()=>{ setBrief(await api("/assist/"+selectedId+"/brief",{method:"POST"})); });
+  const runDraft = ()=> runAssist("draft", async ()=>{
+    const r = await api("/assist/"+selectedId+"/reply-draft",{method:"POST"});
+    setText(r.reply); setDraftTr(r.translation_tr||null);
+  });
+  const LANG_NAME = { de:"German", en:"English", ar:"Arabic", ru:"Russian", fr:"French", it:"Italian", tr:"Turkish", az:"Azerbaijani", ku:"Kurdish" };
+  const runRewrite = (mode)=> runAssist("rewrite", async ()=>{
+    if(!text.trim()){ showToast(T("assist.needText"),"error"); return; }
+    const targetLanguage = mode==="translate" ? (LANG_NAME[detail?.lead?.language]||detail?.lead?.language) : undefined;
+    const r = await api("/assist/rewrite",{method:"POST",body:JSON.stringify({text,mode,targetLanguage})});
+    setText(r.text); setDraftTr(null);
+  });
+
   const send = async ()=>{
     const t = text.trim(); if(!t||!selectedId) return;
     setBusy(true); setErr(null);
     try{
       const res = await api("/conversations/"+selectedId+"/reply", {method:"POST", body:JSON.stringify({text:t})});
-      setText(""); await loadDetail(selectedId); await reloadShared();
+      setText(""); setDraftTr(null); await loadDetail(selectedId); await reloadShared();
       // The backend already tracks whether the actual send succeeded
       // (res.delivered) — a coordinator seeing a green "sent" toast when the
       // patient never received anything is worse than no toast at all.
@@ -2056,6 +2079,13 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
               ${isHuman ? T("inbox.youHandling") : T("inbox.aiHandling")}
             </div>
             ${conv?.urgent? html`<div class="banner" style="background:var(--alert-wash);color:var(--alert-ink);font-weight:600">${T("inbox.urgentEsc")}</div>`:null}
+            ${brief? html`<div style="padding:10px 16px;background:var(--accent-wash);border-bottom:1px solid var(--accent-line);font-size:12.5px;line-height:1.5">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><b>${T("assist.summary")}</b>
+                <button class="btn" style="padding:2px 8px;font-size:11px" onClick=${()=>setBrief(null)}>${T("assist.close")}</button></div>
+              <ul style="margin:0 0 8px;padding-left:18px">${(brief.summary||[]).map((x,i)=> html`<li key=${i}>${x}</li>`)}</ul>
+              ${(brief.tasks||[]).length? html`<b>${T("assist.tasks")}</b>
+                <ul style="margin:4px 0 0;padding-left:18px">${brief.tasks.map((t,i)=> html`<li key=${i}><b>${t.title}</b>${t.why? html` <span style="color:var(--ink-2)">— ${t.why}</span>`:null}</li>`)}</ul>`:null}
+            </div>`:null}
             <div class="msgs" ref=${msgsRef}>
               ${(detail.messages||[]).map((m,i)=> html`
                 <div class="bubble ${m.role} ${rtl?"rtl":""}" key=${i}>
@@ -2065,6 +2095,17 @@ function Inbox({ conversations, selectedId, setSelectedId, reloadShared, pending
                 </div>`)}
               ${(detail.messages||[]).length===0?html`<div class="empty">${T("inbox.noMessages")}</div>`:null}
             </div>
+            <div style="padding:8px 12px 0;border-top:1px solid var(--rule);display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <span style="font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)" title=${T("assist.note")}>✨ ${T("assist.title")}</span>
+              <button class="btn" style="padding:3px 9px;font-size:12px" disabled=${!!assistBusy} onClick=${runBrief}>${T("assist.brief")}</button>
+              <button class="btn" style="padding:3px 9px;font-size:12px" disabled=${!!assistBusy} onClick=${runDraft}>${T("assist.draft")}</button>
+              <span style="color:var(--ink-3);font-size:11px;margin-left:4px">${T("assist.rewrite")}:</span>
+              ${["shorter","warmer","professional","fix"].map((m)=> html`<button key=${m} class="btn" style="padding:3px 8px;font-size:11.5px" disabled=${!!assistBusy||!text.trim()} onClick=${()=>runRewrite(m)}>${T("assist."+m)}</button>`)}
+              ${lead?.language && lead.language!=="tr"? html`<button class="btn" style="padding:3px 8px;font-size:11.5px" disabled=${!!assistBusy||!text.trim()} onClick=${()=>runRewrite("translate")}>${T("assist.translate")} (${flag(lead.language)})</button>`:null}
+              ${assistBusy? html`<span style="font-size:12px;color:var(--ink-2);display:inline-flex;gap:6px;align-items:center"><${Spinner}/> ${T("assist.working")}</span>`:null}
+            </div>
+            ${draftTr? html`<div style="margin:8px 12px 0;padding:8px 10px;border-radius:var(--r-sm);background:var(--brass-wash);border:1px solid var(--brass);font-size:12px;line-height:1.45">
+              <b>${T("assist.draftWarn")}</b><br/><span style="color:var(--ink-2)">${T("assist.draftTr")}:</span> ${draftTr}</div>`:null}
             <div class="composer">
               <textarea placeholder=${isHuman?T("inbox.typeReply"):T("inbox.takeOverHint")} value=${text}
                 onInput=${(e)=>setText(e.target.value)}
@@ -3397,13 +3438,26 @@ function Campaigns({ templates, reloadShared }){
   const [offer,setOffer]=useState(T("campaigns.defaultOffer"));
   const [result,setResult]=useState(null);
   const [busy,setBusy]=useState(false);
+  const [flt,setFlt]=useState({statuses:[],language:"",minScore:"",treatment:"",country:""});
+  const [segCount,setSegCount]=useState(null);
+  const setF=(k,v)=>{ setFlt((f)=>({...f,[k]:v})); setSegCount(null); };
+  const toggleStatus=(st)=> setF("statuses", flt.statuses.includes(st)? flt.statuses.filter((x)=>x!==st) : flt.statuses.concat(st));
+  const countSeg=async()=>{
+    try{ const r=await api("/campaigns/segment-preview",{method:"POST",body:JSON.stringify({filter:flt})}); setSegCount(r.recipients); }
+    catch(e){ showToast(e.message,"error"); }
+  };
   useEffect(()=>{ if(templates.length && !tpl) setTpl(templates[0].key); }, [templates, tpl]);
   const current=templates.find(t=>t.key===tpl);
   const needsOffer=current?.params?.includes("offer");
   const send=async()=>{
+    if(segment==="custom"){
+      if(segCount===null){ showToast(T("seg.countBtn"),"error"); return; }
+      if(segCount===0){ showToast(T("seg.zero"),"error"); return; }
+      if(!window.confirm(T("seg.confirm").replace("{n}",String(segCount)))) return;
+    }
     setBusy(true); setResult(null);
     try{
-      const r=await api("/campaigns/broadcast",{method:"POST",body:JSON.stringify({template:tpl,segment,variables:needsOffer?{offer}:{}})});
+      const r=await api("/campaigns/broadcast",{method:"POST",body:JSON.stringify({template:tpl,segment,filter:segment==="custom"?flt:undefined,variables:needsOffer?{offer}:{}})});
       setResult(r); reloadShared(); showToast(`Broadcast sent to ${r.sent} of ${r.recipients}`);
     }catch(e){ setResult({error:e.message}); } finally{ setBusy(false); }
   };
@@ -3423,7 +3477,20 @@ function Campaigns({ templates, reloadShared }){
         <option value="hot">${T("kpi.hotLeads")}</option>
         <option value="new">${T("seg.new")}</option>
         <option value="all">${T("seg.all")}</option>
+        <option value="custom">${T("seg.custom")}</option>
       </select>
+      ${segment==="custom"? html`<div style="padding:12px;border:1px solid var(--rule);border-radius:var(--r-sm);margin-bottom:14px;background:var(--paper-2)">
+        <div style="font-size:12px;color:var(--ink-2);margin-bottom:6px">${T("seg.status")}</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${["new","hot","handed_over","booked","lost"].map((st)=> html`<label key=${st} style="font-size:12.5px;display:inline-flex;gap:5px;align-items:center"><input type="checkbox" checked=${flt.statuses.includes(st)} onChange=${()=>toggleStatus(st)}/> ${T("pipe."+st)}</label>`)}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px">
+          <label style="font-size:12px;color:var(--ink-2)">${T("seg.language")}<select value=${flt.language} onChange=${(e)=>setF("language",e.target.value)} style="width:100%"><option value="">${T("seg.anyLang")}</option>${["de","en","ar","ru","fr","it","tr"].map((l)=> html`<option key=${l} value=${l}>${l.toUpperCase()}</option>`)}</select></label>
+          <label style="font-size:12px;color:var(--ink-2)">${T("seg.minScore")}<input type="number" min="0" max="100" value=${flt.minScore} onInput=${(e)=>setF("minScore",e.target.value)} style="width:100%"/></label>
+          <label style="font-size:12px;color:var(--ink-2)">${T("seg.treatment")}<input value=${flt.treatment} onInput=${(e)=>setF("treatment",e.target.value)} style="width:100%"/></label>
+          <label style="font-size:12px;color:var(--ink-2)">${T("seg.country")}<input value=${flt.country} onInput=${(e)=>setF("country",e.target.value)} style="width:100%"/></label>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center"><button class="btn" onClick=${countSeg}>${T("seg.countBtn")}</button>
+          ${segCount!==null? html`<b>${T("seg.count")}: ${segCount}</b>`:null}</div>
+      </div>`:null}
       ${current? html`<div class="est" style="background:var(--accent-wash);border-color:var(--accent-line)">
         ${T("campaigns.preview")} ${current.preview.replaceAll("{{1}}","[name]").replace("{{2}}", needsOffer?offer:"[value]")}</div>`:null}
       <button class="btn primary" disabled=${busy||!tpl} onClick=${send}>${busy?T("btn.sending"):T("btn.sendBroadcast")}</button>
@@ -4327,6 +4394,59 @@ function Workflow(){
   </div>`;
 }
 
+// ── Satış Hattı (kanban) ───────────────────────────────────────────────────
+// Veri /conversations'tan (gerçek lead aşamaları). Aşamaları AI otomatik
+// günceller; elle taşıma PATCH /conversations/:id {status}. Sürükle-bırak yok:
+// seçim kutusu hem dokunmatikte hem klavyede çalışır.
+const PIPE_STAGES=["new","hot","handed_over","booked","lost"];
+function Pipeline({onOpenInbox, branchId}){
+  const [items,setItems]=useState(null);
+  const [total,setTotal]=useState(0);
+  const [err,setErr]=useState(null);
+  const [busyId,setBusyId]=useState("");
+  const load=useCallback(()=> api("/conversations?limit=200"+(branchId&&branchId!=="all"?"&branch_id="+encodeURIComponent(branchId):"")).then((p)=>{ setItems(p.items||[]); setTotal(p.total||0); setErr(null); }).catch((e)=>setErr(e.message)),[branchId]);
+  useEffect(()=>{ load(); },[load]);
+  if(err&&!items) return html`<div class="err">${err}</div>`;
+  if(!items) return loadingBox();
+  const move=async(c,status)=>{
+    if(!status||status===c.lead_status) return;
+    setBusyId(c.lead_id);
+    try{ await api("/conversations/"+c.lead_id,{method:"PATCH",body:JSON.stringify({status})}); await load(); showToast(T("admin.saved")); }
+    catch(e){ showToast(e.message,"error"); } finally{ setBusyId(""); }
+  };
+  const by={}; PIPE_STAGES.forEach((k)=>by[k]=[]);
+  items.forEach((c)=>{ (by[c.lead_status]||by.new).push(c); });
+  return html`<div>
+    <h1>${T("pipe.title")}</h1>
+    <div class="sub">${T("pipe.sub")}</div>
+    ${total>items.length? html`<div class="sub" style="margin-top:-8px">${T("pipe.truncated")}</div>`:null}
+    <div style="display:grid;grid-template-columns:repeat(5,minmax(210px,1fr));gap:12px;overflow-x:auto;padding-bottom:8px" class="pipe-grid">
+      ${PIPE_STAGES.map((st)=> html`<div key=${st} class="glass" style="padding:10px;min-width:210px;background:var(--paper-2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b style="font-size:12.5px">${T("pipe."+st)}</b><span class="badge ${st==="hot"?"hot":st==="booked"?"human":""}">${by[st].length}</span></div>
+        ${by[st].length===0? html`<div style="color:var(--ink-3);font-size:12px;padding:8px 2px">${T("pipe.empty")}</div>`:null}
+        ${by[st].map((c)=> html`<div key=${c.lead_id} class="glass" style="padding:9px 10px;margin-bottom:8px;background:var(--paper)">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:3px">
+            <span style="font-size:12px">${flag(c.language)}</span>
+            <b style="font-size:12.5px;overflow-wrap:anywhere">${leadIdentity(c)}</b>
+            ${channelBadge(c.source)}
+            ${c.urgent? html`<span class="badge urgent">${T("pipe.urgent")}</span>`:null}
+            ${c.score!=null? html`<span class="badge ${c.score>=85?"vip":c.score>=70?"hot":""}">${c.score}</span>`:null}
+          </div>
+          <div style="font-size:11.5px;color:var(--ink-2);overflow-wrap:anywhere;max-height:3.2em;overflow:hidden">${c.last_message||""}</div>
+          <div style="display:flex;gap:6px;margin-top:7px">
+            <button class="btn" style="padding:2px 8px;font-size:11px" onClick=${()=>onOpenInbox(c.lead_id)}>${T("pipe.open")} →</button>
+            <select aria-label=${T("pipe.move")} disabled=${busyId===c.lead_id} value="" onChange=${(e)=>move(c,e.target.value)} style="font-size:11px;padding:2px 4px;flex:1;min-width:0">
+              <option value="">${T("pipe.move")}</option>
+              ${PIPE_STAGES.filter((x)=>x!==st).map((x)=> html`<option key=${x} value=${x}>${T("pipe."+x)}</option>`)}
+            </select>
+          </div>
+        </div>`)}
+      </div>`)}
+    </div>
+  </div>`;
+}
+
 // ── Kurulum Sihirbazı ───────────────────────────────────────────────────────
 // Adım listesi, durumlar ve "tamam" bilgisi /api/setup-checklist'ten gelir
 // (sunucu tarafı gerçek veriden ölçer). Burada yalnızca anlatım var. Otomatik
@@ -4542,6 +4662,7 @@ function Simulator({onOpenInbox}){
 const NAV_META={
   command:{label:"nav.command",icon:"grid"},
   inbox:{label:"nav.inbox",icon:"inbox"},
+  pipeline:{label:"nav.pipeline",icon:"workflow"},
   wizard:{label:"nav.wizard",icon:"firstaid"},
   simulator:{label:"nav.simulator",icon:"wand"},
   analytics:{label:"nav.analytics",icon:"chart"},
@@ -4562,12 +4683,12 @@ const NAV_META={
   benchmark:{label:"nav.benchmark",icon:"stopwatch"},
 };
 const NAV_GROUPS=[
-  ["group.overview",["command","wizard","inbox","simulator","compliance"]],
+  ["group.overview",["command","wizard","inbox","pipeline","simulator","compliance"]],
   ["group.growth",["analytics","benchmark","campaigns","widget","studio","partners"]],
   ["group.team",["consultants","matching","doctors","branches"]],
   ["group.operations",["devices","logistics","postop","reviews","workflow"]],
 ];
-const ENABLED = new Set(["command","wizard","inbox","simulator","compliance","analytics","benchmark","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
+const ENABLED = new Set(["command","wizard","inbox","pipeline","simulator","compliance","analytics","benchmark","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
 
 const ICONS={
   grid:'<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
@@ -4730,6 +4851,7 @@ function App(){
         <div class="view" key=${tab} hidden=${!fatal && stats===null}>
         <${ErrorBoundary} key=${"eb-"+tab}>
         ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} roi=${roi} responseTime=${responseTime} onOpenLead=${openLead} />`
+          : tab==="pipeline" ? html`<${Pipeline} branchId=${branchId} onOpenInbox=${(id)=>{ setSelectedId(id); setTab("inbox"); reloadShared(); }} />`
           : tab==="wizard" ? html`<${SetupWizard} onGoTab=${(t)=>setTab(t)} />`
           : tab==="simulator" ? html`<${Simulator} onOpenInbox=${(id)=>{ setSelectedId(id); setTab("inbox"); reloadShared(); }} />`
           : tab==="compliance" ? html`<${Compliance} />`

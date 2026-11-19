@@ -11,6 +11,7 @@ import { createCheckoutForm } from '../services/iyzico.js';
 import { sendToLead } from '../services/channelSend.js';
 import { getAutomationStatus } from '../services/automationStatus.js';
 import { runSimulatorTurn } from './webhook.js';
+import { summarizeConversation, suggestReply, rewriteText, AssistError } from '../services/agentAssist.js';
 import { getSimulatorSnapshot } from '../store/repository.js';
 import { guardUuidParams } from '../middleware/validateUuidParams.js';
 import { rateLimit } from '../middleware/rateLimit.js';
@@ -38,6 +39,7 @@ import {
   createWidgetLead,
   getAnalytics,
   getLeadsBySegment,
+  getLeadsByFilter,
   getConsultantMetrics,
   schedulePostOp,
   getPostOpOverview,
@@ -747,6 +749,32 @@ apiRouter.post('/simulator/message', h(async (req, res) => {
   res.json({ reply, lead: snapshot });
 }));
 
+// ── AI Asistan (koordinatör için) ─────────────────────────────────────────
+// Özet + görev önerisi, yanıt taslağı, metin düzenleme. Hastaya hiçbir şey
+// göndermez; sonucu panele döner. Panel jetonu arkasında, her çağrı ücretli bir
+// AI çağrısıdır.
+const assistErr = (res, err) => {
+  if (err instanceof AssistError) return res.status(err.status).json({ error: err.message });
+  throw err;
+};
+apiRouter.post('/assist/:leadId/brief', h(async (req, res) => {
+  const detail = await getConversationDetail(req.params.leadId);
+  if (!detail) return res.status(404).json({ error: 'Lead not found' });
+  try { res.json(await summarizeConversation({ lead: detail.lead, messages: detail.messages })); }
+  catch (err) { assistErr(res, err); }
+}));
+apiRouter.post('/assist/:leadId/reply-draft', h(async (req, res) => {
+  const detail = await getConversationDetail(req.params.leadId);
+  if (!detail) return res.status(404).json({ error: 'Lead not found' });
+  try { res.json(await suggestReply({ lead: detail.lead, messages: detail.messages })); }
+  catch (err) { assistErr(res, err); }
+}));
+apiRouter.post('/assist/rewrite', h(async (req, res) => {
+  const { text, mode, targetLanguage } = req.body || {};
+  try { res.json(await rewriteText({ text, mode, targetLanguage })); }
+  catch (err) { assistErr(res, err); }
+}));
+
 // Coordinator marks a quote accepted — after a phone call, an in-person
 // confirmation, or a WhatsApp reply the AI doesn't yet parse as acceptance.
 // A manual switch is honest here: there is no online "accept" flow yet.
@@ -1179,6 +1207,12 @@ apiRouter.put('/settings', h(async (req, res) => {
   res.json(updated);
 }));
 
+// Gönderimden ÖNCE kaç kişiye gideceğini gösterir (ad/telefon dönmez, yalnız sayı).
+apiRouter.post('/campaigns/segment-preview', h(async (req, res) => {
+  const leads = await getLeadsByFilter(req.body?.filter || {});
+  res.json({ recipients: leads.length });
+}));
+
 // Broadcast an approved template to a segment of leads.
 // body: { template: 'reengagement', segment: 'past'|'all'|'hot'|'new', variables?: {offer?, date?} }
 apiRouter.post('/campaigns/broadcast', h(async (req, res) => {
@@ -1186,7 +1220,7 @@ apiRouter.post('/campaigns/broadcast', h(async (req, res) => {
   const tpl = TEMPLATES[template];
   if (!tpl) return res.status(400).json({ error: 'Unknown template' });
 
-  const leads = await getLeadsBySegment(segment);
+  const leads = segment === 'custom' ? await getLeadsByFilter(req.body?.filter || {}) : await getLeadsBySegment(segment);
   let sent = 0;
   const results = [];
   for (const lead of leads) {

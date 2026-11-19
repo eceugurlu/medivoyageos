@@ -26,10 +26,10 @@ if (!dbEnabled) {
 // Demo konuşmalarının kim olduğu. AI açıkken bu alanları concierge kendisi
 // çıkarır; kredi yokken elle veriyoruz ki alt sistemler test edilebilsin.
 const PROFILES = [
-  { phone: '491771111111', language: 'de', country: 'Germany',        treatment: 'Hair transplant (FUE)', budget: '€2.500–3.500', score: 82, lead: 'booked',      conv: 'ai_handling' },
-  { phone: '971502222222', language: 'ar', country: 'UAE',            treatment: 'Hair transplant',        budget: '€3.000',        score: 76, lead: 'hot',         conv: 'ai_handling' },
-  { phone: '447703333333', language: 'en', country: 'United Kingdom', treatment: 'Revision surgery',       budget: null,            score: 41, lead: 'handed_over', conv: 'needs_human' },
-  { phone: '33612345678',  language: 'fr', country: 'France',         treatment: 'Dental veneers',         budget: '€4.000–5.000',  score: 68, lead: 'hot',         conv: 'human_handling' },
+  { phone: '999000000101', language: 'de', country: 'Germany',        treatment: 'Hair transplant (FUE)', budget: '€2.500–3.500', score: 82, lead: 'booked',      conv: 'ai_handling' },
+  { phone: '999000000102', language: 'ar', country: 'UAE',            treatment: 'Hair transplant',        budget: '€3.000',        score: 76, lead: 'hot',         conv: 'ai_handling' },
+  { phone: '999000000103', language: 'en', country: 'United Kingdom', treatment: 'Revision surgery',       budget: null,            score: 41, lead: 'handed_over', conv: 'needs_human' },
+  { phone: '999000000104', language: 'fr', country: 'France',         treatment: 'Dental veneers',         budget: '€4.000–5.000',  score: 68, lead: 'hot',         conv: 'human_handling' },
 ];
 
 // Cihaz başına bugün kaç slot dolsun. repository.js'teki SLOTS_PER_DAY = 6, yani

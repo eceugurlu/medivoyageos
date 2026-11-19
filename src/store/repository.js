@@ -2083,12 +2083,13 @@ export async function seedCoordinatorsIfEmpty() {
   if (c.rows[0].n > 0) return false;
   const clinicId = await getDefaultClinicId();
   await pool.query(
+    // Örnek koordinatörler — gerçek kişi adına benzemesin diye dil etiketli.
     `INSERT INTO coordinators (clinic_id, name, languages) VALUES
-      ($1,'Anna Weber',   '{de,en}'),
-      ($1,'Omar Haddad',  '{ar,en}'),
-      ($1,'Dmitry Volkov','{ru,en}'),
-      ($1,'Sophie Dubois','{fr,en}'),
-      ($1,'Mehmet Demir', '{tr,en}')`,
+      ($1,'Örnek Koordinatör (DE)','{de,en}'),
+      ($1,'Örnek Koordinatör (AR)','{ar,en}'),
+      ($1,'Örnek Koordinatör (RU)','{ru,en}'),
+      ($1,'Örnek Koordinatör (FR)','{fr,en}'),
+      ($1,'Örnek Koordinatör (TR)','{tr,en}')`,
     [clinicId],
   );
   return true;
@@ -2671,6 +2672,23 @@ export async function getConsultantMetrics({ branchId = null } = {}) {
     }),
     unmatched_languages: gaps.rows.map((r) => r.language),
   };
+}
+
+// Panel simülatörü: bir turdan sonra lead'in ve konuşmanın GERÇEK durumu —
+// ekranda gösterilen her alan doğrudan veritabanından okunur, AI'ın cevabından
+// tahmin edilmez.
+export async function getSimulatorSnapshot(leadId) {
+  const { rows } = await pool.query(
+    `SELECT l.id, l.name, l.language, l.treatment_interest, l.readiness, l.score, l.status,
+            l.medical_note, co.name AS coordinator_name,
+            c.status AS conversation_status, c.urgent, c.handover_reason
+       FROM leads l
+       LEFT JOIN conversations c ON c.lead_id = l.id
+       LEFT JOIN coordinators co ON co.id = l.coordinator_id
+      WHERE l.id = $1`,
+    [leadId],
+  );
+  return rows[0] || null;
 }
 
 // ── Post-Op & Trust/Review (Modül 8+9) ──────────────────────────────────────

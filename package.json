@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --watch -r dotenv/config src/server.js dotenv_config_path=.env.local",
     "check:ai": "node scripts/ai-quality-check.mjs",
+    "check:simulator": "node scripts/test-simulator-live.mjs",
     "check:monitoring": "node scripts/test-health-monitor.mjs",
     "check:weekly-report": "node scripts/test-weekly-report.mjs",
     "check:ai-cost": "node scripts/test-ai-cost.mjs",

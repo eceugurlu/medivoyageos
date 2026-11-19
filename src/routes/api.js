@@ -10,6 +10,8 @@ import { createCheckoutSession } from '../services/stripe.js';
 import { createCheckoutForm } from '../services/iyzico.js';
 import { sendToLead } from '../services/channelSend.js';
 import { getAutomationStatus } from '../services/automationStatus.js';
+import { runSimulatorTurn } from './webhook.js';
+import { getSimulatorSnapshot } from '../store/repository.js';
 import { guardUuidParams } from '../middleware/validateUuidParams.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import {
@@ -728,6 +730,21 @@ apiRouter.post('/quotes/:quoteId/send', h(async (req, res) => {
     return res.status(502).json({ error: `Send failed: ${err.message}` });
   }
   res.json(await markQuoteSent(quote.id));
+}));
+
+// Panel simülatörü — koordinatör hasta yerine yazar, mesaj WhatsApp ile aynı
+// boru hattından geçer (bkz. webhook.js runSimulatorTurn). Panel jetonu
+// arkasında: her çağrı gerçek bir AI çağrısıdır (ücretli), herkese açık değil.
+const SIM_SESSION_RE = /^[a-z0-9-]{8,64}$/;
+apiRouter.post('/simulator/message', h(async (req, res) => {
+  const sessionId = String(req.body?.sessionId || '').toLowerCase();
+  const text = String(req.body?.text || '').trim().slice(0, 2000);
+  const name = String(req.body?.name || '').trim().slice(0, 80) || null;
+  if (!SIM_SESSION_RE.test(sessionId)) return res.status(400).json({ error: 'invalid sessionId' });
+  if (!text) return res.status(400).json({ error: 'Empty message' });
+  const { reply, leadId } = await runSimulatorTurn({ sessionId, name, userText: text });
+  const snapshot = leadId ? await getSimulatorSnapshot(leadId) : null;
+  res.json({ reply, lead: snapshot });
 }));
 
 // Coordinator marks a quote accepted — after a phone call, an in-person

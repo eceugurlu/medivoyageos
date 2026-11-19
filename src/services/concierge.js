@@ -223,7 +223,7 @@ export async function generateReply({ history, userText, image }) {
   // own words — clearly labelled as raw text, never presented as a summary.
   if (handover.urgent && lead && !lead.medical_note) {
     const raw = String(userText || '').replace(/\s+/g, ' ').trim().slice(0, 300);
-    if (raw) lead.medical_note = `[otomatik — hastanin kendi sozleri] ${raw}`;
+    if (raw) lead.medical_note = `[otomatik — hastanın kendi sözleri] ${raw}`;
   }
   return {
     reply: parsed.reply,

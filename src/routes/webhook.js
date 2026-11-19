@@ -291,7 +291,7 @@ async function _handleMetaMessagingEvent(body, channel) {
 // (or fall back), persist the exchange, reply on the right channel, notify a
 // human on handover, route to a language-matched coordinator, sync to CRM.
 // Only sendReply (and the identity/profileName used for logging) differs.
-async function processConversationTurn({ channel, identity, profileName, userText, image, history, ctx, sendReply, showTyping }) {
+async function processConversationTurn({ channel, identity, profileName, userText, image, history, ctx, sendReply, showTyping, skipCrm = false }) {
   // If a human agent has taken over this conversation, don't auto-reply.
   // The patient's message is already saved — loadContext() claimed/inserted
   // it atomically before this function was even called — so there's nothing
@@ -434,7 +434,7 @@ async function processConversationTurn({ channel, identity, profileName, userTex
   // ── CRM sync (Zoho) ────────────────────────────────────────────────────────
   // Runs AFTER the reply is sent, so Zoho latency never delays the patient.
   // Best-effort: a CRM failure is logged and swallowed.
-  if (zohoEnabled && leadRow) {
+  if (zohoEnabled && leadRow && !skipCrm) {
     try {
       const crmId = await syncLeadToCrm(leadRow, { lastUserText: userText, lastReply: reply });
       if (crmId && crmId !== leadRow.crm_lead_id) await setCrmLeadId(ctx.leadId, crmId);
@@ -442,4 +442,38 @@ async function processConversationTurn({ channel, identity, profileName, userTex
       console.error('[zoho] sync failed (non-fatal):', err.message);
     }
   }
+}
+
+// ── Panel simülatörü ───────────────────────────────────────────────────────
+// Koordinatör panelden "hasta gibi" yazar; mesaj WhatsApp/Instagram ile AYNI
+// boru hattından geçer (loadContext → gerçek AI → saveExchange → skor/devir →
+// koordinatör ataması → devir bildirimi). Tek farklar: cevap bir kanala
+// gönderilmek yerine çağırana döner, lead source='simulator' olarak kaydedilir
+// (gelen kutusunda ayrı etiketle görünür) ve CRM'e senkronlanmaz. Demo için
+// "gerçek sistem çalışıyor mu" sorusunun dürüst cevabı: kanal hariç her şey
+// gerçek.
+export async function runSimulatorTurn({ sessionId, name, userText }) {
+  const { duplicate, history, ctx } = await loadContext({
+    externalId: sessionId,
+    source: 'simulator',
+    name: name || null,
+    wamid: null,
+    userText,
+    image: null,
+  });
+  if (duplicate) return { reply: null, leadId: ctx?.leadId || null };
+  let captured = null;
+  await processConversationTurn({
+    channel: 'simulator',
+    identity: `simulator:${sessionId}`,
+    profileName: name || null,
+    userText,
+    image: null,
+    history,
+    ctx,
+    sendReply: async (text) => { captured = text; },
+    showTyping: null,
+    skipCrm: true,
+  });
+  return { reply: captured, leadId: ctx?.leadId || null };
 }

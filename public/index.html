@@ -413,6 +413,7 @@
     color:var(--ink-3);margin-top:7px;
   }
   .composer{border-top:1px solid var(--rule);padding:12px;display:flex;gap:10px;align-items:flex-end}
+  @media (max-width:900px){ .sim-grid{grid-template-columns:1fr !important} }
 
   /* ── Fields ───────────────────────────────────────────────────────────── */
   textarea,.main input,.main select{
@@ -703,7 +704,7 @@ const I18N = {
     "nav.command":"Command Center","nav.inbox":"Omnichannel Inbox","nav.analytics":"CAC & ROAS Analytics",
     "nav.campaigns":"WhatsApp Broadcast","nav.studio":"AI Prompt Studio","nav.widget":"Lead Widget",
     "nav.consultants":"Consultant Performance","nav.matching":"Language Matching","nav.devices":"Smart Device Booking",
-    "nav.logistics":"VIP Transfer & Logistics","nav.postop":"Fit-to-Fly & Post-Op","nav.reviews":"Trust & Review Engine",
+    "nav.logistics":"VIP Transfer & Logistics","nav.postop":"Fit-to-Fly & Post-Op","nav.simulator":"Patient Simulator","sim.title":"Patient Simulator — live AI","sim.sub":"Type as a patient. The message runs through exactly the same pipeline as WhatsApp: the real AI replies, and the lead score, language, handover and coordinator assignment are written to the database.","sim.banner":"Only difference from WhatsApp: the message comes from this screen instead of a phone. These conversations appear in the Inbox tagged Simulator and are never sent to the CRM.","sim.name":"Patient name (optional)","sim.namePh":"e.g. Test patient","sim.examples":"Example messages","sim.typePh":"Write as the patient, in any language…","sim.newPatient":"New patient","sim.thinking":"AI is replying…","sim.result":"What the system recorded (read from the database)","sim.lang":"Detected language","sim.score":"Lead score","sim.treatment":"Treatment interest","sim.readiness":"Readiness","sim.status":"Conversation","sim.urgent":"URGENT handover — in the handover queue","sim.needsHuman":"Handed over — waiting for a coordinator","sim.aiHandling":"AI is handling it","sim.humanHandling":"A coordinator has taken over — AI is silent","sim.coordinator":"Assigned coordinator","sim.none":"—","sim.medicalNote":"Medical note","sim.handoverReason":"Handover reason","sim.openInbox":"Open in Inbox","sim.secs":"s","sim.empty":"Pick an example or type a message to start.","sim.noReply":"(no reply — see server log)","sim.r.researching":"researching","sim.r.considering":"considering","sim.r.ready_to_book":"ready to book","nav.reviews":"Trust & Review Engine",
     "nav.workflow":"Workflow Automation",
     "group.overview":"Overview","group.growth":"Growth","group.team":"Team","group.operations":"Operations",
     "cmd.sub":"Live overview of your clinic's inbound demand.",
@@ -1036,7 +1037,7 @@ const I18N = {
     "nav.command":"Komuta Merkezi","nav.inbox":"Tüm Kanallar Gelen Kutusu","nav.analytics":"CAC & ROAS Analizi",
     "nav.campaigns":"WhatsApp Toplu Gönderim","nav.studio":"AI Prompt Stüdyosu","nav.widget":"Lead Widget'ı",
     "nav.consultants":"Danışman Performansı","nav.matching":"Dil Eşleştirme","nav.devices":"Akıllı Cihaz Rezervasyonu",
-    "nav.logistics":"VIP Transfer & Lojistik","nav.postop":"Uçuşa Uygunluk & Ameliyat Sonrası",
+    "nav.logistics":"VIP Transfer & Lojistik","nav.postop":"Uçuşa Uygunluk & Ameliyat Sonrası","nav.simulator":"Hasta Simülatörü","sim.title":"Hasta Simülatörü — canlı AI","sim.sub":"Hasta gibi yazın. Mesaj WhatsApp ile birebir aynı akıştan geçer: gerçek AI cevap verir; lead skoru, dil, devir ve koordinatör ataması veritabanına yazılır.","sim.banner":"WhatsApp'tan tek farkı: mesaj telefondan değil bu ekrandan gelir. Bu konuşmalar Gelen Kutusu'nda \"Simülatör\" etiketiyle görünür ve CRM'e gönderilmez.","sim.name":"Hasta adı (isteğe bağlı)","sim.namePh":"ör. Test hasta","sim.examples":"Örnek mesajlar","sim.typePh":"Hasta gibi, istediğiniz dilde yazın…","sim.newPatient":"Yeni hasta","sim.thinking":"AI cevap yazıyor…","sim.result":"Sistemin kaydettiği (veritabanından okunur)","sim.lang":"Algılanan dil","sim.score":"Lead skoru","sim.treatment":"Tedavi ilgisi","sim.readiness":"Hazırlık","sim.status":"Konuşma","sim.urgent":"ACİL DEVİR — devir kuyruğunda","sim.needsHuman":"Devredildi — koordinatör bekliyor","sim.aiHandling":"AI yürütüyor","sim.humanHandling":"Koordinatör devraldı — AI susuyor","sim.coordinator":"Atanan koordinatör","sim.none":"—","sim.medicalNote":"Tıbbi not","sim.handoverReason":"Devir nedeni","sim.openInbox":"Gelen Kutusu'nda aç","sim.secs":"sn","sim.empty":"Başlamak için bir örnek seçin ya da mesaj yazın.","sim.noReply":"(cevap yok — sunucu kaydına bakın)","sim.r.researching":"araştırıyor","sim.r.considering":"düşünüyor","sim.r.ready_to_book":"rezervasyona hazır",
     "nav.reviews":"Güven & Değerlendirme Motoru","nav.workflow":"İş Akışı Otomasyonu",
     "group.overview":"Genel Bakış","group.growth":"Büyüme","group.team":"Ekip","group.operations":"Operasyon",
     "cmd.sub":"Kliniğinize gelen talebin canlı görünümü.",
@@ -1445,7 +1446,7 @@ const flag = (l)=> l? String(l).toUpperCase() : "—";
 // Instagram/Messenger leads have no phone (see external_id) and often no
 // name yet either, until the AI extracts one from conversation — without a
 // fallback, that row would render blank in the Inbox/Action Center.
-const CHANNEL_LABEL = { whatsapp: "WhatsApp", widget: "Web", instagram: "Instagram", messenger: "Messenger" };
+const CHANNEL_LABEL = { whatsapp: "WhatsApp", widget: "Web", instagram: "Instagram", messenger: "Messenger", simulator: "Simülatör" };
 const leadIdentity = (l)=> l.name || l.phone || (l.external_id ? `${CHANNEL_LABEL[l.source]||"Chat"} user` : "—");
 // A small neutral badge naming the channel — shown only for non-WhatsApp
 // sources, since WhatsApp is the default/implicit one and doesn't need calling out.
@@ -4325,10 +4326,95 @@ function Workflow(){
   </div>`;
 }
 
+// ── Hasta Simülatörü ────────────────────────────────────────────────────────
+// Gerçek AI, gerçek boru hattı (POST /api/simulator/message → webhook.js
+// runSimulatorTurn). Sağdaki kart AI'ın cevabından DEĞİL, turdan sonra
+// veritabanından okunan lead/konuşma satırından çizilir.
+const SIM_EXAMPLES=[
+  {label:"🇸🇦 Arapça — ameliyat sonrası kanama", text:"عندي نزيف بعد العملية، أحتاج مساعدة الآن"},
+  {label:"🇩🇪 Almanca — veneer fiyatı", text:"Guten Tag, was kosten Veneers bei Ihnen? Ich möchte im März kommen."},
+  {label:"🇬🇧 İngilizce — saç ekimi, rezervasyona hazır", text:"Hi, I want a hair transplant. My budget is around €2,500 and I can fly next month. How do I book and pay the deposit?"},
+  {label:"🇷🇺 Rusça — rinoplasti", text:"Здравствуйте! Сколько стоит ринопластика и сколько дней нужно провести в Стамбуле?"},
+];
+const newSimSession=()=> "sim-"+((window.crypto&&crypto.randomUUID)? crypto.randomUUID() : (Date.now().toString(36)+Math.random().toString(36).slice(2,12)));
+function Simulator({onOpenInbox}){
+  const [sid,setSid]=useState(newSimSession);
+  const [name,setName]=useState("");
+  const [text,setText]=useState("");
+  const [msgs,setMsgs]=useState([]);
+  const [lead,setLead]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState(null);
+  const msgsRef=useRef(null);
+  useEffect(()=>{ if(msgsRef.current) msgsRef.current.scrollTop=msgsRef.current.scrollHeight; },[msgs,busy]);
+  const send=async(preset)=>{
+    const body=(preset!=null?preset:text).trim();
+    if(!body||busy) return;
+    setBusy(true); setErr(null); setText("");
+    setMsgs(m=>[...m,{role:"user",content:body}]);
+    const t0=performance.now();
+    try{
+      const r=await api("/simulator/message",{method:"POST",body:JSON.stringify({sessionId:sid,name:name.trim()||null,text:body})});
+      setMsgs(m=>[...m,{role:"assistant",content:r.reply||T("sim.noReply"),secs:((performance.now()-t0)/1000).toFixed(1)}]);
+      setLead(r.lead||null);
+    }catch(x){ setErr(x.message); }
+    finally{ setBusy(false); }
+  };
+  const reset=()=>{ setSid(newSimSession()); setMsgs([]); setLead(null); setErr(null); setText(""); };
+  const rtl=(t)=>/[؀-ۿ]/.test(t||"");
+  const status=lead? (lead.conversation_status==="needs_human"? (lead.urgent? html`<span class="badge urgent">${T("sim.urgent")}</span>` : html`<span class="badge awaiting">${T("sim.needsHuman")}</span>`)
+    : lead.conversation_status==="human_handling"? html`<span class="badge human">${T("sim.humanHandling")}</span>`
+    : html`<span class="badge">${T("sim.aiHandling")}</span>`) : null;
+  const row=(k,v)=> html`<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:13px"><span style="color:var(--ink-2)">${k}</span><span style="text-align:right;font-weight:600">${v}</span></div>`;
+  return html`<div>
+    <h1>${T("sim.title")}</h1>
+    <div class="sub">${T("sim.sub")}</div>
+    <div class="glass" style="padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--ink-2);border-left:3px solid var(--brass)">${T("sim.banner")}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <span style="font-size:12px;color:var(--ink-3)">${T("sim.examples")}:</span>
+      ${SIM_EXAMPLES.map((ex,i)=> html`<button key=${i} class="btn" style="padding:5px 10px;font-size:12px" disabled=${busy} onClick=${()=>send(ex.text)}>${ex.label}</button>`)}
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:14px;align-items:start" class="sim-grid">
+      <div class="glass" style="display:flex;flex-direction:column;min-height:460px;overflow:hidden">
+        <div style="display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--rule)">
+          <input aria-label=${T("sim.name")} placeholder=${T("sim.namePh")} value=${name} onInput=${e=>setName(e.target.value)} style="flex:1;min-width:0" disabled=${msgs.length>0}/>
+          <button class="btn" onClick=${reset} disabled=${busy}>${T("sim.newPatient")}</button>
+        </div>
+        <div class="msgs" ref=${msgsRef} style="max-height:520px">
+          ${msgs.length===0? html`<div class="empty">${T("sim.empty")}</div>`:null}
+          ${msgs.map((m,i)=> html`<div class="bubble ${m.role}" key=${i} dir=${rtl(m.content)?"rtl":"auto"}>${m.content}<span class="meta" dir="ltr">${m.role==="assistant"? T("msg.conciergeAgent")+" · "+m.secs+" "+T("sim.secs") : T("msg.patient")}</span></div>`)}
+          ${busy? html`<div class="bubble assistant" style="display:flex;gap:8px;align-items:center"><${Spinner}/> ${T("sim.thinking")}</div>`:null}
+        </div>
+        ${err? html`<div class="err" style="margin:0 12px 10px">${err}</div>`:null}
+        <div class="composer">
+          <textarea placeholder=${T("sim.typePh")} value=${text} onInput=${e=>setText(e.target.value)}
+            onKeyDown=${e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } }}></textarea>
+          <button class="btn primary" disabled=${busy||!text.trim()} onClick=${()=>send()}>${T("btn.send")}</button>
+        </div>
+      </div>
+      <div class="glass" style="padding:14px 16px">
+        <div style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px">${T("sim.result")}</div>
+        ${!lead? html`<div style="color:var(--ink-3);font-size:13px;padding:10px 0">—</div>` : html`
+          <div style="padding:6px 0 10px">${status}</div>
+          ${row(T("sim.lang"), lead.language? lead.language.toUpperCase() : T("sim.none"))}
+          ${row(T("sim.score"), lead.score!=null? html`<span class="badge ${lead.score>=85?"vip":lead.score>=70?"hot":""}">${lead.score}/100</span>` : T("sim.none"))}
+          ${row(T("sim.treatment"), lead.treatment_interest||T("sim.none"))}
+          ${row(T("sim.readiness"), lead.readiness? T("sim.r."+lead.readiness) : T("sim.none"))}
+          ${row(T("sim.coordinator"), lead.coordinator_name||T("sim.none"))}
+          ${lead.handover_reason? html`<div style="margin-top:10px;font-size:12.5px"><div style="color:var(--ink-2);margin-bottom:3px">${T("sim.handoverReason")}</div>${lead.handover_reason}</div>`:null}
+          ${lead.medical_note? html`<div style="margin-top:10px;font-size:12.5px;padding:8px 10px;border-radius:var(--r-sm);background:var(--alert-wash);color:var(--alert-ink)"><b>${T("sim.medicalNote")}:</b> ${lead.medical_note}</div>`:null}
+          <button class="btn" style="margin-top:12px;width:100%" onClick=${()=>onOpenInbox(lead.id)}>${T("sim.openInbox")} →</button>
+        `}
+      </div>
+    </div>
+  </div>`;
+}
+
 // ── Shell ───────────────────────────────────────────────────────────────────
 const NAV_META={
   command:{label:"nav.command",icon:"grid"},
   inbox:{label:"nav.inbox",icon:"inbox"},
+  simulator:{label:"nav.simulator",icon:"wand"},
   analytics:{label:"nav.analytics",icon:"chart"},
   campaigns:{label:"nav.campaigns",icon:"bullhorn"},
   studio:{label:"nav.studio",icon:"wand"},
@@ -4347,12 +4433,12 @@ const NAV_META={
   benchmark:{label:"nav.benchmark",icon:"stopwatch"},
 };
 const NAV_GROUPS=[
-  ["group.overview",["command","inbox","compliance"]],
+  ["group.overview",["command","inbox","simulator","compliance"]],
   ["group.growth",["analytics","benchmark","campaigns","widget","studio","partners"]],
   ["group.team",["consultants","matching","doctors","branches"]],
   ["group.operations",["devices","logistics","postop","reviews","workflow"]],
 ];
-const ENABLED = new Set(["command","inbox","compliance","analytics","benchmark","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
+const ENABLED = new Set(["command","inbox","simulator","compliance","analytics","benchmark","campaigns","studio","consultants","matching","devices","logistics","postop","reviews","workflow","partners","doctors","branches"]);
 
 const ICONS={
   grid:'<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
@@ -4514,6 +4600,7 @@ function App(){
         <div class="view" key=${tab} hidden=${!fatal && stats===null}>
         <${ErrorBoundary} key=${"eb-"+tab}>
         ${tab==="command" ? html`<${CommandCenter} stats=${stats} analytics=${analytics} handovers=${handovers} risks=${risks} roi=${roi} responseTime=${responseTime} onOpenLead=${openLead} />`
+          : tab==="simulator" ? html`<${Simulator} onOpenInbox=${(id)=>{ setSelectedId(id); setTab("inbox"); reloadShared(); }} />`
           : tab==="compliance" ? html`<${Compliance} />`
           : tab==="benchmark" ? html`<${Benchmark} />`
           : tab==="inbox" ? html`<${Inbox} conversations=${conversations} selectedId=${selectedId} setSelectedId=${setSelectedId} reloadShared=${reloadShared} pendingDeposits=${pendingDeposits} convTotal=${convTotal} onLoadMore=${loadMoreConversations} loadingMore=${loadingMore} branches=${branches} partners=${partners} doctors=${doctors} />`

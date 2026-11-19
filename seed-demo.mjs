@@ -11,14 +11,16 @@
 
 const URL = process.env.WEBHOOK_URL || 'http://localhost:3000/webhook';
 
+// Numaralar +999 (atanmamış ülke kodu): WhatsApp bağlıyken bile gerçek bir
+// kişiye mesaj gidemez. İsimler gerçek kişiye benzemesin diye "Örnek Hasta".
 const samples = [
-  { name: 'Hans Müller', wa: '491771111111', id: 'seed_de',
+  { name: 'Örnek Hasta (DE)', wa: '999000000101', id: 'seed_de',
     text: 'Guten Tag, ich interessiere mich für eine Haartransplantation. Was kostet das ungefähr?' },
-  { name: 'Layla Ahmed', wa: '971502222222', id: 'seed_ar',
+  { name: 'Örnek Hasta (AR)', wa: '999000000102', id: 'seed_ar',
     text: 'مرحبا، أريد حجز موعد لزراعة الشعر الأسبوع القادم. ميزانيتي حوالي 3000 يورو' },
-  { name: 'John Smith', wa: '447703333333', id: 'seed_en',
+  { name: 'Örnek Hasta (EN)', wa: '999000000103', id: 'seed_en',
     text: 'I am very unhappy — my previous clinic ruined my results and nobody replies to me!' },
-  { name: 'Sophie Martin', wa: '33612345678', id: 'seed_fr',
+  { name: 'Örnek Hasta (FR)', wa: '999000000104', id: 'seed_fr',
     text: 'Bonjour, je voudrais des facettes dentaires. Quel est le prix et comment réserver ?' },
 ];
 
